@@ -94,15 +94,8 @@ local function calculateMoveVector(vec)
 	return vec.Unit == vec.Unit and vec.Unit or Vector3.zero
 end
 
-local function isFriend(plr, recolor)
-	if vain.Categories.Friends.Options['Use friends'].Enabled then
-		local friend = table.find(vain.Categories.Friends.ListEnabled, plr.Name) and true
-		if recolor then
-			friend = friend and vain.Categories.Friends.Options['Recolor visuals'].Enabled
-		end
-		return friend
-	end
-	return nil
+local function isFriend(plr)
+	return table.find(vain.Categories.Friends.ListEnabled, plr.Name) and true
 end
 
 local function isTarget(plr)
@@ -403,8 +396,6 @@ run(function()
 			hum:GetPropertyChangedSignal('MaxHealth'),
 			{
 				Connect = function()
-					ent.Friend = ent.Player and isFriend(ent.Player) or nil
-					ent.Target = ent.Player and isTarget(ent.Player) or nil
 					return {Disconnect = function() end,}
 				end,
 			},
@@ -417,12 +408,6 @@ run(function()
 		end
 		if ent.NPC then
 			return true
-		end
-		if isFriend(ent.Player) then
-			return false
-		end
-		if not select(2, whitelist:get(ent.Player)) then
-			return false
 		end
 		if vain.Categories.Main.Options['Teams by server'].Enabled then
 			if not lplr.Team then
@@ -444,11 +429,31 @@ run(function()
 		if not (ent and vain.Categories.Main.Options['Use team color'].Enabled) then
 			return
 		end
-		if isFriend(ent, true) then
-			return Color3.fromHSV(vain.Categories.Friends.Options['Friends color'].Hue, vain.Categories.Friends.Options['Friends color'].Sat, vain.Categories.Friends.Options['Friends color'].Value)
-		end
 		return tostring(ent.TeamColor) ~= 'White' and ent.TeamColor.Color or nil
 	end
+
+	-- Notify when a friend or target joins/leaves
+	local function onPlayerAdded(plr)
+		if isFriend(plr) then
+			vain:CreateNotification('Friends', plr.Name .. ' joined the server', 8)
+		elseif isTarget(plr) then
+			vain:CreateNotification('Targets', plr.Name .. ' joined the server', 8)
+		end
+	end
+	local function onPlayerRemoving(plr)
+		if isFriend(plr) then
+			vain:CreateNotification('Friends', plr.Name .. ' left the server', 8)
+		elseif isTarget(plr) then
+			vain:CreateNotification('Targets', plr.Name .. ' left the server', 8)
+		end
+	end
+	for _, plr in playersService:GetPlayers() do
+		if plr ~= lplr then
+			task.spawn(onPlayerAdded, plr)
+		end
+	end
+	vain:Clean(playersService.PlayerAdded:Connect(onPlayerAdded))
+	vain:Clean(playersService.PlayerRemoving:Connect(onPlayerRemoving))
 
 	vain:Clean(function()
 		entitylib.kill()
