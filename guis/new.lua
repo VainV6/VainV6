@@ -5988,58 +5988,15 @@ mainapi.Categories.Main:CreateDivider('misc')
 	Friends
 ]]
 local friends
-local friendscolor = {
-	Hue = 1,
-	Sat = 1,
-	Value = 1
-}
-local friendssettings = {
+friends = mainapi:CreateCategoryList({
 	Name = 'Friends',
 	Icon = getcustomasset('newvain/assets/new/friendstab.png'),
 	Size = UDim2.fromOffset(17, 16),
 	Placeholder = 'Roblox username',
 	Color = Color3.fromRGB(5, 134, 105),
-	Function = function()
-		friends.Update:Fire()
-		friends.ColorUpdate:Fire(friendscolor.Hue, friendscolor.Sat, friendscolor.Value)
-	end
-}
-friends = mainapi:CreateCategoryList(friendssettings)
+})
 friends.Update = Instance.new('BindableEvent')
 friends.ColorUpdate = Instance.new('BindableEvent')
-friends:CreateToggle({
-	Name = 'Recolor visuals',
-	Darker = true,
-	Default = true,
-	Function = function()
-		friends.Update:Fire()
-		friends.ColorUpdate:Fire(friendscolor.Hue, friendscolor.Sat, friendscolor.Value)
-	end
-})
-friendscolor = friends:CreateColorSlider({
-	Name = 'Friends color',
-	Darker = true,
-	Function = function(hue, sat, val)
-		for _, v in friends.Object.Children:GetChildren() do
-			local dot = v:FindFirstChild('Dot')
-			if dot and dot.BackgroundColor3 ~= color.Light(uipallet.Main, 0.37) then
-				dot.BackgroundColor3 = Color3.fromHSV(hue, sat, val)
-				dot.Dot.BackgroundColor3 = dot.BackgroundColor3
-			end
-		end
-		friendssettings.Color = Color3.fromHSV(hue, sat, val)
-		friends.ColorUpdate:Fire(hue, sat, val)
-	end
-})
-friends:CreateToggle({
-	Name = 'Use friends',
-	Darker = true,
-	Default = true,
-	Function = function()
-		friends.Update:Fire()
-		friends.ColorUpdate:Fire(friendscolor.Hue, friendscolor.Sat, friendscolor.Value)
-	end
-})
 mainapi:Clean(friends.Update)
 mainapi:Clean(friends.ColorUpdate)
 
