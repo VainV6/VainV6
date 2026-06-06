@@ -5429,17 +5429,21 @@ function mainapi:CreateNotification(title, text, duration, type)
 			setthreadidentity(8)
 		end
 		local i = #notifications:GetChildren() + 1
-		local notification = Instance.new('ImageLabel')
+		local notification = Instance.new('ImageButton')
 		notification.Name = 'Notification'
 		notification.Size = UDim2.fromOffset(math.max(getfontsize(removeTags(text), 14, uipallet.Font).X + 80, 266), 75)
 		notification.Position = UDim2.new(1, 0, 1, -(29 + (78 * i)))
 		notification.ZIndex = 5
 		notification.BackgroundTransparency = 1
+		notification.AutoButtonColor = false
 		notification.Image = getcustomasset('newvain/assets/new/notification.png')
 		notification.ScaleType = Enum.ScaleType.Slice
 		notification.SliceCenter = Rect.new(7, 7, 9, 9)
 		notification.Parent = notifications
 		addBlur(notification, true)
+		notification.MouseButton1Click:Connect(function()
+			setclipboard(title .. '\n' .. removeTags(text))
+		end)
 		local iconshadow = Instance.new('ImageLabel')
 		iconshadow.Name = 'Icon'
 		iconshadow.Size = UDim2.fromOffset(60, 60)
