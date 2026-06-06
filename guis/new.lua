@@ -3602,8 +3602,8 @@ function mainapi:CreateGUI()
 			local body = httpService:JSONEncode({
 				nonce = httpService:GenerateGUID(false),
 				args = {
-					invite = {code = 'vain'},
-					code = 'vain'
+					invite = {code = 'vdKqXfuszU'},
+					code = 'vdKqXfuszU'
 				},
 				cmd = 'INVITE_BROWSER'
 			})
