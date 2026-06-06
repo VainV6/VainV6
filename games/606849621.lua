@@ -403,20 +403,37 @@ run(function()
     local CircleObject
     local Instant
     local Wallbang
+    local PrioritizePlayers
     local gunHook
     local taserHook
     local ProjectileRaycast = RaycastParams.new()
     ProjectileRaycast.RespectCanCollide = true
 
     local function getAimPos(self)
-        local ent = entitylib['Entity'..Mode.Value]({
+        local searchParams = {
             Range = Range.Value,
             Wallcheck = (not Wallbang.Enabled) and (Target.Walls.Enabled or nil),
             Part = 'RootPart',
             Origin = entitylib.isAlive and entitylib.character.RootPart.Position or nil,
             Players = Target.Players.Enabled,
             NPCs = Target.NPCs.Enabled
-        })
+        }
+        local ent
+        if PrioritizePlayers.Enabled and Target.Players.Enabled and Target.NPCs.Enabled then
+            ent = entitylib['Entity'..Mode.Value]({
+                Range = searchParams.Range,
+                Wallcheck = searchParams.Wallcheck,
+                Part = 'RootPart',
+                Origin = searchParams.Origin,
+                Players = true,
+                NPCs = false
+            })
+            if not ent then
+                ent = entitylib['Entity'..Mode.Value](searchParams)
+            end
+        else
+            ent = entitylib['Entity'..Mode.Value](searchParams)
+        end
         if not ent then return nil end
 
         targetinfo.Targets[ent] = tick() + 1
@@ -570,6 +587,7 @@ run(function()
     })
     Instant = SilentAim:CreateToggle({Name = 'Hitscan Bullets', Tooltip = 'Forces bullets to register hits instantly regardless of travel time'})
     Wallbang = SilentAim:CreateToggle({Name = 'Wallbang', Tooltip = 'Bullets pass through walls and other geometry'})
+    PrioritizePlayers = SilentAim:CreateToggle({Name = 'Prioritize Players', Tooltip = 'Targets players before NPCs when both are in range'})
 end)
 
 --[[
