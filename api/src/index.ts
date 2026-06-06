@@ -1,0 +1,64 @@
+import { Env } from './types';
+import { verifyDiscordSignature } from './discord/verify';
+import { handleCommand, syncAllTiers } from './discord/commands';
+import { handleCheck } from './routes/check';
+import { handlePoll, handleQueueCommand } from './routes/commands';
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url    = new URL(request.url);
+    const method = request.method;
+    const path   = url.pathname;
+
+    if (method === 'OPTIONS') return new Response(null, { headers: corsHeaders() });
+
+    // Discord interaction webhook
+    if (method === 'POST' && path === '/discord') {
+      const body = await request.text();
+      const valid = await verifyDiscordSignature(request, env.DISCORD_PUBLIC_KEY, body);
+      if (!valid) return new Response('Invalid signature', { status: 401 });
+
+      const interaction = JSON.parse(body);
+      if (interaction.type === 1) return json({ type: 1 });
+      if (interaction.type === 2) return handleCommand(interaction, env);
+      return new Response('Unknown interaction type', { status: 400 });
+    }
+
+    if (method === 'GET' && path === '/check') {
+      return withCors(await handleCheck(request, env));
+    }
+
+    if (method === 'GET' && path === '/commands') {
+      return withCors(await handlePoll(request, env));
+    }
+
+    if (method === 'POST' && path === '/queue-command') {
+      return withCors(await handleQueueCommand(request, env));
+    }
+
+    return new Response('Not found', { status: 404 });
+  },
+
+  // Runs every 5 minutes — syncs Discord roles → tiers for all whitelisted users
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    await syncAllTiers(env);
+  },
+};
+
+function json(data: unknown): Response {
+  return new Response(JSON.stringify(data), {
+    headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+  });
+}
+function corsHeaders(): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, x-vain-secret',
+  };
+}
+function withCors(response: Response): Response {
+  const headers = new Headers(response.headers);
+  for (const [k, v] of Object.entries(corsHeaders())) headers.set(k, v);
+  return new Response(response.body, { status: response.status, headers });
+}
