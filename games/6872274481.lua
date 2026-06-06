@@ -1,6 +1,12 @@
 local canDebug = true
 local run = function(func)
-	func()
+	local suc, err = pcall(func)
+	if not suc then
+		local vain = shared.vain
+		if vain and vain.CreateNotification then
+			vain:CreateNotification('Vain 6872274481', 'Failure executing function: ' .. tostring(err), 3)
+		end
+	end
 end
 local cloneref = cloneref or function(obj)
 	return obj
@@ -97,7 +103,7 @@ local store = {
 		hotbar = {}
 	},
 	selfProjectiles = {},
-	inventories = {},
+	inventories = setmetatable({}, {__mode = "k"}),
 	matchState = 0,
 	queueType = 'bedwars_test',
 	tools = {}

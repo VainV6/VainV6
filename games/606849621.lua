@@ -9,7 +9,7 @@ local isfile = isfile or function(file)
 end
 local function downloadFile(path, func)
 	if not isfile(path) then
-		local suc, res = pcall(function() return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('vain/profiles/commit.txt')..'/'..select(1, path:gsub('vain/', '')), true) end)
+		local suc, res = pcall(function() return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeV4ForRoblox/'..readfile('vain/profiles/commit.txt')..'/'..select(1, path:gsub('vain/', '')), true) end)
 		if not suc or res == '404: Not Found' then error(res) end
 		if path:find('.lua') then res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vain updates.\n'..res end
 		writefile(path, res)
@@ -149,8 +149,7 @@ run(function()
 		local returned = {}
 
 		for _, scr in scripts do
-			local ok, deserializedcode = pcall(vm.luau_deserialize, getscriptbytecode(scr))
-			if not ok then continue end
+			local deserializedcode = vm.luau_deserialize(getscriptbytecode(scr))
 
 			for _, proto in deserializedcode.protoList do
 				local stack, top, code = {}, -1, proto.code
@@ -286,7 +285,7 @@ run(function()
 		Draw = 'TaseReplicate',
 		Gun = 'PopTires',
 		LocalScript2 = 'LookAngle',
-		LocalScript = 'SelfDamage',
+		LocomotiveFront = 'SelfDamage',
 		onPressed = 'FlipVehicle',
 		OnJump = 'GetOut',
 		OnJump1 = 'GetOut',
@@ -365,491 +364,430 @@ run(function()
 	end)
 end)
 
-for _, v in {'Reach', 'TriggerBot', 'Disabler', 'AntiFall', 'HitBoxes', 'Killaura', 'MurderMystery', 'Silent Aim'} do
+for _, v in {'Reach', 'TriggerBot', 'Disabler', 'AntiFall', 'HitBoxes', 'Killaura', 'MurderMystery'} do
 	vain:Remove(v)
 end
-
---[[
-    Combat
-]]
-
 run(function()
-    vain.Categories.Combat:CreateModule({
-    	Name = 'Force Headshot',
-    	Function = function(callback)
-    		if callback then
-    			local hook
-    			hook = hookfunction(jb.GunController.BulletEmitterOnLocalHitPlayer, function(...)
-    				local shotData = select(15, ...)
-    				shotData.isHeadshot = true
-    				return hook(...)
-    			end)
-    		else
-    			restorefunction(jb.GunController.BulletEmitterOnLocalHitPlayer)
-    		end
-    	end,
-    	Tooltip = 'Modifies bullets to always do headshot damage.'
-    })
+	local SilentAim
+	local Target
+	local Mode
+	local Range
+	local HitChance
+	local HeadshotChance
+	local CircleColor
+	local CircleTransparency
+	local CircleFilled
+	local CircleObject
+	local Instant
+	local Hooked
+	local ProjectileRaycast = RaycastParams.new()
+	ProjectileRaycast.RespectCanCollide = true
+	
+	SilentAim = vain.Categories.Combat:CreateModule({
+		Name = 'SilentAim',
+		Function = function(callback)
+			if CircleObject then
+				CircleObject.Visible = callback and Mode.Value == 'Mouse'
+			end
+			if callback then
+				Hooked = jb.GunController.TransformLocalMousePosition
+				jb.GunController.TransformLocalMousePosition = function(self, pos)
+					local ent = entitylib['Entity'..Mode.Value]({
+						Range = Range.Value,
+						Wallcheck = Target.Walls.Enabled and (obj or true) or nil,
+						Part = 'RootPart',
+						Origin = entitylib.isAlive and entitylib.character.RootPart.Position or nil,
+						Players = Target.Players.Enabled,
+						NPCs = Target.NPCs.Enabled
+					})
+	
+					if ent then
+						local item = jb.ItemSystemController:GetLocalEquipped()
+						if item and ((self.Tip.CFrame.Position - ent.RootPart.Position).Magnitude / (item.Config.BulletSpeed or 1000)) < item.BulletEmitter.LifeSpan then
+							ProjectileRaycast.FilterDescendantsInstances = {gameCamera, ent.Character}
+							ProjectileRaycast.CollisionGroup = ent.RootPart.CollisionGroup
+							local calc = prediction.SolveTrajectory(self.Tip.CFrame.Position, item.Config.BulletSpeed or 1000, math.abs(item.BulletEmitter.GravityVector.Y), ent.RootPart.Position, Instant.Enabled and Vector3.zero or ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight, nil, ProjectileRaycast)
+							if calc then
+								targetinfo.Targets[ent] = tick() + 1
+								return calc
+							end
+						end
+					end
+	
+					return pos
+				end
+	
+				repeat
+					if CircleObject then 
+						CircleObject.Position = inputService:GetMouseLocation() 
+					end
+	
+					if Instant.Enabled then 
+						local item = jb.ItemSystemController:GetLocalEquipped()
+						if item and item.BulletEmitter then
+							rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.1))
+						end
+					end
+					task.wait()
+				until not SilentAim.Enabled
+			else
+				jb.GunController.TransformLocalMousePosition = Hooked
+			end
+		end,
+		Tooltip = 'Silently adjusts your aim towards the enemy'
+	})
+	Target = SilentAim:CreateTargets({Players = true})
+	Mode = SilentAim:CreateDropdown({
+		Name = 'Mode',
+		List = {'Mouse', 'Position'},
+		Function = function(val)
+			if CircleObject then
+				CircleObject.Visible = SilentAim.Enabled and val == 'Mouse'
+			end
+		end,
+		Tooltip = 'Mouse - Checks for entities near the mouses position\nPosition - Checks for entities near the local character'
+	})
+	Range = SilentAim:CreateSlider({
+		Name = 'Range',
+		Min = 1,
+		Max = 1000,
+		Default = 150,
+		Function = function(val)
+			if CircleObject then
+				CircleObject.Radius = val
+			end
+		end,
+		Suffix = function(val) 
+			return val == 1 and 'stud' or 'studs' 
+		end
+	})
+	SilentAim:CreateToggle({
+		Name = 'Range Circle',
+		Function = function(callback)
+			if callback then
+				CircleObject = Drawing.new('Circle')
+				CircleObject.Filled = CircleFilled.Enabled
+				CircleObject.Color = Color3.fromHSV(CircleColor.Hue, CircleColor.Sat, CircleColor.Value)
+				CircleObject.Position = vain.gui.AbsoluteSize / 2
+				CircleObject.Radius = Range.Value
+				CircleObject.NumSides = 100
+				CircleObject.Transparency = 1 - CircleTransparency.Value
+				CircleObject.Visible = SilentAim.Enabled and Mode.Value == 'Mouse'
+			else
+				pcall(function()
+					CircleObject.Visible = false
+					CircleObject:Remove()
+				end)
+			end
+			CircleColor.Object.Visible = callback
+			CircleTransparency.Object.Visible = callback
+			CircleFilled.Object.Visible = callback
+		end
+	})
+	CircleColor = SilentAim:CreateColorSlider({
+		Name = 'Circle Color', 
+		Function = function(hue, sat, val)
+			if CircleObject then
+				CircleObject.Color = Color3.fromHSV(hue, sat, val)
+			end
+		end, 
+		Darker = true, 
+		Visible = false
+	})
+	CircleTransparency = SilentAim:CreateSlider({
+		Name = 'Transparency',
+		Min = 0,
+		Max = 1,
+		Decimal = 10,
+		Default = 0.5,
+		Function = function(val)
+			if CircleObject then
+				CircleObject.Transparency = 1 - val
+			end
+		end,
+		Darker = true,
+		Visible = false
+	})
+	CircleFilled = SilentAim:CreateToggle({
+		Name = 'Circle Filled', 
+		Function = function(callback)
+			if CircleObject then
+				CircleObject.Filled = callback
+			end
+		end, 
+		Darker = true, 
+		Visible = false
+	})
+	Instant = SilentAim:CreateToggle({Name = 'Hitscan Bullets'})
 end)
-
+	
 run(function()
-    local SilentAim
-    local Target
-    local Mode
-    local Range
-    local CircleColor
-    local CircleTransparency
-    local CircleFilled
-    local CircleObject
-    local Instant
-    local Wallbang
-    local PrioritizePlayers
-    local gunHook
-    local taserHook
-    local ProjectileRaycast = RaycastParams.new()
-    ProjectileRaycast.RespectCanCollide = true
-
-    local function getAimPos(self)
-        local searchParams = {
-            Range = Range.Value,
-            Wallcheck = (not Wallbang.Enabled) and (Target.Walls.Enabled or nil),
-            Part = 'RootPart',
-            Origin = entitylib.isAlive and entitylib.character.RootPart.Position or nil,
-            Players = Target.Players.Enabled,
-            NPCs = Target.NPCs.Enabled
-        }
-        local ent
-        if PrioritizePlayers.Enabled and Target.Players.Enabled and Target.NPCs.Enabled then
-            ent = entitylib['Entity'..Mode.Value]({
-                Range = searchParams.Range,
-                Wallcheck = searchParams.Wallcheck,
-                Part = 'RootPart',
-                Origin = searchParams.Origin,
-                Players = true,
-                NPCs = false
-            })
-            if not ent then
-                ent = entitylib['Entity'..Mode.Value](searchParams)
-            end
-        else
-            ent = entitylib['Entity'..Mode.Value](searchParams)
-        end
-        if not ent then return nil end
-
-        targetinfo.Targets[ent] = tick() + 1
-
-        local item = jb.ItemSystemController:GetLocalEquipped()
-        if item and item.BulletEmitter then
-            local gv = item.BulletEmitter.GravityVector
-            local bulletGravity = gv and math.abs(gv.Y) or 0
-            local origin = self and self.Tip and self.Tip.CFrame.Position
-                or (entitylib.isAlive and entitylib.character.RootPart.CFrame.Position)
-                or Vector3.zero
-            local speed = item.Config.BulletSpeed or 1000
-            local targetPos = ent.RootPart.Position
-            local targetVel = Instant.Enabled and Vector3.zero or ent.RootPart.Velocity
-
-            -- Simple iterative predictor: avoids the broken q-substitution in SolveTrajectory
-            -- which incorrectly modifies Y velocity for grounded moving targets causing large
-            -- misses at distance (q gets set to -hipHeight then compounded by gravity estimate)
-            local t = (targetPos - origin).Magnitude / speed
-            for _ = 1, 3 do
-                local predicted = targetPos + targetVel * t
-                t = (predicted - origin).Magnitude / speed
-            end
-            local aimPos = targetPos + targetVel * t + Vector3.new(0, 0.5 * bulletGravity * t * t, 0)
-            return aimPos
-        end
-
-        return ent.RootPart.CFrame.Position
-    end
-
-    SilentAim = vain.Categories.Combat:CreateModule({
-    	Name = 'SilentAim',
-    	Function = function(callback)
-    		if CircleObject then
-    			CircleObject.Visible = callback and Mode.Value == 'Mouse'
-    		end
-
-    		if callback then
-    			gunHook = hookfunction(jb.GunController.TransformLocalMousePosition, function(self, pos)
-    				return getAimPos(self) or gunHook(self, pos)
-    			end)
-    			if jb.TaserController and jb.TaserController.TransformLocalMousePosition then
-    				taserHook = hookfunction(jb.TaserController.TransformLocalMousePosition, function(self, pos)
-    					return getAimPos(self) or taserHook(self, pos)
-    				end)
-    			end
-
-    			repeat
-    				if CircleObject then
-    					CircleObject.Position = inputService:GetMouseLocation()
-    				end
-    				local item = jb.ItemSystemController:GetLocalEquipped()
-    				if item and item.BulletEmitter then
-    					if Instant.Enabled then
-    						rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.1))
-    					end
-    					if Wallbang.Enabled then
-    						rawset(item.BulletEmitter, 'IgnoreList', {workspace})
-    					end
-    				end
-    				task.wait()
-    			until not SilentAim.Enabled
-    		else
-    			if gunHook then
-    				restorefunction(jb.GunController.TransformLocalMousePosition)
-    				gunHook = nil
-    			end
-    			if taserHook then
-    				restorefunction(jb.TaserController.TransformLocalMousePosition)
-    				taserHook = nil
-    			end
-    		end
-    	end,
-    	Tooltip = 'Silently adjusts your aim towards the enemy'
-    })
-    Target = SilentAim:CreateTargets({Players = true})
-    Mode = SilentAim:CreateDropdown({
-    	Name = 'Mode',
-    	List = {'Mouse', 'Position'},
-    	Function = function(val)
-    		if CircleObject then
-    			CircleObject.Visible = SilentAim.Enabled and val == 'Mouse'
-    		end
-    	end,
-    	Tooltip = 'Mouse - Checks for entities near the mouses position\nPosition - Checks for entities near the local character'
-    })
-    Range = SilentAim:CreateSlider({
-    	Name = 'Range',
-    	Tooltip = 'Radius in studs to search for targets',
-    	Min = 1,
-    	Max = 1000,
-    	Default = 150,
-    	Function = function(val)
-    		if CircleObject then
-    			CircleObject.Radius = val
-    		end
-    	end,
-    	Suffix = function(val)
-    		return val == 1 and 'stud' or 'studs'
-    	end
-    })
-    SilentAim:CreateToggle({
-    	Name = 'Range Circle',
-    	Tooltip = 'Draws a circle on screen showing the aim radius',
-    	Function = function(callback)
-    		if callback then
-    			CircleObject = Drawing.new('Circle')
-    			CircleObject.Filled = CircleFilled.Enabled
-    			CircleObject.Color = Color3.fromHSV(CircleColor.Hue, CircleColor.Sat, CircleColor.Value)
-    			CircleObject.Position = vain.gui.AbsoluteSize / 2
-    			CircleObject.Radius = Range.Value
-    			CircleObject.NumSides = 100
-    			CircleObject.Transparency = 1 - CircleTransparency.Value
-    			CircleObject.Visible = SilentAim.Enabled and Mode.Value == 'Mouse'
-    		else
-    			pcall(function()
-    				CircleObject.Visible = false
-    				CircleObject:Remove()
-    			end)
-    		end
-    		CircleColor.Object.Visible = callback
-    		CircleTransparency.Object.Visible = callback
-    		CircleFilled.Object.Visible = callback
-    	end
-    })
-    CircleColor = SilentAim:CreateColorSlider({
-    	Name = 'Circle Color',
-    	Function = function(hue, sat, val)
-    		if CircleObject then
-    			CircleObject.Color = Color3.fromHSV(hue, sat, val)
-    		end
-    	end,
-    	Darker = true,
-    	Visible = false
-    })
-    CircleTransparency = SilentAim:CreateSlider({
-    	Name = 'Transparency',
-    	Tooltip = 'Opacity of the aim range circle (0 = invisible, 1 = solid)',
-    	Min = 0,
-    	Max = 1,
-    	Decimal = 10,
-    	Default = 0.5,
-    	Function = function(val)
-    		if CircleObject then
-    			CircleObject.Transparency = 1 - val
-    		end
-    	end,
-    	Darker = true,
-    	Visible = false
-    })
-    CircleFilled = SilentAim:CreateToggle({
-    	Name = 'Circle Filled',
-    	Tooltip = 'Fills the range circle instead of drawing just the outline',
-    	Function = function(callback)
-    		if CircleObject then
-    			CircleObject.Filled = callback
-    		end
-    	end,
-    	Darker = true,
-    	Visible = false
-    })
-    Instant = SilentAim:CreateToggle({Name = 'Hitscan Bullets', Tooltip = 'Forces bullets to register hits instantly regardless of travel time'})
-    Wallbang = SilentAim:CreateToggle({Name = 'Wallbang', Tooltip = 'Bullets pass through walls and other geometry'})
-    PrioritizePlayers = SilentAim:CreateToggle({Name = 'Prioritize Players', Tooltip = 'Targets players before NPCs when both are in range'})
+	local Wallbang = {Enabled = false}
+	
+	Wallbang = vain.Categories.Combat:CreateModule({
+		Name = 'Wallbang',
+		Function = function(callback)
+			if callback then
+				local hook
+				hook = hookfunction(jb.GunController.BulletEmitterOnLocalHitPlayer, function(...)
+					local shotData = select(15, ...)
+					shotData.isWallbang = nil
+					shotData.isHeadshot = true
+					return hook(...)
+				end)
+	
+				repeat
+					local item = jb.ItemSystemController:GetLocalEquipped()
+					if item and item.BulletEmitter then
+						item.BulletEmitter.IgnoreList = {workspace}
+					end
+					task.wait(0.1)
+				until not Wallbang.Enabled
+			else
+				restorefunction(jb.GunController.BulletEmitterOnLocalHitPlayer)
+			end
+		end,
+		Tooltip = 'Modifies bullets to always do headshot damage & shooting through most walls.'
+	})
 end)
-
---[[
-    Blatant
-]]
-
+	
 run(function()
-    local AutoArrest
-
-    AutoArrest = vain.Categories.Blatant:CreateModule({
-    	Name = 'AutoArrest',
-    	Function = function(callback)
-    		if callback then
-    			repeat
-    				local item = jb.ItemSystemController:GetLocalEquipped()
-    				if item and item.__ClassName == 'Handcuffs' then
-    					local localPosition = entitylib.character.Humanoid.HumanoidUnloadServerPosition.Value
-    					local plrs = entitylib.AllPosition({
-    						Players = true,
-    						Part = 'RootPart',
-    						Range = 50
-    					})
-
-    					for _, ent in plrs do
-    						if not AutoArrest.Enabled then break end
-    						if ent.Player and isIllegal(ent) then
-    							local vehicle = ent.Humanoid.Sit and getVehicle(ent) or nil
-    							if vehicle then
-    								jb:FireServer('Eject', vehicle)
-    							elseif not isArrested(ent.Player.Name) and (localPosition - ent.RootPart.Position).Magnitude < 18.4 then
-    								jb:FireServer('Arrest', ent.Player.Name)
-    								task.wait(0.6)
-    							end
-    						end
-    					end
-    				end
-
-    				task.wait(0.016)
-    			until not AutoArrest.Enabled
-    		end
-    	end,
-    	Tooltip = 'Automatically uses handcuffs on nearby entities'
-    })
+	local AutoArrest = {Enabled = false}
+	
+	AutoArrest = vain.Categories.Blatant:CreateModule({
+		Name = 'AutoArrest',
+		Function = function(callback)
+			if callback then
+				repeat
+					local item = jb.ItemSystemController:GetLocalEquipped()
+					if item and item.__ClassName == 'Handcuffs' then
+						local localPosition = entitylib.character.Humanoid.HumanoidUnloadServerPosition.Value
+						local plrs = entitylib.AllPosition({
+							Players = true,
+							Part = 'RootPart',
+							Range = 50
+						})
+	
+						for _, ent in plrs do
+							if not AutoArrest.Enabled then break end
+							if ent.Player and isIllegal(ent) then
+								local vehicle = ent.Humanoid.Sit and getVehicle(ent) or nil
+								if vehicle then
+									jb:FireServer('Eject', vehicle)
+								elseif not isArrested(ent.Player.Name) and (localPosition - ent.RootPart.Position).Magnitude < 18.4 then
+									jb:FireServer('Arrest', ent.Player.Name)
+									task.wait(0.6)
+								end
+							end
+						end
+					end
+					task.wait(0.016)
+				until not AutoArrest.Enabled
+			end
+		end,
+		Tooltip = 'Automatically uses handcuffs on nearby entities'
+	})
 end)
-
+	
 run(function()
-    local AutoPop
-    local Range
-    local TeamCheck
-    local HandCheck
-
-    local function getEntitiesInVehicle(car)
-    	local entities = {}
-
-    	for _, seat in car:GetChildren() do
-    		if (seat.Name == 'Seat' or seat.Name == 'Passenger') then
-    			seat = seat:FindFirstChild('PlayerName')
-    			if seat then
-    				for _, ent in entitylib.List do
-    					if ent.Player and ent.Player.Name == seat.Value then
-    						table.insert(entities, ent)
-    					end
-    				end
-    			end
-    		end
-    	end
-
-    	return entities
-    end
-
-    local function getVehiclesNear()
-    	local allowed = {}
-
-    	if entitylib.isAlive then
-    		local localPosition = entitylib.character.HumanoidRootPart.Position
-    		for _, car in collectionService:GetTagged('Vehicle') do
-    			if car.PrimaryPart and (car.PrimaryPart.Position - localPosition).Magnitude <= Range.Value then
-    				local entities = getEntitiesInVehicle(car)
-    				local check = #entities > 0
-    				if TeamCheck.Enabled then
-    					for _, ent in entities do
-    						if not ent.Targetable then
-    							check = false
-    							break
-    						end
-    					end
-    				end
-
-    				if check then
-    					table.insert(allowed, car)
-    				end
-    			end
-    		end
-    	end
-
-    	return allowed
-    end
-
-    AutoPop = vain.Categories.Blatant:CreateModule({
-    	Name = 'AutoPop',
-    	Function = function(callback)
-    		if callback then
-    			task.spawn(function()
-    				repeat
-    					local item = jb.ItemSystemController:GetLocalEquipped()
-    					if (not HandCheck.Enabled) or (item and item.BulletEmitter and item.Model) then
-    						for _, car in getVehiclesNear() do
-    							if not AutoPop.Enabled then break end
-    							jb:FireServer('PopTires', car, item.Model.Name)
-    							task.wait(0.1)
-    						end
-    					end
-
-    					task.wait(0.016)
-    				until not AutoPop.Enabled
-    			end)
-    		end
-    	end,
-    	Tooltip = 'Automatically pops vehicles tires around you'
-    })
-    Range = AutoPop:CreateSlider({
-    	Name = 'Range',
-    	Tooltip = 'Maximum distance in studs to search for vehicles to pop',
-    	Min = 1,
-    	Max = 600,
-    	Default = 600
-    })
-    HandCheck = AutoPop:CreateToggle({Name = 'Hand Check', Tooltip = 'Only pops tires while holding a weapon'})
-    TeamCheck = AutoPop:CreateToggle({Name = 'Team Check', Tooltip = 'Only targets enemy team vehicles'})
+	local AutoPop
+	local Range
+	local HandCheck
+	local TeamCheck
+	
+	local function getEntitiesInVehicle(car)
+		local entities = {}
+	
+		for _, seat in car:GetChildren() do
+			if (seat.Name == 'Seat' or seat.Name == 'Passenger') then
+				seat = seat:FindFirstChild('PlayerName')
+				if seat then
+					for _, ent in entitylib.List do
+						if ent.Player and ent.Player.Name == seat.Value then
+							table.insert(entities, ent)
+						end
+					end
+				end
+			end
+		end
+	
+		return entities
+	end
+	
+	local function getVehiclesNear()
+		local allowed = {}
+	
+		if entitylib.isAlive then
+			local localPosition = entitylib.character.HumanoidRootPart.Position
+			for _, car in collectionService:GetTagged('Vehicle') do
+				if car.PrimaryPart and (car.PrimaryPart.Position - localPosition).Magnitude <= Range.Value then
+					local entities = getEntitiesInVehicle(car)
+					local check = #entities > 0
+					if TeamCheck.Enabled then
+						for _, ent in entities do
+							if not ent.Targetable then 
+								check = false 
+								break 
+							end
+						end
+					end
+					
+					if check then 
+						table.insert(allowed, car) 
+					end
+				end
+			end
+		end
+	
+		return allowed
+	end
+	
+	AutoPop = vain.Categories.Blatant:CreateModule({
+		Name = 'AutoPop',
+		Function = function(callback)
+			if callback then
+				task.spawn(function()
+					repeat
+						local item = jb.ItemSystemController:GetLocalEquipped()
+						if (not HandCheck.Enabled) or item and item.BulletEmitter then
+							for _, car in getVehiclesNear() do
+								if not AutoPop.Enabled then break end
+								jb:FireServer('PopTires', car, 'Sniper')
+								task.wait(0.1)
+							end
+						end
+						task.wait(0.016)
+					until not AutoPop.Enabled
+				end)
+			end
+		end,
+		Tooltip = 'Automatically pops vehicles tires around you'
+	})
+	Range = AutoPop:CreateSlider({
+		Name = 'Range',
+		Min = 1,
+		Max = 600,
+		Default = 600
+	})
+	HandCheck = AutoPop:CreateToggle({Name = 'Hand Check'})
+	TeamCheck = AutoPop:CreateToggle({Name = 'Team Check'})
 end)
-
+	
 run(function()
-    local AutoPunch
-
-    AutoPunch = vain.Categories.Blatant:CreateModule({
-    	Name = 'AutoPunch',
-    	Function = function(callback)
-    		if callback then
-    			repeat
-    				if entitylib.isAlive then
-    					jb:FireServer('Punch')
-    				end
-
-    				task.wait(0.3)
-    			until not AutoPunch.Enabled
-    		end
-    	end,
-    	Tooltip = 'Always punches people infront of you'
-    })
+	local Punch = {Enabled = false}
+	
+	Punch = vain.Categories.Blatant:CreateModule({
+		Name = 'AutoPunch',
+		Function = function(callback)
+			if callback then
+				repeat
+					if entitylib.isAlive then 
+						jb:FireServer('Punch') 
+					end
+					task.wait(0.3)
+				until not Punch.Enabled
+			end
+		end,
+		Tooltip = 'Always punches people infront of you'
+	})
 end)
-
+	
 run(function()
-    local AutoTaze
-    local HandCheck
-
-    AutoTaze = vain.Categories.Blatant:CreateModule({
-    	Name = 'AutoTaze',
-    	Function = function(callback)
-    		if callback then
-    			repeat
-    				local item = jb.ItemSystemController:GetLocalEquipped()
-    				item = item and item.__ClassName == 'Taser' or nil
-    				if not HandCheck.Enabled or item then
-    					local ent = entitylib.EntityPosition({
-    						Players = true,
-    						Part = 'RootPart',
-    						Range = 50
-    					})
-
-    					if ent and isIllegal(ent) and not isArrested(ent.Player.Name) then
-    						if item then
-    							jb:FireServer('TaseReplicate', ent.Head.Position)
-    						end
-    						jb:FireServer('Tase', ent.Humanoid, ent.Head, ent.Head.Position)
-    						task.wait(10)
-    					end
-    				end
-
-    				task.wait(0.016)
-    			until not AutoTaze.Enabled
-    		end
-    	end,
-    	Tooltip = 'Immobilizes entities around you'
-    })
-    HandCheck = AutoTaze:CreateToggle({Name = 'Hand Check', Tooltip = 'Only activates while holding a taser'})
+	local AutoTaze = {Enabled = false}
+	local AutoTazeHandCheck = {Enabled = false}
+	
+	AutoTaze = vain.Categories.Blatant:CreateModule({
+		Name = 'AutoTaze',
+		Function = function(callback)
+			if callback then
+				repeat
+					local item = jb.ItemSystemController:GetLocalEquipped()
+					item = item and item.__ClassName == 'Taser' or nil
+					if not AutoTazeHandCheck.Enabled or item then
+						local ent = entitylib.EntityPosition({
+							Players = true,
+							Part = 'RootPart',
+							Range = 50
+						})
+	
+						if ent and isIllegal(ent) and not isArrested(ent.Player.Name) then
+							if item then 
+								jb:FireServer('TaseReplicate', ent.Head.Position) 
+							end
+							jb:FireServer('Tase', ent.Humanoid, ent.Head, ent.Head.Position)
+							task.wait(10)
+						end
+					end
+					task.wait(0.016)
+				until not AutoTaze.Enabled
+			end
+		end,
+		Tooltip = 'Immobilizes entities around you'
+	})
+	AutoTazeHandCheck = AutoTaze:CreateToggle({Name = 'Hand Check'})
 end)
-
+	
 run(function()
-    LazerGodmode = vain.Categories.Blatant:CreateModule({ Name = 'LazerGodmode', Tooltip = 'Godmode via lazer exploit' })
+	LazerGodmode = vain.Categories.Blatant:CreateModule({Name = 'LazerGodmode'})
 end)
-
+	
 run(function()
-    vain.Categories.Blatant:CreateModule({
-    	Name = 'NoFall',
-    	Function = function(callback)
-    		debug.setconstant(debug.getupvalue(jb.FallingController.Init, 20), 9, callback and 'Archivable' or 'Sit')
-    	end,
-    	Tooltip = 'Disables ragdoll handling & fall damage',
-    })
+	vain.Categories.Blatant:CreateModule({
+		Name = 'NoFall',
+		Function = function(callback)
+			debug.setconstant(debug.getupvalue(jb.FallingController.Init, 19), 9, callback and 'Archivable' or 'Sit')
+		end,
+		Tooltip = 'Disables ragdoll handling & fall damage'
+	})
 end)
-
---[[
-    Utility
-]]
-
+	
 run(function()
-    local nitrotable = debug.getupvalue(jb.VehicleController.NitroShopVisible, 1)
-    local oldnitro
-
-    InfNitro = vain.Categories.Utility:CreateModule({
-    	Name = 'InfiniteNitro',
-    	Function = function(callback)
-    		if callback then
-    			oldnitro = nitrotable.Nitro
-    			jb.VehicleController.updateSpdBarRatio(1)
-    			
-    			repeat
-    				nitrotable.Nitro = 250
-    				task.wait(0.1)
-    			until not InfNitro.Enabled
-    		else
-    			nitrotable.Nitro = oldnitro
-    			jb.VehicleController.updateSpdBarRatio(oldnitro / 250)
-    		end
-    	end,
-    	Tooltip = 'Infinite boost for the local car',
-    })
+	local InfiniteNitro
+	local nitrotable = debug.getupvalue(jb.VehicleController.NitroShopVisible, 1)
+	local oldnitro
+	
+	InfiniteNitro = vain.Categories.Utility:CreateModule({
+		Name = 'InfiniteNitro',
+		Function = function(callback)
+			if callback then
+				oldnitro = nitrotable.Nitro
+				jb.VehicleController.updateSpdBarRatio(1)
+				repeat
+					nitrotable.Nitro = 250
+					task.wait(0.1)
+				until not InfiniteNitro.Enabled
+			else
+				nitrotable.Nitro = oldnitro
+				jb.VehicleController.updateSpdBarRatio(oldnitro / 250)
+			end
+		end,
+		Tooltip = 'Infinite boost for the local car'
+	})
 end)
-
+	
 run(function()
-    vain.Categories.Utility:CreateModule({
-    	Name = 'InstantAction',
-    	Function = function(callback)
-    		debug.setconstant(jb.CircleAction.Press, 3, callback and 'Timeda' or 'Timed')
-    	end,
-    	Tooltip = 'Allows you to instantly complete ProximityPrompt actions',
-    })
+	vain.Categories.Utility:CreateModule({
+		Name = 'InstantAction',
+		Function = function(callback)
+			debug.setconstant(jb.CircleAction.Press, 3, callback and 'Timeda' or 'Timed')
+		end,
+		Tooltip = 'Allows you to instantly complete ProximityPrompt actions'
+	})
 end)
-
+	
 run(function()
-    vain.Categories.Utility:CreateModule({
-    	Name = 'KeySpoofer',
-    	Function = function(callback)
-    		if callback then
-    			hookfunction(jb.PlayerUtils.hasKey, function()
-    				return true
-    			end)
-    		else
-    			restorefunction(jb.PlayerUtils.hasKey)
-    		end
-    	end,
-    	Tooltip = 'Enables most doors to be walked through',
-    })
+	vain.Categories.Utility:CreateModule({
+		Name = 'KeySpoofer',
+		Function = function(callback)
+			if callback then
+				hookfunction(jb.PlayerUtils.hasKey, function() 
+					return true 
+				end)
+			else
+				restorefunction(jb.PlayerUtils.hasKey)
+			end
+		end,
+		Tooltip = 'Enables most doors to be walked through'
+	})
 end)
-
+	
