@@ -397,17 +397,44 @@ run(function()
     local Target
     local Mode
     local Range
-    local HitChance
-    local HeadshotChance
     local CircleColor
     local CircleTransparency
     local CircleFilled
     local CircleObject
     local Instant
-    local Hooked
-    local HookedTaser
+    local gunHook
+    local taserHook
     local ProjectileRaycast = RaycastParams.new()
     ProjectileRaycast.RespectCanCollide = true
+
+    local function getAimPos(self)
+        local ent = entitylib['Entity'..Mode.Value]({
+            Range = Range.Value,
+            Wallcheck = Target.Walls.Enabled or nil,
+            Part = 'RootPart',
+            Origin = entitylib.isAlive and entitylib.character.RootPart.Position or nil,
+            Players = Target.Players.Enabled,
+            NPCs = Target.NPCs.Enabled
+        })
+        if not ent then return nil end
+
+        targetinfo.Targets[ent] = tick() + 1
+
+        local item = jb.ItemSystemController:GetLocalEquipped()
+        if item and item.BulletEmitter then
+            local gv = item.BulletEmitter.GravityVector
+            local gravity = gv and math.abs(gv.Y) or 0
+            local origin = self and self.Tip and self.Tip.CFrame.Position
+                or (entitylib.isAlive and entitylib.character.RootPart.CFrame.Position)
+                or Vector3.zero
+            ProjectileRaycast.FilterDescendantsInstances = {gameCamera, ent.Character}
+            ProjectileRaycast.CollisionGroup = ent.RootPart.CollisionGroup
+            local calc = prediction.SolveTrajectory(origin, item.Config.BulletSpeed or 1000, gravity, ent.RootPart.Position, Instant.Enabled and Vector3.zero or ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight, nil, ProjectileRaycast)
+            return calc or ent.RootPart.CFrame.Position
+        end
+
+        return ent.RootPart.CFrame.Position
+    end
 
     SilentAim = vain.Categories.Combat:CreateModule({
     	Name = 'SilentAim',
@@ -417,44 +444,19 @@ run(function()
     		end
 
     		if callback then
-    			Hooked = jb.GunController.TransformLocalMousePosition
-    			local hookFn = function(self, pos)
-    				local ent = entitylib['Entity'..Mode.Value]({
-    					Range = Range.Value,
-    					Wallcheck = Target.Walls.Enabled and (obj or true) or nil,
-    					Part = 'RootPart',
-    					Origin = entitylib.isAlive and entitylib.character.RootPart.Position or nil,
-    					Players = Target.Players.Enabled,
-    					NPCs = Target.NPCs.Enabled
-    				})
-
-    				if ent then
-    					local item = jb.ItemSystemController:GetLocalEquipped()
-    					if item and item.BulletEmitter then
-    						ProjectileRaycast.FilterDescendantsInstances = {gameCamera, ent.Character}
-    						ProjectileRaycast.CollisionGroup = ent.RootPart.CollisionGroup
-    						local calc = prediction.SolveTrajectory(self.Tip.CFrame.Position, item.Config.BulletSpeed or 1000, math.abs(item.BulletEmitter.GravityVector and item.BulletEmitter.GravityVector.Y or 0), ent.RootPart.Position, Instant.Enabled and Vector3.zero or ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight, nil, ProjectileRaycast)
-    						targetinfo.Targets[ent] = tick() + 1
-    						return calc or ent.RootPart.CFrame.Position
-    					else
-    						targetinfo.Targets[ent] = tick() + 1
-    						return ent.RootPart.CFrame.Position
-    					end
-    				end
-
-    				return pos
-    			end
-    			jb.GunController.TransformLocalMousePosition = hookFn
+    			gunHook = hookfunction(jb.GunController.TransformLocalMousePosition, function(self, pos)
+    				return getAimPos(self) or gunHook(self, pos)
+    			end)
     			if jb.TaserController and jb.TaserController.TransformLocalMousePosition then
-    				HookedTaser = jb.TaserController.TransformLocalMousePosition
-    				jb.TaserController.TransformLocalMousePosition = hookFn
+    				taserHook = hookfunction(jb.TaserController.TransformLocalMousePosition, function(self, pos)
+    					return getAimPos(self) or taserHook(self, pos)
+    				end)
     			end
 
     			repeat
     				if CircleObject then
     					CircleObject.Position = inputService:GetMouseLocation()
     				end
-
     				if Instant.Enabled then
     					local item = jb.ItemSystemController:GetLocalEquipped()
     					if item and item.BulletEmitter then
@@ -464,10 +466,13 @@ run(function()
     				task.wait()
     			until not SilentAim.Enabled
     		else
-    			jb.GunController.TransformLocalMousePosition = Hooked
-    			if HookedTaser then
-    				jb.TaserController.TransformLocalMousePosition = HookedTaser
-    				HookedTaser = nil
+    			if gunHook then
+    				restorefunction(jb.GunController.TransformLocalMousePosition)
+    				gunHook = nil
+    			end
+    			if taserHook then
+    				restorefunction(jb.TaserController.TransformLocalMousePosition)
+    				taserHook = nil
     			end
     		end
     	end,
