@@ -299,6 +299,11 @@ local function luau_deserialize(bytecode, luau_settings)
 		local opcode = bit32_band(value * 203, 0xFF)
 
 		local opinfo = opList[opcode + 1]
+		if not opinfo then
+			-- Unknown opcode from a newer Luau version; treat as no-op with no AUX
+			table_insert(codeList, {opcode = opcode, opname = 'UNKNOWN', opmode = 0, kmode = 0, usesAux = false})
+			return false
+		end
 		local opname = opinfo[1]
 		local opmode = opinfo[2]
 		local kmode = opinfo[3]
@@ -452,6 +457,8 @@ local function luau_deserialize(bytecode, luau_settings)
 				else
 					k = luau_settings.vectorCtor(x,y,z)
 				end
+			else
+				error("unknown constant type " .. kt, 0)
 			end
 
 			klist[i] = k

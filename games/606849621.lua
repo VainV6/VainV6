@@ -149,7 +149,8 @@ run(function()
 		local returned = {}
 
 		for _, scr in scripts do
-			local deserializedcode = vm.luau_deserialize(getscriptbytecode(scr))
+			local ok, deserializedcode = pcall(vm.luau_deserialize, getscriptbytecode(scr))
+			if not ok then continue end
 
 			for _, proto in deserializedcode.protoList do
 				local stack, top, code = {}, -1, proto.code
