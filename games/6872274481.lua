@@ -7137,7 +7137,7 @@ run(function()
         List = {'Bedwars', 'CFrame'},
         Default = 'CFrame',
         ItemTooltips = {
-            Bedwars = 'Uses the game's own walk speed API — more compatible but capped',
+            Bedwars = "Uses the game's own walk speed API — more compatible but capped",
             CFrame = 'Moves the character CFrame directly each frame — faster and uncapped',
         }
     })
@@ -10665,7 +10665,7 @@ run(function()
         Default = 'On',
         Tooltip = 'Predict target movement for better accuracy',
         ItemTooltips = {
-            Off = 'Aims directly at the target's current position',
+            Off = "Aims directly at the target's current position",
             On = 'Leads the shot based on target velocity for better hit rate',
         }
     })
