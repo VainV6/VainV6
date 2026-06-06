@@ -152,7 +152,7 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
     const targetUserId = topOpt(interaction, 'user');
     const tierName     = topOpt(interaction, 'tier');
     const newTier      = (TIER as Record<string, number>)[tierName] as TierValue | undefined;
-    if (newTier === undefined) return json(err(`Unknown tier **${tierName}**`));
+    if (newTier === undefined) return json(err(`Unknown tier. Use: Premium, Privileged, Owner`));
 
     // Fetch guild roles to find role IDs for each tier name
     const guildRoles = await fetchGuildRoles(guildId, env.DISCORD_BOT_TOKEN);
