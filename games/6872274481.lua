@@ -2814,7 +2814,7 @@ run(function()
         Default = true,
     })
     Mouse = SilentAura:CreateToggle({Name = 'Require mouse down', Tooltip = 'Only activates while the left mouse button is held'})
-    LegitAura = SilentAura:CreateToggle({Name = 'Swing only', Tooltip = 'Enables or disables swing only'})
+    LegitAura = SilentAura:CreateToggle({Name = 'Swing only', Tooltip = 'Only sends attack packets when you manually swing your sword'})
     SilentAim = SilentAura:CreateToggle({
         Name = 'Silent Aim',
         Tooltip = "Uses Vain's aiming technology to silently aim while looking legit",
@@ -7023,14 +7023,14 @@ run(function()
     })
     AutoJump = Speed:CreateToggle({
         Name = 'AutoJump',
-        Tooltip = 'Enables or disables autojump',
+        Tooltip = 'Automatically jumps when you land, enabling continuous bunny-hop movement',
         Function = function(callback)
             AlwaysJump.Object.Visible = callback
         end
     })
     AlwaysJump = Speed:CreateToggle({
         Name = 'Always Jump',
-        Tooltip = 'Enables or disables always jump',
+        Tooltip = 'Continuously jumps even while airborne — requires AutoJump to be enabled',
         Visible = false,
         Darker = true
     })
@@ -10322,7 +10322,7 @@ run(function()
     end)
     for _, v in sortTable do
         Toggles[v] = AutoKit:CreateToggle({
-        	Tooltip = 'Enables or disables ',
+        	Tooltip = "Automatically activates this kit's ability when the kit is equipped",
             Name = bedwars.BedwarsKitMeta[v].name,
             Default = true
         })
@@ -11326,9 +11326,16 @@ run(function()
         Tooltip = 'Automatically types GG in chat after the match ends',
         Default = true
     })
+    local toxicTooltips = {
+        Kill = 'Sends a random chat message when you score a final kill on an enemy',
+        Death = 'Sends a random chat message when you are eliminated from the game',
+        Bed = "Sends a random chat message when you destroy an enemy team's bed",
+        BedDestroyed = 'Sends a random chat message when your own bed is destroyed by an enemy',
+        Win = 'Sends a random chat message when your team wins the match',
+    }
     for _, v in {'Kill', 'Death', 'Bed', 'BedDestroyed', 'Win'} do
         Toggles[v] = AutoToxic:CreateToggle({
-        	Tooltip = 'Enables or disables ',
+        	Tooltip = toxicTooltips[v],
             Name = v..' ',
             Function = function(callback)
                 if Lists[v] then
@@ -12499,21 +12506,33 @@ run(function()
     end
     AimMode = BedAssist:CreateDropdown({
         Name = 'Mode',
-        Tooltip = 'Selects the operating mode',
+        Tooltip = 'How the camera moves toward the target bed',
         List = {'Simple', 'Adaptive'},
         Default = 'Simple',
+        ItemTooltips = {
+            Simple = 'Snaps to the bed at a constant speed each frame',
+            Adaptive = 'Lerps smoothly toward the bed, slowing down as it gets closer',
+        },
     })
     Mode = BedAssist:CreateDropdown({
         Name = 'Aim Mode',
         Tooltip = 'Selects the aiming technique',
         List = list,
         Default = 'Camera',
+        ItemTooltips = {
+            Camera = 'Rotates the game camera CFrame toward the bed',
+            Mouse = 'Physically moves the mouse cursor toward the bed',
+        },
     })
     Sort = BedAssist:CreateDropdown({
         Name = 'Target Mode',
         Tooltip = 'Selects how targets are prioritized and selected',
         List = {'Distance', 'Health'},
         Default = 'Distance',
+        ItemTooltips = {
+            Distance = 'Targets the nearest enemy bed by stud distance',
+            Health = 'Targets the enemy bed with the lowest remaining health',
+        },
     })
     Speed = BedAssist:CreateSlider({
         Name = 'Aim Speed',
@@ -12908,7 +12927,7 @@ run(function()
     	DefaultMax = 0.1,
     	Decimal = 5,
     })
-    Bedfinder = BlockIn:CreateToggle({ Name = 'Bed finder' , Tooltip = 'Enables or disables bed finder'})
+    Bedfinder = BlockIn:CreateToggle({ Name = 'Bed finder' , Tooltip = 'Automatically detects and targets the nearest enemy bed as the block-in destination'})
     LimitItem = BlockIn:CreateToggle({
     	Name = 'Limit to items',
     	Tooltip = 'Only block-in with the block you are holding',
@@ -13765,7 +13784,7 @@ run(function()
         local toggleCount = count
         table.insert(UpgradeToggles, AutoBuy:CreateToggle({
             Name = 'Buy '..(v.name == 'Armor' and 'Protection' or v.name),
-            Tooltip = 'Enables or disables buy ',
+            Tooltip = 'Automatically purchases this team upgrade when you have enough resources',
             Function = function(callback)
                 npctick = tick()
                 Functions[5 + toggleCount + (v.name == 'Armor' and 20 or 0)] = callback and function(currencytable, shop, upgrades)
@@ -15372,9 +15391,9 @@ run(function()
         Darker = true
     })
     Animation = Breaker:CreateToggle({Name = 'Animation', Tooltip = 'Shows the kit ability animation when activated'})
-    SelfBreak = Breaker:CreateToggle({Name = 'Self Break', Tooltip = 'Enables or disables self break'})
-    InstantBreak = Breaker:CreateToggle({Name = 'Instant Break', Tooltip = 'Enables or disables instant break'})
-    AutoTool = Breaker:CreateToggle({Name = 'Auto Tool', Tooltip = 'Enables or disables auto tool'})
+    SelfBreak = Breaker:CreateToggle({Name = 'Self Break', Tooltip = 'Allows Breaker to target and remove blocks you placed yourself'})
+    InstantBreak = Breaker:CreateToggle({Name = 'Instant Break', Tooltip = 'Bypasses the break animation delay — blocks break immediately as fast as the server allows'})
+    AutoTool = Breaker:CreateToggle({Name = 'Auto Tool', Tooltip = 'Automatically equips the most effective tool for each block type being broken'})
     LimitItem = Breaker:CreateToggle({
         Name = 'Limit to items',
         Tooltip = 'Only breaks when tools are held'
@@ -15423,7 +15442,7 @@ run(function()
     for i in bedwars.AdetundeUpgradeMeta do
     	AutoAdetunde:CreateToggle({
     		Name = 'Buy ' .. i,
-    		Tooltip = 'Enables or disables buy ',
+    		Tooltip = 'Automatically upgrades this Frosty Hammer tier when you have enough crystals',
     		Default = true,
     	})
     end
@@ -16047,7 +16066,7 @@ run(function()
 
     Streamer = AutoElder:CreateToggle({
     	Name = 'Streamer mode',
-    	Tooltip = 'Useful for when ur screensharing',
+    	Tooltip = 'Hides delay, range, and animation settings from the UI — useful for streaming',
     	Function = function(call)
     		pcall(function()
     			Delay.Object.Visible = not call
@@ -16689,7 +16708,7 @@ run(function()
     			Animation.Object.Visible = not call
     		end)
     	end,
-    	Tooltip = 'Actually does the metal prompt thing for you'
+    	Tooltip = 'Hides duration, range, and animation settings from the UI — useful for streaming'
     })
     Animation = AutoMetal:CreateToggle({
     	Name = 'Animation',
@@ -16813,7 +16832,7 @@ run(function()
     	end))
     end
 
-    Notify = AutoNoelle:CreateToggle({ Name = 'Notify on direct' , Tooltip = 'Enables or disables notify on direct'})
+    Notify = AutoNoelle:CreateToggle({ Name = 'Notify on direct' , Tooltip = 'Sends a notification each time a slime is successfully redirected to its target'})
     Limit = AutoNoelle:CreateToggle({ Name = 'Limit to item' , Tooltip = 'Only activates when a required item is in your hand'})
     FrostySlime = AutoNoelle:CreateDropdown({
     	Name = 'Frosty Slime Target',
@@ -16917,7 +16936,7 @@ run(function()
     for _, i in list do
     	AutoPyro:CreateToggle({
     		Name = 'Buy ' .. i,
-    		Tooltip = 'Enables or disables buy ',
+    		Tooltip = 'Automatically upgrades this flamethrower ability when you have enough currency',
     		Default = true
     	})
     end
@@ -17128,7 +17147,7 @@ run(function()
     			Animation.Object.Visible = not call
     		end)
     	end,
-    	Tooltip = 'Useful for when ur screensharing'
+    	Tooltip = 'Hides delay, range, and animation settings from the UI — useful for streaming'
     })
     Animation = AutoStar:CreateToggle({
     	Name = 'Animation',
@@ -17370,7 +17389,7 @@ run(function()
     			HealSpirit.Object.Visible = call
     		end)
     	end,
-    	Tooltip = 'Automattically summons spirit for you'
+    	Tooltip = 'Automatically summons a spirit companion to assist you in combat'
     })
     HealSpirit = AutoUma:CreateToggle({
     	Name = 'Use heal spirit',
@@ -17621,7 +17640,7 @@ run(function()
     	Tooltip = 'Uses the lightning strike ability automatically',
     	Default = true
     })
-    UseStorm = AutoZeno:CreateToggle({Name = 'Use Lightning Storm', Tooltip = 'Enables or disables use lightning storm'})
+    UseStorm = AutoZeno:CreateToggle({Name = 'Use Lightning Storm', Tooltip = 'Automatically uses the Lightning Storm ability to hit multiple nearby enemies at once'})
     AutoShockWave = AutoZeno:CreateToggle({
     	Name = 'Auto Shockwave',
     	Tooltip = 'Enables or disables auto shockwave',

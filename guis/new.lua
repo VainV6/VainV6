@@ -1078,9 +1078,13 @@ components = {
 					dropdownoption.TextTruncate = Enum.TextTruncate.AtEnd
 					dropdownoption.FontFace = uipallet.Font
 					dropdownoption.Parent = dropdownchildren
+					local itemTip = optionsettings.ItemTooltips and optionsettings.ItemTooltips[v]
+					if itemTip then
+						addTooltip(dropdownoption, itemTip)
+					end
 					dropdownoption.MouseEnter:Connect(function()
 						tooltipOwner = dropdownoption
-						tooltip.Visible = false
+						if not itemTip then tooltip.Visible = false end
 						tween:Tween(dropdownoption, uipallet.Tween, {
 							BackgroundColor3 = color.Light(uipallet.Main, 0.02)
 						})
