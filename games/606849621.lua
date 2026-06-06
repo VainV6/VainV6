@@ -815,32 +815,3 @@ run(function()
     })
 end)
 
-run(function()
-	local Wallbang = {Enabled = false}
-
-	Wallbang = vain.Categories.Combat:CreateModule({
-		Name = 'Wallbang',
-		Function = function(callback)
-			if callback then
-				local hook
-				hook = hookfunction(jb.GunController.BulletEmitterOnLocalHitPlayer, function(...)
-					local shotData = select(15, ...)
-					shotData.isWallbang = nil
-					shotData.isHeadshot = true
-					return hook(...)
-				end)
-
-				repeat
-					local item = jb.ItemSystemController:GetLocalEquipped()
-					if item and item.BulletEmitter then
-						item.BulletEmitter.IgnoreList = {workspace}
-					end
-					task.wait(0.1)
-				until not Wallbang.Enabled
-			else
-				restorefunction(jb.GunController.BulletEmitterOnLocalHitPlayer)
-			end
-		end,
-		Tooltip = 'Modifies bullets to always do headshot damage & shooting through most walls.'
-	})
-end)
