@@ -1741,7 +1741,12 @@ local AimAssist
 		Name = 'Aim Part',
 		Tooltip = 'Which body part on the target to aim at',
 		List = {'Torso', 'Head', 'Closest'},
-		Default = 'Torso'
+		Default = 'Torso',
+		ItemTooltips = {
+			Torso = 'Aims at the center of the player\'s body — reliable and easy to hit',
+			Head = 'Aims at the head — higher damage potential but smaller hitbox',
+			Closest = 'Aims at whichever body part is nearest to your crosshair',
+		}
 	})
 
 	ViewMode = AimAssist:CreateDropdown({
@@ -6550,6 +6555,13 @@ run(function()
 		List = {'Dynamic', 'RootPart', 'Head', 'Closest', 'Randomize'},
 		Default = 'RootPart',
 		Tooltip = 'Select which body part to aim at',
+		ItemTooltips = {
+			Dynamic = 'Targets the head when holding Headhunter, otherwise aims at RootPart',
+			RootPart = 'Always aims at the center of the player\'s body (HumanoidRootPart)',
+			Head = 'Always aims at the head — highest damage but smaller hitbox',
+			Closest = 'Aims at whichever body part is closest to your crosshair',
+			Randomize = 'Picks a random body part each shot',
+		},
 		Function = function()
 			lockedRandomPart = nil
 			wasHovering = false
@@ -10507,7 +10519,12 @@ run(function()
         Name = 'Aim Part',
         Tooltip = 'Which body part on the target to aim at',
         List = {'RootPart', 'Head', 'Torso'},
-        Default = 'RootPart'
+        Default = 'RootPart',
+        ItemTooltips = {
+            RootPart = 'Aims at the center of the player\'s body (HumanoidRootPart)',
+            Head = 'Aims at the head — higher damage potential but smaller hitbox',
+            Torso = 'Aims at the upper torso',
+        }
     })
 
     PredictionMode = AutoLasso:CreateDropdown({
