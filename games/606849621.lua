@@ -474,6 +474,7 @@ run(function()
     })
     Range = SilentAim:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Radius in studs to search for targets',
     	Min = 1,
     	Max = 1000,
     	Default = 150,
@@ -488,6 +489,7 @@ run(function()
     })
     SilentAim:CreateToggle({
     	Name = 'Range Circle',
+    	Tooltip = 'Draws a circle on screen showing the aim radius',
     	Function = function(callback)
     		if callback then
     			CircleObject = Drawing.new('Circle')
@@ -521,6 +523,7 @@ run(function()
     })
     CircleTransparency = SilentAim:CreateSlider({
     	Name = 'Transparency',
+    	Tooltip = 'Opacity of the aim range circle (0 = invisible, 1 = solid)',
     	Min = 0,
     	Max = 1,
     	Decimal = 10,
@@ -535,6 +538,7 @@ run(function()
     })
     CircleFilled = SilentAim:CreateToggle({
     	Name = 'Circle Filled',
+    	Tooltip = 'Fills the range circle instead of drawing just the outline',
     	Function = function(callback)
     		if CircleObject then
     			CircleObject.Filled = callback
@@ -543,7 +547,7 @@ run(function()
     	Darker = true,
     	Visible = false
     })
-    Instant = SilentAim:CreateToggle({Name = 'Hitscan Bullets'})
+    Instant = SilentAim:CreateToggle({Name = 'Hitscan Bullets', Tooltip = 'Forces bullets to register hits instantly regardless of travel time'})
 end)
 
 --[[
@@ -666,12 +670,13 @@ run(function()
     })
     Range = AutoPop:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs to search for vehicles to pop',
     	Min = 1,
     	Max = 600,
     	Default = 600
     })
-    HandCheck = AutoPop:CreateToggle({Name = 'Hand Check'})
-    TeamCheck = AutoPop:CreateToggle({Name = 'Team Check'})
+    HandCheck = AutoPop:CreateToggle({Name = 'Hand Check', Tooltip = 'Only pops tires while holding a weapon'})
+    TeamCheck = AutoPop:CreateToggle({Name = 'Team Check', Tooltip = 'Only targets enemy team vehicles'})
 end)
 
 run(function()
@@ -727,11 +732,11 @@ run(function()
     	end,
     	Tooltip = 'Immobilizes entities around you'
     })
-    HandCheck = AutoTaze:CreateToggle({Name = 'Hand Check'})
+    HandCheck = AutoTaze:CreateToggle({Name = 'Hand Check', Tooltip = 'Only activates while holding a taser'})
 end)
 
 run(function()
-    LazerGodmode = vain.Categories.Blatant:CreateModule({ Name = 'LazerGodmode' })
+    LazerGodmode = vain.Categories.Blatant:CreateModule({ Name = 'LazerGodmode', Tooltip = 'Godmode via lazer exploit' })
 end)
 
 run(function()

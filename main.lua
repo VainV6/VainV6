@@ -37,8 +37,37 @@ local function downloadFile(path, func)
 	return (func or readfile)(path)
 end
 
+local function applyModuleIndicators()
+	pcall(function()
+		local content
+		if isfile('newvain/changed_modules.txt') then
+			content = readfile('newvain/changed_modules.txt')
+		elseif isfile('newvain/profiles/commit.txt') then
+			local res = game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('newvain/profiles/commit.txt')..'/changed_modules.txt', true)
+			if res ~= '404: Not Found' then content = res end
+		end
+		if not content or not vain then return end
+		for line in content:gmatch('[^\n]+') do
+			local tag, name = line:match('^([A-Z]+):(.+)$')
+			if tag and name then
+				local mod = vain.Modules[name]
+				if mod then
+					local t = tag
+					mod.ExtraText = function() return t end
+					if mod.Object then
+						mod.Object.RichText = true
+						local tagColor = tag == 'NEW' and '#5AFF5A' or '#FFD95A'
+						mod.Object.Text = mod.Object.Text.." <font color='"..tagColor.."' size='11'>["..tag.."]</font>"
+					end
+				end
+			end
+		end
+	end)
+end
+
 local function finishLoading()
 	vain.Init = nil
+	applyModuleIndicators()
 	vain:Load()
 	task.spawn(function()
 		repeat

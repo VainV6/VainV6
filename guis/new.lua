@@ -219,10 +219,13 @@ local function addMaid(object)
 	end
 end
 
+local tooltipOwner = nil
+
 local function addTooltip(gui, text)
 	if not text then return end
 
 	local function tooltipMoved(x, y)
+		if tooltipOwner ~= gui then return end
 		local right = x + 16 + tooltip.Size.X.Offset > (scale.Scale * 1920)
 		tooltip.Position = UDim2.fromOffset(
 			(right and x - (tooltip.Size.X.Offset * scale.Scale) - 16 or x + 16) / scale.Scale,
@@ -232,13 +235,18 @@ local function addTooltip(gui, text)
 	end
 
 	gui.MouseEnter:Connect(function(x, y)
-		local tooltipSize = getfontsize(text, tooltip.TextSize, uipallet.Font)
-		tooltip.Size = UDim2.fromOffset(tooltipSize.X + 10, tooltipSize.Y + 10)
-		tooltip.Text = text
-		tooltipMoved(x, y)
+		tooltipOwner = gui
+		task.defer(function()
+			if tooltipOwner ~= gui then return end
+			local tooltipSize = getfontsize(text, tooltip.TextSize, uipallet.Font)
+			tooltip.Size = UDim2.fromOffset(tooltipSize.X + 10, tooltipSize.Y + 10)
+			tooltip.Text = text
+			tooltipMoved(x, y)
+		end)
 	end)
 	gui.MouseMoved:Connect(tooltipMoved)
 	gui.MouseLeave:Connect(function()
+		if tooltipOwner == gui then tooltipOwner = nil end
 		tooltip.Visible = false
 	end)
 end
@@ -1071,11 +1079,14 @@ components = {
 					dropdownoption.FontFace = uipallet.Font
 					dropdownoption.Parent = dropdownchildren
 					dropdownoption.MouseEnter:Connect(function()
+						tooltipOwner = dropdownoption
+						tooltip.Visible = false
 						tween:Tween(dropdownoption, uipallet.Tween, {
 							BackgroundColor3 = color.Light(uipallet.Main, 0.02)
 						})
 					end)
 					dropdownoption.MouseLeave:Connect(function()
+						if tooltipOwner == dropdownoption then tooltipOwner = nil end
 						tween:Tween(dropdownoption, uipallet.Tween, {
 							BackgroundColor3 = uipallet.Main
 						})

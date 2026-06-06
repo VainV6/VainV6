@@ -2311,6 +2311,7 @@ run(function()
     })
     Projectiles = BowAssist:CreateTextList({
     	Name = 'Blacklisted',
+    	Tooltip = 'Projectile names that bypass bow-assist (one per line)',
     	Default = { 'fireball', 'telepearl', 'gloop' },
     	Darker = true,
     })
@@ -4332,6 +4333,7 @@ run(function()
     
     blocks = FastBreak:CreateTextList({
         Name = 'Blacklisted Blocks',
+        Tooltip = 'Block names that FastBreak will not mine (one per line)',
         Placeholder = 'bed',
         Visible = false,
         Function = function()
@@ -5453,6 +5455,7 @@ run(function()
     })
     ParticleTexture = Killaura:CreateTextBox({
         Name = 'Texture',
+        Tooltip = 'Roblox asset ID for the particle effect texture',
         Default = 'rbxassetid://14736249347',
         Function = function()
             for _, v in Particles do
@@ -6738,6 +6741,7 @@ run(function()
 
 	Blacklist = ProjectileAimbot:CreateTextList({
 		Name = 'Blacklist',
+		Tooltip = 'Projectile types to exclude from aimbot (one per line)',
 		Darker = true,
 		Default = {'telepearl'},
 		Visible = OtherProjectiles.Enabled
@@ -6912,6 +6916,7 @@ run(function()
     })
     List = ProjectileAura:CreateTextList({
     	Name = 'Projectiles',
+    	Tooltip = 'Projectile types the aura fires (one per line)',
     	Default = {'arrow', 'snowball'},
     })
     FireRate = ProjectileAura:CreateSlider({
@@ -7603,6 +7608,7 @@ run(function()
     })
     TAG = CustomTags:CreateTextBox({
     	Name = 'Tag',
+    	Tooltip = 'Text to display as the kill tag',
     	Default = 'gg',
     	Function = function()
     		if CustomTags.Enabled then
@@ -7784,6 +7790,7 @@ run(function()
     })
     Whitelisted = GeneratorESP:CreateTextList({
     	Name = 'Generators',
+    	Tooltip = 'Generator names to highlight (leave empty for all)',
     	Darker = true,
     	Default = {'diamond', 'iron'},
     })
@@ -7965,6 +7972,7 @@ run(function()
     })
     Whitelist = ItemESP:CreateTextList({
     	Name = 'Allowed items',
+    	Tooltip = 'Only highlight items in this list (one per line)',
     	Visible = false,
     	Darker = true,
     	Function = function()
@@ -9635,6 +9643,7 @@ run(function()
     })
     List = StorageESP:CreateTextList({
     	Name = 'Item',
+    	Tooltip = 'Items to search for inside storage chests (one per line)',
     	Function = function()
     		for _, v in Reference do
     			task.spawn(refreshAdornee, v)
@@ -11329,6 +11338,7 @@ run(function()
         })
         Lists[v] = AutoToxic:CreateTextList({
             Name = v,
+            Tooltip = 'Messages to send for this category (one per line)',
             Darker = true,
             Visible = false
         })
@@ -12170,12 +12180,14 @@ run(function()
     })
     Profile = StaffDetector:CreateTextBox({
         Name = 'Profile',
+        Tooltip = 'Vain profile name to switch to when staff is detected',
         Default = 'default',
         Darker = true,
         Visible = false
     })
     Users = StaffDetector:CreateTextList({
         Name = 'Users',
+        Tooltip = 'Player names or user IDs to flag as staff (one per line)',
         Placeholder = 'player (userid)'
     })
 end)
@@ -12655,6 +12667,7 @@ run(function()
     })
     Blacklist = BedProtector:CreateTextList({
         Name = 'Blacklist',
+        Tooltip = 'Block types to ignore when detecting bed threats (one per line)',
         Default = {'siege_tnt', 'tnt'},
     })
     PlaceRange = BedProtector:CreateSlider({
@@ -12912,6 +12925,7 @@ run(function()
     })
     Blacklist = BlockIn:CreateTextList({
     	Name = 'Blacklists',
+    	Tooltip = 'Block names to skip for block-in detection (one per line)',
     	Placeholder = 'block',
     	Default = {
     		'cannon',
@@ -13241,6 +13255,7 @@ run(function()
     })
     File = Schematica:CreateTextBox({
         Name = 'File',
+        Tooltip = 'Filename to save or load the schematic',
         Function = function()
             loadMaterials()
             point1, point2 = nil, nil
@@ -13784,6 +13799,7 @@ run(function()
     })
     AutoBuy:CreateTextList({
         Name = 'Item',
+        Tooltip = 'Auto-buy list (format: priority/item/amount/after)',
         Placeholder = 'priority/item/amount/after',
         Function = function(list)
             table.clear(Custom)
@@ -15303,6 +15319,7 @@ run(function()
     })
     Custom = Breaker:CreateTextList({
         Name = 'Custom',
+        Tooltip = 'Custom block break speed overrides (one per line)',
         Function = function()
             if not customlist then return end
             table.clear(customlist)
@@ -15625,6 +15642,7 @@ run(function()
     })
     Blacklist = AutoBuilder:CreateTextList({
     	Name = 'Blacklists',
+    	Tooltip = 'Block types to skip when auto-building (one per line)',
     	Placeholder = 'block',
     	Default = {'cannon', 'wool'}
     })
@@ -18092,6 +18110,7 @@ run(function()
     })
     Image = Crosshair:CreateTextBox({
         Name = 'Image',
+        Tooltip = 'Roblox image ID to use as the crosshair overlay',
         Placeholder = 'image id (roblox)',
         Function = function(enter)
             if enter and Crosshair.Enabled then
@@ -18920,6 +18939,7 @@ run(function()
     })
     List = SongBeats:CreateTextList({
         Name = 'Songs',
+        Tooltip = 'Songs to play (format: filepath/bpm/start, one per line)',
         Placeholder = 'filepath/bpm/start'
     })
     FOV = SongBeats:CreateToggle({
@@ -18987,6 +19007,7 @@ run(function()
     })
     List = SoundChanger:CreateTextList({
         Name = 'Sounds',
+        Tooltip = 'Custom sound replacements (format: SOUND_ID/file.mp3, one per line)',
         Placeholder = '(DAMAGE_1/ben.mp3)',
         Function = function()
             table.clear(soundlist)
@@ -20021,7 +20042,7 @@ run(function()
 		end
 	})
 	ParticleTexture = Killaura:CreateTextBox({
-		Name = 'Texture', Default = 'rbxassetid://14736249347',
+		Name = 'Texture', Tooltip = 'Roblox asset ID for the particle effect texture', Default = 'rbxassetid://14736249347',
 		Function = function()
 			for _, v in Particles do v.ParticleEmitter.Texture = ParticleTexture.Value end
 		end,
@@ -23795,6 +23816,7 @@ run(function()
 
     Blacklist = Fisherman:CreateTextList({
         Name    = "Blacklist Fish",
+        Tooltip = "Fish types to skip auto-catching (one per line)",
         Default = { "fish_iron" }
     })
 
@@ -27130,6 +27152,7 @@ run(function()
 	})
 	Blacklist = AutoMushroom:CreateTextList({
 		Name = "Blacklist",
+		Tooltip = 'Mushroom types to skip collecting (one per line)',
 		Default = {'Dizzy'}
 	})
 	Range = AutoMushroom:CreateSlider({
@@ -28018,6 +28041,7 @@ run(function()
 	})
 	customIcon = CustomCursor:CreateTextBox({
 		Name = 'Custom Mouse Icon',
+		Tooltip = 'Roblox image ID for the custom cursor (not a decal ID)',
 		TempText = 'Image ID (not decal)',
 		FocusLost = function(enter) 
 			if CustomCursor.Enabled then 
