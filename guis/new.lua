@@ -6168,7 +6168,7 @@ do
 	-- ── Build browser window ──────────────────────────────────────────────────
 	local browserWindow = Instance.new('Frame')
 	browserWindow.Name = 'GlobalProfileBrowser'
-	browserWindow.Size = UDim2.fromOffset(280, 360)
+	browserWindow.Size = UDim2.fromOffset(340, 480)
 	browserWindow.Position = UDim2.fromOffset(480, 60)
 	browserWindow.BackgroundColor3 = uipallet.Main
 	browserWindow.BorderSizePixel = 0
@@ -6327,9 +6327,8 @@ do
 	local uploadBtn  = makeBottomBtn('Upload Current', 124)
 	local loadMoreBtn = makeBottomBtn('Load More', 100)
 
-	-- Hide upload if not Premium+
-	local userTier = mainapi.Tier or 0
-	uploadBtn.Visible = userTier >= 1
+	-- Upload visibility is set lazily when the browser opens (tier may not be set yet at init)
+	uploadBtn.Visible = false
 
 	-- ── Data & state ──────────────────────────────────────────────────────────
 	local cachedProfiles = nil
@@ -6650,22 +6649,24 @@ do
 	if profilesWindow then
 		local browseBtn = Instance.new('TextButton')
 		browseBtn.Size = UDim2.fromOffset(200, 28)
-		browseBtn.BackgroundColor3 = color.Light(uipallet.Main, 0.04)
+		browseBtn.LayoutOrder = 999
+		browseBtn.BackgroundColor3 = color.Light(uipallet.Main, 0.07)
 		browseBtn.AutoButtonColor = false
 		browseBtn.Text = 'Browse Global Profiles'
-		browseBtn.TextColor3 = color.Dark(uipallet.Text, 0.25)
+		browseBtn.TextColor3 = color.Dark(uipallet.Text, 0.08)
 		browseBtn.TextSize = 12
 		browseBtn.FontFace = uipallet.FontSemiBold
 		browseBtn.Parent = profilesWindow.Children
 		addCorner(browseBtn)
 
 		local browseBtnStroke = Instance.new('UIStroke')
-		browseBtnStroke.Color = color.Light(uipallet.Main, 0.1)
+		browseBtnStroke.Color = color.Light(uipallet.Main, 0.14)
 		browseBtnStroke.Parent = browseBtn
 
 		browseBtn.MouseButton1Click:Connect(function()
 			browserWindow.Visible = not browserWindow.Visible
 			if browserWindow.Visible then
+				uploadBtn.Visible = (mainapi.Tier or 0) >= 1
 				fetchProfiles(true)
 			end
 		end)
@@ -6674,7 +6675,7 @@ do
 			tween:Tween(browseBtn, uipallet.Tween, { TextColor3 = uipallet.Text })
 		end)
 		browseBtn.MouseLeave:Connect(function()
-			tween:Tween(browseBtn, uipallet.Tween, { TextColor3 = color.Dark(uipallet.Text, 0.25) })
+			tween:Tween(browseBtn, uipallet.Tween, { TextColor3 = color.Dark(uipallet.Text, 0.08) })
 		end)
 	end
 	-- ── End Global Profile Browser ────────────────────────────────────────────
