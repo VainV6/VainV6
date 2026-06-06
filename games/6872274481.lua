@@ -1571,6 +1571,7 @@ local AimAssist
 
 	AimAssist = vain.Categories.Combat:CreateModule({
 		Name = 'AimAssist',
+		Tooltip = 'Smoothly deflects your camera toward nearby enemies',
 		Function = function(callback)
 			if callback then
 				lockedTarget = nil
@@ -1718,6 +1719,7 @@ local AimAssist
 	})
 
 	Targets = AimAssist:CreateTargets({
+		Tooltip = 'Configure which types of targets to include',
 		Players = true,
 		Walls = true
 	})
@@ -1737,6 +1739,7 @@ local AimAssist
 
 	AimPart = AimAssist:CreateDropdown({
 		Name = 'Aim Part',
+		Tooltip = 'Which body part on the target to aim at',
 		List = {'Torso', 'Head', 'Closest'},
 		Default = 'Torso'
 	})
@@ -1758,6 +1761,7 @@ local AimAssist
 
 	Distance = AimAssist:CreateSlider({
 		Name = 'Distance',
+		Tooltip = 'Maximum distance in studs',
 		Min = 1,
 		Max = 30,
 		Default = 25,
@@ -1820,6 +1824,7 @@ local AimAssist
 
 	ShakeAmount = AimAssist:CreateSlider({
 		Name = 'Shake Amount',
+		Tooltip = 'Adjusts the shake amount value',
 		Min = 1,
 		Max = 10,
 		Default = 3,
@@ -1908,6 +1913,7 @@ run(function()
 
         AutoClicker = vain.Categories.Combat:CreateModule({
             Name = 'AutoClicker',
+            Tooltip = 'Automatically clicks at a configurable CPS rate',
             Function = function(callback)
                 if callback then
                     AutoClicker:Clean(inputService.InputBegan:Connect(function(input)
@@ -1945,6 +1951,7 @@ run(function()
 
         AutoClicker:CreateToggle({
             Name = 'Place Blocks',
+            Tooltip = 'Automatically places blocks while clicking',
             Default = true,
             Function = function(callback)
                 if BlockCPS.Object then
@@ -2032,6 +2039,7 @@ run(function()
 
         AutoClicker = vain.Categories.Combat:CreateModule({
             Name = 'AutoClicker',
+            Tooltip = 'Automatically clicks at a configurable CPS rate',
             Function = function(callback)
                 if callback then
                     AutoClicker:Clean(inputService.InputBegan:Connect(function(input)
@@ -2065,6 +2073,7 @@ run(function()
 
         PlaceBlocksToggle = AutoClicker:CreateToggle({
             Name = 'Place Blocks',
+            Tooltip = 'Automatically places blocks while clicking',
             Default = false,
             Function = function(callback)
                 task.defer(function()
@@ -2084,6 +2093,7 @@ run(function()
 
         SwingSwordToggle = AutoClicker:CreateToggle({
             Name = 'Swing Sword',
+            Tooltip = 'Automatically swings the sword while clicking',
             Default = false,
             Function = function(callback)
                 if SwordCPS.Object then SwordCPS.Object.Visible = callback end
@@ -2172,6 +2182,7 @@ run(function()
     
     BowAssist = vain.Categories.Combat:CreateModule({
     	Name = 'Bow Assist',
+    	Tooltip = 'Snaps bow aim onto the nearest valid target',
     	Function = function(callback)
     		if callback then
     			local multi, predicted = 0, nil
@@ -2232,6 +2243,7 @@ run(function()
     })
     
     Targets = BowAssist:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
     	Players = true,
     	Walls = true,
     })
@@ -2243,6 +2255,7 @@ run(function()
     end
     Sort = BowAssist:CreateDropdown({
     	Name = 'Target mode',
+    	Tooltip = 'Selects how targets are prioritized and selected',
     	List = methods,
     	Default = 'Angle',
     })
@@ -2256,6 +2269,7 @@ run(function()
     })
     Angle = BowAssist:CreateSlider({
     	Name = 'Max angle',
+    	Tooltip = 'Maximum angle in degrees from your look direction to engage',
     	Min = 1,
     	Max = 360,
     	Default = 120,
@@ -2269,12 +2283,14 @@ run(function()
     })
     FOV = BowAssist:CreateSlider({
     	Name = 'FOV',
+    	Tooltip = 'Field-of-view cone in degrees for target detection',
     	Min = 1,
     	Max = 1000,
     	Default = 200,
     })
     Mouse = BowAssist:CreateToggle({
     	Name = 'Require mouse down',
+    	Tooltip = 'Only activates while the left mouse button is held',
     	Default = inputService.KeyboardEnabled,
     })
     ThirdPerson = BowAssist:CreateToggle({
@@ -2284,6 +2300,7 @@ run(function()
     })
     Blacklist = BowAssist:CreateToggle({
     	Name = 'Use blacklist',
+    	Tooltip = 'Enables a block type blacklist for filtering targets',
     	Default = true,
     	Function = function(callback)
     		if Projectiles then
@@ -2304,6 +2321,7 @@ run(function()
     
     vain.Categories.Combat:CreateModule({
         Name = 'No Click Delay',
+        Tooltip = 'Enables the No Click Delay module',
         Function = function(callback)
             if callback then
                 old = bedwars.SwordController.isClickingTooFast
@@ -2358,6 +2376,7 @@ run(function()
     		})
     		SwordReach = Reach:CreateToggle({
     			Name = 'Sword Reach',
+    			Tooltip = 'Extends sword attack reach server-side',
     			Default = true,
     			Function = function(callback)
     				bedwars.CombatConstant.RAYCAST_SWORD_CHARACTER_DISTANCE = Reach.Enabled and callback and SwordRange.Value + 2 or 14.4
@@ -2368,6 +2387,7 @@ run(function()
     		})
     		SwordRange = Reach:CreateSlider({
     			Name = 'Sword Range',
+    			Tooltip = 'Sword reach extension in studs',
     			Min = 1,
     			Max = 18,
     			Default = 18,
@@ -2382,12 +2402,14 @@ run(function()
     		})
     		BlockReach = Reach:CreateToggle({
     			Name = 'Placement Reach',
+    			Tooltip = 'Extends block placement reach in studs',
     			Function = function(callback)
     				BlockRange.Object.Visible = callback
     			end,
     		})
     		BlockRange = Reach:CreateSlider({
     			Name = 'Placement Range',
+    			Tooltip = 'Adjusts the placement range value',
     			Min = 1,
     			Max = 60,
     			Default = 18,
@@ -2399,12 +2421,14 @@ run(function()
     		})
     		BreakReach = Reach:CreateToggle({
     			Name = 'Break Reach',
+    			Tooltip = 'Extends block breaking reach in studs',
     			Function = function(callback)
     				BreakRange.Object.Visible = callback
     			end,
     		})
     		BreakRange = Reach:CreateSlider({
     			Name = 'Break Range',
+    			Tooltip = 'Maximum distance in studs to break blocks',
     			Min = 1,
     			Max = 30,
     			Default = 30,
@@ -2432,6 +2456,7 @@ run(function()
     
     	Reach = vain.Categories.Combat:CreateModule({
     		Name = 'Reach',
+    		Tooltip = 'Extends your melee and placement ranges server-side',
     		Function = function(callback)
     			if callback then
     				Reach:Clean(vapeEvents.CEAttacked.Event:Connect(function()
@@ -2489,6 +2514,7 @@ run(function()
     	})
     	Value = Reach:CreateSlider({
     		Name = 'Range',
+    		Tooltip = 'Maximum distance in studs',
     		Min = 0,
     		Max = 18,
     		Default = 18,
@@ -2602,6 +2628,7 @@ run(function()
     
     SilentAura = vain.Categories.Combat:CreateModule({
         Name = 'Silent Aura',
+        Tooltip = 'Attacks nearby enemies silently without visible swings',
         Function = function(callback)
             if callback then
                 local lastent, lastfound = nil, 0
@@ -2718,6 +2745,7 @@ run(function()
     })
     
     Targets = SilentAura:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
         Players = true,
         NPCs = true,
     })
@@ -2731,6 +2759,7 @@ run(function()
     })
     SwingTime = SilentAura:CreateSlider({
         Name = 'Swing time',
+        Tooltip = 'Minimum seconds between swings',
         Darker = true,
         Visible = false,
         Min = 0,
@@ -2751,6 +2780,7 @@ run(function()
     })
     Angle = SilentAura:CreateSlider({
         Name = 'Max angle',
+        Tooltip = 'Maximum angle in degrees from your look direction to engage',
         Min = 1,
         Max = 360,
         Default = 180,
@@ -2783,7 +2813,9 @@ run(function()
         Default = true,
     })
     Mouse = SilentAura:CreateToggle({Name = 'Require mouse down'})
+    Tooltip = 'Only activates while the left mouse button is held',
     LegitAura = SilentAura:CreateToggle({Name = 'Swing only'})
+    Tooltip = 'Enables or disables swing only',
     SilentAim = SilentAura:CreateToggle({
         Name = 'Silent Aim',
         Tooltip = "Uses Vain's aiming technology to silently aim while looking legit",
@@ -2794,6 +2826,7 @@ run(function()
     })
     Show = SilentAura:CreateToggle({
         Name = 'Show target',
+        Tooltip = 'Renders a visual indicator on the current target',
         Default = true,
         Function = function(callback)
             pcall(function()
@@ -2814,6 +2847,7 @@ run(function()
         DefaultOpacity = 0.5,
     })
     Limit = SilentAura:CreateToggle({Name = 'Limit to items'})
+    Tooltip = 'Only activates when a required item is in your hand',
 end)
 
 run(function()
@@ -2822,6 +2856,7 @@ run(function()
     
     Sprint = vain.Categories.Combat:CreateModule({
         Name = 'Sprint',
+        Tooltip = 'Keeps you sprinting at all times automatically',
         Function = function(callback)
             if callback then
                 if inputService.TouchEnabled then 
@@ -3175,6 +3210,7 @@ run(function()
 	})
 	Mode = Velocity:CreateDropdown({
 		Name = "Mode",
+		Tooltip = 'Selects the operating mode',
 		List = {'Lag','Default'},
 		Function = function(val)
 			if val == 'Default' then
@@ -3204,6 +3240,7 @@ run(function()
 	})
 	Vertical = Velocity:CreateSlider({
 		Name = "Vertical",
+		Tooltip = 'Vertical knockback component',
 		Min = 0,
 		Max = 100,
 		Default = 100,
@@ -3212,6 +3249,7 @@ run(function()
 	})
 	VerticalChance = Velocity:CreateSlider({
 		Name = "Vertical Chance",
+		Tooltip = 'Probability (%) of applying the vertical component',
 		Min = 0,
 		Max = 100,
 		Default = 100,
@@ -3221,6 +3259,7 @@ run(function()
 	})
 	Horizontal = Velocity:CreateSlider({
 		Name = "Horizontal",
+		Tooltip = 'Horizontal knockback component',
 		Min = 0,
 		Max = 100,
 		Default = 100,
@@ -3229,6 +3268,7 @@ run(function()
 	})
 	HorizontalChance = Velocity:CreateSlider({
 		Name = "Horizontal Chance",
+		Tooltip = 'Probability (%) of applying the horizontal component',
 		Min = 0,
 		Max = 100,
 		Default = 100,
@@ -3238,6 +3278,7 @@ run(function()
 	})
 	DelayGround = Velocity:CreateSlider({
 		Name = "Delay Ground",
+		Tooltip = 'Seconds before applying velocity while grounded',
 		Min = 0,
 		Max = 3000,
 		Default = 1000,
@@ -3247,6 +3288,7 @@ run(function()
 	})
 	DelayAir = Velocity:CreateSlider({
 		Name = "Air Ground",
+		Tooltip = 'Seconds before applying velocity while airborne',
 		Min = 0,
 		Max = 3000,
 		Default = 1000,
@@ -3256,10 +3298,12 @@ run(function()
 	})
 	Targetting = Velocity:CreateToggle({
 		Name = 'Only when targetting',
+		Tooltip = 'Only modifies velocity when a target is being attacked',
 		Default = false
 	})
 	Chance = Velocity:CreateSlider({
 		Name = "Chance",
+		Tooltip = 'Probability (%) this action fires each cycle',
 		Min = 0,
 		Max = 100,
 		Default = 100,
@@ -3283,6 +3327,7 @@ run(function()
     
     VelocityPlus = vain.Categories.Combat:CreateModule({
     	Name = 'Velocity Plus',
+    	Tooltip = 'Modifies the knockback velocity you receive from hits',
     	Function = function(callback)
     		if callback then
     			old = bedwars.KnockbackUtil.applyKnockback
@@ -3363,6 +3408,7 @@ run(function()
     
     AntiFall = vain.Categories.Blatant:CreateModule({
         Name = 'Anti Fall',
+        Tooltip = 'Prevents fall damage by placing a block beneath you',
         Function = function(callback)
             if callback then
                 repeat task.wait() until store.matchState ~= 0 or (not AntiFall.Enabled)
@@ -3445,6 +3491,7 @@ run(function()
     })
     Mode = AntiFall:CreateDropdown({
         Name = 'Move Mode',
+        Tooltip = 'Selects the move mode option',
         List = {'Normal', 'Collide', 'Velocity'},
         Function = function(val)
             if AntiFallPart then
@@ -3461,6 +3508,7 @@ run(function()
     end
     Material = AntiFall:CreateDropdown({
         Name = 'Material',
+        Tooltip = 'Selects the material used for placed blocks',
         List = materials,
         Function = function(val)
             if AntiFallPart then
@@ -3617,6 +3665,7 @@ run(function()
     })
     
     Targets = AutoDodge:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
     	Players = true,
     	NPCs = false,
     })
@@ -3632,6 +3681,7 @@ run(function()
     })
     Range = AutoDodge:CreateSlider({
     	Name = 'Melee Range',
+    	Tooltip = 'Maximum melee hit distance in studs',
     	Min = 1,
     	Max = 30,
     	Default = 30,
@@ -3780,6 +3830,7 @@ run(function()
 
 	KaidaKillaura = vain.Categories.Kits:CreateModule({
 		Name = 'AutoKaida',
+		Tooltip = 'Automates the Kaida kit flame breath ability',
 		Function = function(callback)
 			if callback then
 				lastAttackTime = 0
@@ -3997,6 +4048,7 @@ run(function()
 	})
 
 	Targets = KaidaKillaura:CreateTargets({
+		Tooltip = 'Configure which types of targets to include',
 		Players = true,
 		NPCs = true,
 		Walls = true
@@ -4004,6 +4056,7 @@ run(function()
 
 	AttackRange = KaidaKillaura:CreateSlider({
 		Name = 'Attack Range',
+		Tooltip = 'Distance at which the hit packet is sent',
 		Min = 1,
 		Max = 32,
 		Default = 22,
@@ -4014,6 +4067,7 @@ run(function()
 
 	UpdateRate = KaidaKillaura:CreateSlider({
 		Name = 'Update Rate',
+		Tooltip = 'How often to scan for targets (seconds)',
 		Min = 1,
 		Max = 120,
 		Default = 60,
@@ -4027,10 +4081,12 @@ run(function()
 
 	GUICheck = KaidaKillaura:CreateToggle({
 		Name = 'GUI Check'
+		Tooltip = 'Pauses the module when a GUI menu is open',
 	})
 
 	ShowAnimation = KaidaKillaura:CreateToggle({
 		Name = 'Show Animation',
+		Tooltip = 'Plays the attack animation during killaura hits',
 		Default = true
 	})
 
@@ -4085,6 +4141,7 @@ run(function()
     
     DamageBoost = vain.Categories.Blatant:CreateModule({
     	Name = 'Damage Boost',
+    	Tooltip = 'Boosts the damage you deal to enemies',
     	Function = function(callback)
     		if callback then
     			DamageBoost:Clean(vapeEvents.EntityDamageEvent.Event:Connect(function(damageTable)
@@ -4195,6 +4252,7 @@ run(function()
     
     FastBreak = vain.Categories.Blatant:CreateModule({
         Name = 'FastBreak',
+        Tooltip = 'Speeds up block breaking beyond the normal cap',
         Function = function(callback)
             if callback then
                 oldHitBlock = bedwars.BlockBreaker.hitBlock
@@ -4251,6 +4309,7 @@ run(function()
     
     Time = FastBreak:CreateSlider({
         Name = 'Break speed',
+        Tooltip = 'How fast blocks are broken (higher = faster)',
         Min = 0, Max = 0.3, Default = 0.25, Decimal = 100, Suffix = 'seconds',
         Function = function() updateBreakSpeed() end
     })
@@ -4298,6 +4357,7 @@ run(function()
     
     Fly = vain.Categories.Blatant:CreateModule({
         Name = 'Fly',
+        Tooltip = 'Lets you fly freely around the map',
         Function = function(callback)
             frictionTable.Fly = callback or nil
             updateVelocity()
@@ -4403,6 +4463,7 @@ run(function()
     })
     Value = Fly:CreateSlider({
         Name = 'Speed',
+        Tooltip = 'Movement speed multiplier',
         Min = 1,
         Max = 23,
         Default = 23,
@@ -4412,6 +4473,7 @@ run(function()
     })
     VerticalValue = Fly:CreateSlider({
         Name = 'Vertical Speed',
+        Tooltip = 'Upward/downward speed in fly mode',
         Min = 1,
         Max = 150,
         Default = 50,
@@ -4421,14 +4483,17 @@ run(function()
     })
     WallCheck = Fly:CreateToggle({
         Name = 'Wall Check',
+        Tooltip = 'Only targets enemies with a clear line of sight',
         Default = true
     })
     PopBalloons = Fly:CreateToggle({
         Name = 'Pop Balloons',
+        Tooltip = 'Automatically pops balloons when flying nearby',
         Default = true
     })
     TP = Fly:CreateToggle({
         Name = 'TP Down',
+        Tooltip = 'Teleports down to ground level when fly is active',
         Default = true
     })
 end)
@@ -4544,6 +4609,7 @@ run(function()
 
     HitBoxes = vain.Categories.Blatant:CreateModule({
         Name = 'HitBoxes',
+        Tooltip = 'Expands enemy hitboxes to make them easier to hit',
         Function = function(callback)
             if callback then
                 updateExpandSize(Expand.Value)
@@ -4604,6 +4670,7 @@ run(function()
     })
 
     Targets = HitBoxes:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
         Players = true,
         Walls = false,
         NPCs = false,
@@ -4620,6 +4687,7 @@ run(function()
 
     Mode = HitBoxes:CreateDropdown({
         Name = 'Mode',
+        Tooltip = 'Selects the operating mode',
         List = {'Sword', 'Player'},
         Function = function(val)
             local isPlayer = val == 'Player'
@@ -4633,6 +4701,7 @@ run(function()
 
     Expand = HitBoxes:CreateSlider({
         Name = 'Expand amount',
+        Tooltip = 'How many studs to expand hitboxes in each direction',
         Min = 0,
         Max = 50,
         Default = 14.4,
@@ -4730,6 +4799,7 @@ end)
 run(function()
     vain.Categories.Blatant:CreateModule({
         Name = 'Keep Sprint',
+        Tooltip = 'Enables the Keep Sprint module',
         Function = function(callback)
             debug.setconstant(bedwars.SprintController.startSprinting, 5, callback and 'blockSprinting' or 'blockSprint')
             bedwars.SprintController:stopSprinting()
@@ -4867,6 +4937,7 @@ run(function()
     
     Killaura = vain.Categories.Blatant:CreateModule({
         Name = 'Killaura',
+        Tooltip = 'Automatically attacks all nearby enemies within range',
         Function = function(callback)
             if callback then
                 if Animation.Enabled then
@@ -5151,6 +5222,7 @@ run(function()
         Tooltip = 'Attack players around you\nwithout aiming at them.'
     })
     Targets = Killaura:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
         Players = true,
         NPCs = true
     })
@@ -5172,6 +5244,7 @@ run(function()
     end
     SwingRange = Killaura:CreateSlider({
         Name = 'Swing range',
+        Tooltip = 'Distance at which the swing animation begins',
         Min = 1,
         Max = 28,
         Default = 28,
@@ -5181,6 +5254,7 @@ run(function()
     })
     AttackRange = Killaura:CreateSlider({
         Name = 'Attack range',
+        Tooltip = 'Distance at which the hit packet is sent',
         Min = 1,
         Max = 28,
         Default = 28,
@@ -5190,12 +5264,14 @@ run(function()
     })
     AngleSlider = Killaura:CreateSlider({
         Name = 'Max angle',
+        Tooltip = 'Maximum angle in degrees from your look direction to engage',
         Min = 1,
         Max = 360,
         Default = 360
     })
     AirChance = Killaura:CreateSlider({
         Name = 'Air Hit Chance',
+        Tooltip = 'Probability (%) of landing hits while airborne',
         Min = 0,
     	Max = 100,
     	Default = 100,
@@ -5203,6 +5279,7 @@ run(function()
     })
     SwingTime = Killaura:CreateSlider({
         Name = 'Swing time',
+        Tooltip = 'Minimum seconds between swings',
         Min = 0,
         Max = 2,
         Decimal = 100,
@@ -5216,6 +5293,7 @@ run(function()
     })]]
     Hitreg = Killaura:CreateSlider({
         Name = 'Hitreg',
+        Tooltip = 'Hit registration timing offset in seconds',
         Min = 1,
         Max = 36,
         Default = 36,
@@ -5223,6 +5301,7 @@ run(function()
     })
     UpdateRate = Killaura:CreateSlider({
         Name = 'Update rate',
+        Tooltip = 'How often to scan for targets (seconds)',
         Min = 1,
         Max = 120,
         Default = 60,
@@ -5249,11 +5328,13 @@ run(function()
     })
     Legit = Killaura:CreateToggle({
     	Name = 'Legit Switch',
+    	Tooltip = 'Switches to a more legit-looking mode automatically',
     	Darker = true,
     	Visible = false
     })
     FireRate = Killaura:CreateSlider({
     	Name = 'Fire rate',
+    	Tooltip = 'Shots per second for projectile weapons',
     	Suffix = 'seconds',
     	Min = 0,
     	Max = 2,
@@ -5264,6 +5345,7 @@ run(function()
     })
     MaxTargets = Killaura:CreateSlider({
         Name = 'Max targets',
+        Tooltip = 'Maximum number of enemies to attack simultaneously',
         Min = 1,
         Max = 5,
         Default = 5
@@ -5281,6 +5363,7 @@ run(function()
     })
     Sort = Killaura:CreateDropdown({
         Name = 'Target Mode',
+        Tooltip = 'Selects how targets are prioritized and selected',
         List = methods
     })
     Dynamic = Killaura:CreateToggle({
@@ -5288,10 +5371,14 @@ run(function()
         Tooltip = 'Calculates ur hitreg depending on ur distance'
     })
     Mouse = Killaura:CreateToggle({Name = 'Require mouse down'})
+    Tooltip = 'Only activates while the left mouse button is held',
     Swing = Killaura:CreateToggle({Name = 'No Swing'})
+    Tooltip = 'Sends hit packets without playing the swing animation',
     GUI = Killaura:CreateToggle({Name = 'GUI check'})
+    Tooltip = 'Pauses the module when a GUI menu is open',
     Killaura:CreateToggle({
         Name = 'Show target',
+        Tooltip = 'Renders a visual indicator on the current target',
         Function = function(callback)
             BoxSwingColor.Object.Visible = callback
             BoxAttackColor.Object.Visible = callback
@@ -5329,6 +5416,7 @@ run(function()
     })
     Killaura:CreateToggle({
         Name = 'Target particles',
+        Tooltip = 'Shows particles on the currently targeted enemy',
         Function = function(callback)
             ParticleTexture.Object.Visible = callback
             ParticleColor1.Object.Visible = callback
@@ -5408,6 +5496,7 @@ run(function()
     })
     ParticleSize = Killaura:CreateSlider({
         Name = 'Size',
+        Tooltip = 'Display size of this element',
         Min = 0,
         Max = 1,
         Default = 0.2,
@@ -5421,8 +5510,10 @@ run(function()
         Visible = false
     })
     Face = Killaura:CreateToggle({Name = 'Face target'})
+    Tooltip = 'Rotates your character to face the target during animation',
     Animation = Killaura:CreateToggle({
         Name = 'Custom Animation',
+        Tooltip = 'Plays a custom ability animation instead of the default',
         Function = function(callback)
             AnimationMode.Object.Visible = callback
             AnimationTween.Object.Visible = callback
@@ -5439,12 +5530,14 @@ run(function()
     end
     AnimationMode = Killaura:CreateDropdown({
         Name = 'Animation Mode',
+        Tooltip = 'Selects the animation style to use',
         List = animnames,
         Darker = true,
         Visible = false
     })
     AnimationSpeed = Killaura:CreateSlider({
         Name = 'Animation Speed',
+        Tooltip = 'Adjusts the animation speed value',
         Min = 0,
         Max = 2,
         Default = 1,
@@ -5454,6 +5547,7 @@ run(function()
     })
     AnimationTween = Killaura:CreateToggle({
         Name = 'No Tween',
+        Tooltip = 'Skips smooth interpolation for instant hitbox updates',
         Darker = true,
         Visible = false
     })
@@ -5608,6 +5702,7 @@ run(function()
     
     LongJump = vain.Categories.Blatant:CreateModule({
         Name = 'Long Jump',
+        Tooltip = 'Increases jump distance by boosting horizontal velocity',
         Function = function(callback)
             frictionTable.LongJump = callback or nil
             updateVelocity()
@@ -5688,6 +5783,7 @@ run(function()
     })
     Value = LongJump:CreateSlider({
         Name = 'Speed',
+        Tooltip = 'Movement speed multiplier',
         Min = 1,
         Max = 37,
         Default = 37,
@@ -5697,6 +5793,7 @@ run(function()
     })
     CameraDir = LongJump:CreateToggle({
         Name = 'Camera Direction'
+        Tooltip = 'Launches in the direction the camera is facing',
     })
 end)
 
@@ -5799,6 +5896,7 @@ run(function()
     
     MouseTP = vain.Categories.Blatant:CreateModule({
     	Name = 'Mouse TP',
+    	Tooltip = 'Teleports you to wherever your mouse is pointing',
     	Function = function(callback)
     		if callback then
     			local position = nil
@@ -5852,6 +5950,7 @@ run(function()
     
     vain.Categories.Blatant:CreateModule({
         Name = 'No Slow',
+        Tooltip = 'Prevents slowness effects from items and abilities',
         Function = function(callback)
             local modifier = bedwars.SprintController:getMovementStatusModifier()
             if callback then
@@ -5889,6 +5988,7 @@ run(function()
     
     OwlAura = vain.Categories.Blatant:CreateModule({
         Name = 'Owl Aura',
+        Tooltip = 'Automatically uses the Owl kit passive on nearby enemies',
         Function = function(callback)
             if callback then
                 local owls = collection('Owl', OwlAura, function(self, obj)
@@ -5950,11 +6050,13 @@ run(function()
     })
     
     Targets = OwlAura:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
         Players = true,
         Wallcheck = true,
     })
     Range = OwlAura:CreateSlider({
         Name = 'Range',
+        Tooltip = 'Maximum distance in studs',
         Min = 1,
         Max = 50,
         Suffix = function(val)
@@ -6004,12 +6106,14 @@ run(function()
     })
     
     Targets = PlayerAttach:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
         Players = true,
         NPCs = true
     })
     
     Range = PlayerAttach:CreateSlider({
         Name = 'Range',
+        Tooltip = 'Maximum distance in studs',
         Min = 1,
         Max = 35,
         Default = 23,
@@ -6249,6 +6353,7 @@ run(function()
 
 	ProjectileAimbot = vain.Categories.Blatant:CreateModule({
 		Name = 'ProjectileAimbot',
+		Tooltip = 'Automatically aims and fires projectile weapons',
 		Function = function(callback)
 			if callback then
 					if PAFOVCircle then
@@ -6438,6 +6543,7 @@ run(function()
 	})
 
 	Targets = ProjectileAimbot:CreateTargets({
+		Tooltip = 'Configure which types of targets to include',
 		Players = true,
 		NPCs = true,
 		Walls = true
@@ -6480,6 +6586,7 @@ run(function()
 
 	FOV = ProjectileAimbot:CreateSlider({
 		Name = 'FOV',
+		Tooltip = 'Field-of-view cone in degrees for target detection',
 		Min = 1,
 		Max = 1000,
 		Default = 1000
@@ -6555,6 +6662,7 @@ run(function()
 
 	DesirePACursorViewMode = ProjectileAimbot:CreateDropdown({
 		Name = 'Cursor View Mode',
+		Tooltip = 'Selects in which camera mode the cursor is visible',
 		List = {'First Person', 'Third Person', 'Both'},
 		Default = 'First Person',
 		Darker = true,
@@ -6628,6 +6736,7 @@ run(function()
 
 	OtherProjectiles = ProjectileAimbot:CreateToggle({
 		Name = 'Other Projectiles',
+		Tooltip = 'Also activates for non-main projectile weapon types',
 		Default = true,
 		Function = function(call)
 			if Blacklist then Blacklist.Object.Visible = call end
@@ -6643,6 +6752,7 @@ run(function()
 
 	AutoCharge = ProjectileAimbot:CreateToggle({
 		Name = "AutoCharge",
+		Tooltip = 'Automatically holds and fully charges the bow before release',
 		Default = true,
 		Function = function(v)
 			if AeroPAChargePercent and AeroPAChargePercent.Object then AeroPAChargePercent.Object.Visible = v end
@@ -6700,6 +6810,7 @@ run(function()
     
     ProjectileAura = vain.Categories.Blatant:CreateModule({
     	Name = 'Projectile Aura',
+    	Tooltip = 'Auto-fires projectile weapons at nearby enemies',
     	Function = function(callback)
     		if callback then
     			repeat
@@ -6790,6 +6901,7 @@ run(function()
     	Tooltip = 'Shoots people around you',
     })
     Targets = ProjectileAura:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
     	Players = true,
     	Walls = true,
     })
@@ -6801,6 +6913,7 @@ run(function()
     end
     Sort = ProjectileAura:CreateDropdown({
     	Name = 'Target Mode',
+    	Tooltip = 'Selects how targets are prioritized and selected',
     	List = methods,
     	Default = 'Distance'
     })
@@ -6810,6 +6923,7 @@ run(function()
     })
     FireRate = ProjectileAura:CreateSlider({
     	Name = 'Fire Rate',
+    	Tooltip = 'Shots per second for projectile weapons',
     	Min = 0,
     	Max = 2,
     	Default = 0.02,
@@ -6818,6 +6932,7 @@ run(function()
     })
     Range = ProjectileAura:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 50,
     	Default = 50,
@@ -6838,6 +6953,7 @@ run(function()
     
     Speed = vain.Categories.Blatant:CreateModule({
         Name = 'Speed',
+        Tooltip = 'Increases your movement speed beyond the server cap',
         Function = function(callback)
             frictionTable.Speed = callback or nil
             updateVelocity()
@@ -6888,11 +7004,13 @@ run(function()
     })
     Mode = Speed:CreateDropdown({
         Name = 'Method',
+        Tooltip = 'Selects the implementation method',
         List = {'Bedwars', 'CFrame'},
         Default = 'CFrame'
     })
     Value = Speed:CreateSlider({
         Name = 'Speed',
+        Tooltip = 'Movement speed multiplier',
         Min = 1,
         Max = 23,
         Default = 23,
@@ -6902,16 +7020,19 @@ run(function()
     })
     WallCheck = Speed:CreateToggle({
         Name = 'Wall Check',
+        Tooltip = 'Only targets enemies with a clear line of sight',
         Default = true
     })
     AutoJump = Speed:CreateToggle({
         Name = 'AutoJump',
+        Tooltip = 'Enables or disables autojump',
         Function = function(callback)
             AlwaysJump.Object.Visible = callback
         end
     })
     AlwaysJump = Speed:CreateToggle({
         Name = 'Always Jump',
+        Tooltip = 'Enables or disables always jump',
         Visible = false,
         Darker = true
     })
@@ -6946,6 +7067,7 @@ run(function()
     
     ArmorHighlight = vain.Categories.Render:CreateModule({
         Name = 'Armor Highlight',
+        Tooltip = 'Highlights enemy armor pieces through walls',
         Function = function(call)
             if call then
                 ArmorHighlight:Clean(lplr.CharacterAdded:Connect(function(char)
@@ -7127,6 +7249,7 @@ run(function()
     
     Helmet = ArmorHighlight:CreateToggle({
         Name = 'Helmet',
+        Tooltip = 'Includes the helmet in the armor highlight',
         Function = function()
             if ArmorHighlight.Enabled then
                 ArmorHighlight:Toggle()
@@ -7137,6 +7260,7 @@ run(function()
     
     Chestplate = ArmorHighlight:CreateToggle({
         Name = 'Chestplate',
+        Tooltip = 'Includes the chestplate in the armor highlight',
         Function = function()
             if ArmorHighlight.Enabled then
                 ArmorHighlight:Toggle()
@@ -7147,6 +7271,7 @@ run(function()
     
     Boots = ArmorHighlight:CreateToggle({
         Name = 'Boots',
+        Tooltip = 'Includes the boots in the armor highlight',
         Default = true,
         Function = function()
             if ArmorHighlight.Enabled then
@@ -7158,6 +7283,7 @@ run(function()
     
     UseParts = ArmorHighlight:CreateToggle({
         Name = 'Use Parts',
+        Tooltip = 'Targets individual body parts instead of the whole model',
         Default = true,
         Function = function()
             if ArmorHighlight.Enabled then
@@ -7210,6 +7336,7 @@ run(function()
 
     BedESP = vain.Categories.Render:CreateModule({
     	Name = 'Bed ESP',
+    	Tooltip = 'Shows the location and HP of all beds on the map',
     	Function = function(callback)
     		if callback then
     			BedESP:Clean(collectionService:GetInstanceAddedSignal('bed'):Connect(function(bed)
@@ -7288,6 +7415,7 @@ run(function()
 
     HiveESP = vain.Categories.Render:CreateModule({
     	Name = 'Beehive ESP',
+    	Tooltip = 'Highlights beehive blocks through walls',
     	Function = function(call)
     		if call then
     			for _, v in collectionService:GetTagged('beehive') do
@@ -7333,6 +7461,7 @@ run(function()
     })
     Transparency = HiveESP:CreateSlider({
     	Name = 'Transparency',
+    	Tooltip = 'Opacity of the rendered element (0 = fully opaque)',
     	Function = function()
     		if HiveESP.Enabled then
     			for ent in Reference do
@@ -7347,6 +7476,7 @@ run(function()
     })
     Scale = HiveESP:CreateSlider({
     	Name = 'Scale',
+    	Tooltip = 'Scale multiplier for this ESP element',
     	Default = 1,
     	Min = 0.1,
     	Max = 1.5,
@@ -7459,6 +7589,7 @@ run(function()
 
     CustomTags = vain.Categories.Render:CreateModule({
     	Name = 'Custom Tags',
+    	Tooltip = 'Enables the Custom Tags module',
     	Function = function(callback)
     		if callback then
     			CompleteTagEffect()
@@ -7584,6 +7715,7 @@ run(function()
 
     GeneratorESP = vain.Categories.Render:CreateModule({
     	Name = 'Generator ESP',
+    	Tooltip = 'Shows resource generators and their current tiers',
     	Function = function(call)
     		if call then
     			for _, v in collectionService:GetTagged('Generator') do
@@ -7619,6 +7751,7 @@ run(function()
 
     Transparency = GeneratorESP:CreateSlider({
     	Name = 'Transparency',
+    	Tooltip = 'Opacity of the rendered element (0 = fully opaque)',
     	Function = function()
     		if GeneratorESP.Enabled then
     			for ent in Reference do
@@ -7633,6 +7766,7 @@ run(function()
     })
     Scale = GeneratorESP:CreateSlider({
     	Name = 'Scale',
+    	Tooltip = 'Scale multiplier for this ESP element',
     	Default = 1,
     	Min = 0.1,
     	Max = 1.5,
@@ -7647,6 +7781,7 @@ run(function()
     })
     Whitelist = GeneratorESP:CreateToggle({
     	Name = 'Use whitelist',
+    	Tooltip = 'Enables a whitelist to filter which generators appear',
     	Default = true,
     	Function = function(call)
     		if Whitelisted.Object then
@@ -7666,6 +7801,7 @@ run(function()
 
     Health = vain.Categories.Render:CreateModule({
     	Name = 'Health',
+    	Tooltip = 'Renders health bars above enemy players',
     	Function = function(callback)
     		if callback then
     			local label = Instance.new('TextLabel')
@@ -7745,6 +7881,7 @@ run(function()
 
     ItemESP = vain.Categories.Render:CreateModule({
     	Name = 'Item ESP',
+    	Tooltip = 'Highlights dropped items on the ground',
     	Function = function(call)
     		if call then
     			ItemESP:Clean(collectionService:GetInstanceAddedSignal('ItemDrop'):Connect(Added))
@@ -7791,6 +7928,7 @@ run(function()
     })
     Transparency = ItemESP:CreateSlider({
     	Name = 'Transparency',
+    	Tooltip = 'Opacity of the rendered element (0 = fully opaque)',
     	Function = function()
     		if ItemESP.Enabled then
     			for ent in Reference do
@@ -7805,6 +7943,7 @@ run(function()
     })
     Scale = ItemESP:CreateSlider({
     	Name = 'Scale',
+    	Tooltip = 'Scale multiplier for this ESP element',
     	Default = 1,
     	Min = 0.1,
     	Max = 1.5,
@@ -8078,6 +8217,7 @@ run(function()
 
     KitDisplay = vain.Categories.Render:CreateModule({
     	Name = 'Kit Display',
+    	Tooltip = 'Enables the Kit Display module',
     	Function = function(call)
     		if call then
     			local DraftApp = lplr.PlayerGui:WaitForChild('MatchDraftApp', 9e9)
@@ -8419,6 +8559,7 @@ run(function()
 
 	KitESP = vain.Categories.Kits:CreateModule({
 		Name = 'KitESP',
+		Tooltip = 'Displays the kit being used by each enemy',
 		Function = function(callback)
 			if callback then
 				task.spawn(function()
@@ -8457,10 +8598,12 @@ run(function()
 	})
 	Notify = KitESP:CreateToggle({
 		Name = "Notify",
+		Tooltip = 'Sends a notification when this event occurs',
 		Default = false
 	})
 	Background = KitESP:CreateToggle({
 		Name = 'Background',
+		Tooltip = 'Renders a background box behind this ESP element',
 		Function = function(callback)
 			if Color.Object then Color.Object.Visible = callback end
 			for _, v in Reference do
@@ -8838,6 +8981,7 @@ run(function()
 
     NameTags = vain.Categories.Render:CreateModule({
     	Name = 'Name Tags',
+    	Tooltip = 'Renders custom nametags above players with extra info',
     	Function = function(callback)
     		if callback then
     			methodused = DrawingToggle.Enabled and 'Drawing' or 'Normal'
@@ -8883,6 +9027,7 @@ run(function()
     	Tooltip = 'Renders nametags on entities through walls.'
     })
     Targets = NameTags:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
     	Players = true,
     	Function = function()
     		if NameTags.Enabled then
@@ -8911,6 +9056,7 @@ run(function()
     })
     Scale = NameTags:CreateSlider({
     	Name = 'Scale',
+    	Tooltip = 'Scale multiplier for this ESP element',
     	Function = function()
     		if NameTags.Enabled then
     			NameTags:Toggle()
@@ -8924,6 +9070,7 @@ run(function()
     })
     Background = NameTags:CreateSlider({
     	Name = 'Transparency',
+    	Tooltip = 'Opacity of the rendered element (0 = fully opaque)',
     	Function = function()
     		if NameTags.Enabled then
     			NameTags:Toggle()
@@ -8937,6 +9084,7 @@ run(function()
     })
     Health = NameTags:CreateToggle({
     	Name = 'Health',
+    	Tooltip = 'Health threshold that triggers this action',
     	Function = function()
     		if NameTags.Enabled then
     			NameTags:Toggle()
@@ -8946,6 +9094,7 @@ run(function()
     })
     Distance = NameTags:CreateToggle({
     	Name = 'Distance',
+    	Tooltip = 'Maximum distance in studs',
     	Function = function()
     		if NameTags.Enabled then
     			NameTags:Toggle()
@@ -8964,6 +9113,7 @@ run(function()
     })
     Equipment = NameTags:CreateToggle({
     	Name = 'Equipment',
+    	Tooltip = 'Shows equipped items on the nametag',
     	Function = function()
     		if NameTags.Enabled then
     			NameTags:Toggle()
@@ -8973,6 +9123,7 @@ run(function()
     })
     DisplayName = NameTags:CreateToggle({
     	Name = 'Use Displayname',
+    	Tooltip = 'Shows the player\'s display name instead of their username',
     	Function = function()
     		if NameTags.Enabled then
     			NameTags:Toggle()
@@ -8983,6 +9134,7 @@ run(function()
     })
     Teammates = NameTags:CreateToggle({
     	Name = 'Priority Only',
+    	Tooltip = 'Only renders for players in your priority/target list',
     	Function = function()
     		if NameTags.Enabled then
     			NameTags:Toggle()
@@ -8993,6 +9145,7 @@ run(function()
     })
     DrawingToggle = NameTags:CreateToggle({
     	Name = 'Drawing',
+    	Tooltip = 'Uses the Drawing API instead of Roblox billboards',
     	Function = function()
     		if NameTags.Enabled then
     			NameTags:Toggle()
@@ -9002,6 +9155,7 @@ run(function()
     })
     DistanceCheck = NameTags:CreateToggle({
     	Name = 'Distance Check',
+    	Tooltip = 'Only renders this element within a set distance',
     	Function = function(callback)
     		DistanceLimit.Object.Visible = callback
     	end,
@@ -9032,6 +9186,7 @@ run(function()
 
     BulletTracers = vain.Categories.Render:CreateModule({
     	Name = 'Projectile Tracers',
+    	Tooltip = 'Draws tracers on all projectiles in flight',
     	Function = function(callback)
     		if callback then
     			BulletTracers:Clean(workspace.ChildAdded:Connect(function(projectile)
@@ -9083,6 +9238,7 @@ run(function()
     end
     Material = BulletTracers:CreateDropdown({
     	Name = 'Material',
+    	Tooltip = 'Selects the material used for placed blocks',
     	List = materials
     })
     Color = BulletTracers:CreateColorSlider({
@@ -9091,6 +9247,7 @@ run(function()
     })
     Thickness = BulletTracers:CreateSlider({
     	Name = 'Thickness',
+    	Tooltip = 'Line thickness for drawn elements',
     	Min = 0.01,
     	Max = 1,
     	Default = 0.1,
@@ -9105,6 +9262,7 @@ run(function()
     })
     Opacity = BulletTracers:CreateSlider({
     	Name = 'Opacity',
+    	Tooltip = 'Opacity of the drawn element',
     	Min = 0,
     	Max = 1,
     	Default = 0,
@@ -9112,6 +9270,7 @@ run(function()
     })
     Lifetime = BulletTracers:CreateSlider({
     	Name = 'Lifetime',
+    	Tooltip = 'How long in seconds the visual effect persists',
     	Min = 0,
     	Max = 5,
     	Decimal = 100,
@@ -9120,6 +9279,7 @@ run(function()
     })
     Fade = BulletTracers:CreateToggle({
     	Name = 'Fade',
+    	Tooltip = 'Fades the tracer out over its lifetime',
     	Default = true
     })
 end)
@@ -9320,10 +9480,12 @@ run(function()
     end)
     Skin = SkinChanger:CreateDropdown({
         Name = 'Item Skin',
+        Tooltip = 'Selects the cosmetic skin for this item',
         List = list,
     })
     SkinType = SkinChanger:CreateDropdown({
         Name = 'Skin Type',
+        Tooltip = 'Selects the skin category',
         List = { 'All', 'Gold', 'Platinum', 'Diamond', 'Emerald', 'Nightmare', 'Void' },
         Default = 'All',
     })
@@ -9463,6 +9625,7 @@ run(function()
 
     StorageESP = vain.Categories.Render:CreateModule({
     	Name = 'Storage ESP',
+    	Tooltip = 'Enables the Storage ESP module',
     	Function = function(callback)
     		if callback then
     			StorageESP:Clean(collectionService:GetInstanceAddedSignal('chest'):Connect(Added))
@@ -9487,6 +9650,7 @@ run(function()
     })
     Background = StorageESP:CreateToggle({
     	Name = 'Background',
+    	Tooltip = 'Renders a background box behind this ESP element',
     	Function = function(callback)
     		if Color and Color.Object then
     			Color.Object.Visible = callback
@@ -9517,6 +9681,7 @@ run(function()
 
     vain.Categories.Render:CreateModule({
     	Name = 'Stream Remover',
+    	Tooltip = 'Enables the Stream Remover module',
     	Function = function(call)
     		if call then
     			old = bedwars.GamePlayer.canSeeThroughDisguise
@@ -9579,6 +9744,7 @@ run(function()
 
     TrapESP = vain.Categories.Render:CreateModule({
     	Name = 'Trap ESP',
+    	Tooltip = 'Reveals placed traps through walls',
     	Function = function(callback)
     		if callback then
     			repeat
@@ -9605,6 +9771,7 @@ run(function()
 
     Background = TrapESP:CreateToggle({
     	Name = 'Background',
+    	Tooltip = 'Renders a background box behind this ESP element',
     	Function = function(callback)
     		if Color and Color.Object then
     			Color.Object.Visible = callback
@@ -9639,6 +9806,7 @@ run(function()
     
     ViewmodelVisuals = vain.Categories.Render:CreateModule({
         Name = 'Viewmodel Visuals',
+        Tooltip = 'Applies visual effects to the first-person viewmodel',
         Function = function(call)
             if call then
                 local viewmodel = gameCamera:WaitForChild('Viewmodel', 9e9)
@@ -9715,6 +9883,7 @@ run(function()
     
     AntiSuffocate = vain.Categories.Utility:CreateModule({
     	Name = 'Anti Suffocate',
+    	Tooltip = 'Prevents suffocation damage inside blocks',
     	Function = function(call)
     		if call then
     			repeat
@@ -9745,6 +9914,7 @@ run(function()
     
     AutoBalloon = vain.Categories.Utility:CreateModule({
         Name = 'Auto Balloon',
+        Tooltip = 'Automatically deploys balloons when in range',
         Function = function(callback)
             if callback then
                 repeat task.wait() until store.matchState ~= 0 or (not AutoBalloon.Enabled)
@@ -10129,6 +10299,7 @@ run(function()
     
     AutoKit = vain.Categories.Utility:CreateModule({
         Name = 'Auto Kit',
+        Tooltip = 'Enables the Auto Kit module',
         Function = function(callback)
             if callback then
                 repeat task.wait() until store.equippedKit ~= '' and store.matchState ~= 0 or (not AutoKit.Enabled)
@@ -10140,6 +10311,7 @@ run(function()
         Tooltip = 'Automatically uses kit abilities.'
     })
     Legit = AutoKit:CreateToggle({Name = 'Legit Range'})
+    Tooltip = 'Restricts range to a value indistinguishable from vanilla',
     local sortTable = {}
     for i in AutoKitFunctions do
         table.insert(sortTable, i)
@@ -10149,6 +10321,7 @@ run(function()
     end)
     for _, v in sortTable do
         Toggles[v] = AutoKit:CreateToggle({
+        	Tooltip = 'Enables or disables ',
             Name = bedwars.BedwarsKitMeta[v].name,
             Default = true
         })
@@ -10267,6 +10440,7 @@ run(function()
 
     AutoLasso = vain.Categories.Kits:CreateModule({
         Name = 'AutoLasso',
+        Tooltip = 'Automatically uses the lasso on nearby enemies',
         Function = function(callback)
             if callback then
                 repeat
@@ -10303,6 +10477,7 @@ run(function()
     })
 
     Targets = AutoLasso:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
         Players = true,
         NPCs = true,
         Walls = false
@@ -10310,6 +10485,7 @@ run(function()
 
     Range = AutoLasso:CreateSlider({
         Name = 'Range',
+        Tooltip = 'Maximum distance in studs',
         Min = 5,
         Max = 80,
         Default = 50,
@@ -10320,6 +10496,7 @@ run(function()
 
     FOV = AutoLasso:CreateSlider({
         Name = 'FOV',
+        Tooltip = 'Field-of-view cone in degrees for target detection',
         Min = 1,
         Max = 360,
         Default = 90
@@ -10327,6 +10504,7 @@ run(function()
 
     AimPart = AutoLasso:CreateDropdown({
         Name = 'Aim Part',
+        Tooltip = 'Which body part on the target to aim at',
         List = {'RootPart', 'Head', 'Torso'},
         Default = 'RootPart'
     })
@@ -10538,6 +10716,7 @@ run(function()
 
 	AutoPearl = vain.Categories.Utility:CreateModule({
 		Name = 'AutoPearl',
+		Tooltip = 'Automatically throws ender pearls toward targets',
 		Function = function(callback)
 			if callback then
 				local lastThrowTime = 0
@@ -10651,6 +10830,7 @@ run(function()
     
     AutoPlay = vain.Categories.Utility:CreateModule({
         Name = 'Auto Play',
+        Tooltip = 'Enables the Auto Play module',
         Function = function(callback)
             if callback then
                 AutoPlay:Clean(vapeEvents.EntityDeathEvent.Event:Connect(function(deathTable)
@@ -10679,6 +10859,7 @@ run(function()
     
     AutoRelease = vain.Categories.Utility:CreateModule({
     	Name = 'Auto Release',
+    	Tooltip = 'Automatically releases a charged bow at the optimal moment',
     	Function = function(call)
     		if call then
     			launchHook = bedwars.ProjectileLaunchHook:Add('AutoRelease', 20, function(nextLaunch, ...)
@@ -10711,6 +10892,7 @@ run(function()
     
     Percentage = AutoRelease:CreateSlider({
     	Name = 'Percentage',
+    	Tooltip = 'Threshold percentage that triggers the action',
     	Min = 0,
     	Max = 100,
     	Suffix = '%',
@@ -10718,6 +10900,7 @@ run(function()
     })
     Delay = AutoRelease:CreateSlider({
     	Name = 'Release delay',
+    	Tooltip = 'Seconds before releasing a fully charged bow',
     	Min = 0,
     	Max = 5,
     	Default = 0.5,
@@ -10874,6 +11057,7 @@ run(function()
 	
 	local AutoShoot = vain.Categories.Utility:CreateModule({
 		Name = 'AutoShoot',
+		Tooltip = 'Automatically fires ranged weapons at nearby enemies',
 		Function = function(callback)
 			if callback then
 				autoShootEnabled = true
@@ -11090,6 +11274,7 @@ run(function()
     
     AutoToxic = vain.Categories.Utility:CreateModule({
         Name = 'Auto Toxic',
+        Tooltip = 'Automatically sends configured chat messages',
         Function = function(callback)
             if callback then
                 AutoToxic:Clean(vapeEvents.BedwarsBedBreak.Event:Connect(function(bedTable)
@@ -11137,10 +11322,12 @@ run(function()
     })
     GG = AutoToxic:CreateToggle({
         Name = 'AutoGG',
+        Tooltip = 'Automatically types GG in chat after the match ends',
         Default = true
     })
     for _, v in {'Kill', 'Death', 'Bed', 'BedDestroyed', 'Win'} do
         Toggles[v] = AutoToxic:CreateToggle({
+        	Tooltip = 'Enables or disables ',
             Name = v..' ',
             Function = function(callback)
                 if Lists[v] then
@@ -11162,6 +11349,7 @@ run(function()
     
     AutoVoidDrop = vain.Categories.Utility:CreateModule({
         Name = 'Auto Void Drop',
+        Tooltip = 'Automatically drops configured items into the void',
         Function = function(callback)
             if callback then
                 repeat task.wait() until store.matchState ~= 0 or (not AutoVoidDrop.Enabled)
@@ -11218,6 +11406,7 @@ run(function()
     
     BackTrack = vain.Categories.Utility:CreateModule({
         Name = 'Back Track',
+        Tooltip = 'Exploits lag compensation to hit enemies at past positions',
         Function = function(callback)
             if callback then
                 repeat
@@ -11258,6 +11447,7 @@ run(function()
     })
     Tick = BackTrack:CreateSlider({
         Name = 'Ticks',
+        Tooltip = 'How many ticks back to use for back-track positions',
         Min = 1,
         Max = 20,
         Default = 5,
@@ -11266,6 +11456,7 @@ run(function()
     })
     Mode = BackTrack:CreateDropdown({
         Name = 'Mode',
+        Tooltip = 'Selects the operating mode',
         List = { 'Manual', 'Lag Based' },
         Default = 'Manual',
         Function = function(val)
@@ -11287,6 +11478,7 @@ run(function()
     
     FakeLag = vain.Categories.Utility:CreateModule({
         Name = 'Fake Lag',
+        Tooltip = 'Delays your packets to simulate lag and confuse hit detection',
         Function = function(callback)
             if callback then
                 rng = Random.new()
@@ -11348,6 +11540,7 @@ run(function()
     
     TransmissionOffset = FakeLag:CreateSlider({
         Name = 'Transmission Offset',
+        Tooltip = 'Packet restore window in seconds after freeze ends',
         Min = 1,
         Max = 10,
         Default = 3,
@@ -11356,6 +11549,7 @@ run(function()
     })
     Mode = FakeLag:CreateDropdown({
         Name = 'Mode',
+        Tooltip = 'Selects the operating mode',
         List = { 'Dynamic', 'Repel', 'Latency' },
         Default = 'Dynamic',
         Function = function(val)
@@ -11365,6 +11559,7 @@ run(function()
     })
     Delay = FakeLag:CreateSlider({
         Name = 'Delay',
+        Tooltip = 'Seconds between consecutive actions',
         Suffix = function()
             return 'ms'
         end,
@@ -11391,6 +11586,7 @@ run(function()
     
     KnockbackDelay = vain.Categories.Utility:CreateModule({
     	Name = 'Knockback Delay',
+    	Tooltip = 'Delays knockback processing to make you harder to push',
     	Function = function(callback)
     		if callback then
     			old, rand = bedwars.KnockbackUtil.applyKnockback, Random.new()
@@ -11421,6 +11617,7 @@ run(function()
     
     Chance = KnockbackDelay:CreateSlider({
     	Name = 'Chance',
+    	Tooltip = 'Probability (%) this action fires each cycle',
     	Min = 1,
     	Max = 100,
     	Default = 40,
@@ -11441,6 +11638,7 @@ run(function()
     	DefaultMax = 200,
     })
     TargetCheck = KnockbackDelay:CreateToggle({ Name = 'Target check' })
+    Tooltip = 'Only applies to the current killaura target',
 end)
 
 run(function()
@@ -11448,6 +11646,7 @@ run(function()
     
     MissileTP = vain.Categories.Utility:CreateModule({
         Name = 'Missile TP',
+        Tooltip = 'Teleports you via a fired missile projectile',
         Function = function(callback)
             if callback then
                 MissileTP:Toggle()
@@ -11492,6 +11691,7 @@ run(function()
     
     PickupRange = vain.Categories.Utility:CreateModule({
         Name = 'Pickup Range',
+        Tooltip = 'Extends the range at which you can pick up dropped items',
         Function = function(callback)
             if callback then
                 local items = collection('ItemDrop', PickupRange)
@@ -11533,6 +11733,7 @@ run(function()
     })
     Range = PickupRange:CreateSlider({
         Name = 'Range',
+        Tooltip = 'Maximum distance in studs',
         Min = 1,
         Max = 10,
         Default = 10,
@@ -11542,9 +11743,11 @@ run(function()
     })
     Network = PickupRange:CreateToggle({
         Name = 'Network TP',
+        Tooltip = 'Uses a network-level teleport packet',
         Default = true
     })
     Lower = PickupRange:CreateToggle({Name = 'Feet Check'})
+    Tooltip = 'Verifies your feet are clear before teleporting',
 end)
 
 run(function()
@@ -11552,6 +11755,7 @@ run(function()
     
     RavenTP = vain.Categories.Utility:CreateModule({
         Name = 'Raven TP',
+        Tooltip = 'Teleports you using the Raven kit ability',
         Function = function(callback)
             if callback then
                 RavenTP:Toggle()
@@ -11661,6 +11865,7 @@ run(function()
     
     Scaffold = vain.Categories.Utility:CreateModule({
         Name = 'Scaffold',
+        Tooltip = 'Automatically places blocks beneath you as you walk',
         Function = function(callback)
             if label then
                 label.Visible = callback
@@ -11722,25 +11927,32 @@ run(function()
     })
     Expand = Scaffold:CreateSlider({
         Name = 'Expand',
+        Tooltip = 'Additional studs added to scaffold placement area',
         Min = 1,
         Max = 6
     })
     Tower = Scaffold:CreateToggle({
         Name = 'Tower',
+        Tooltip = 'Builds a vertical tower upward while scaffolding',
         Default = true
     })
     Downwards = Scaffold:CreateToggle({
         Name = 'Downwards',
+        Tooltip = 'Extends scaffold placement downward as well',
         Default = true
     })
     Diagonal = Scaffold:CreateToggle({
         Name = 'Diagonal',
+        Tooltip = 'Allows diagonal block placement while scaffolding',
         Default = true
     })
     LimitItem = Scaffold:CreateToggle({Name = 'Limit to items'})
+    Tooltip = 'Only activates when a required item is in your hand',
     Mouse = Scaffold:CreateToggle({Name = 'Require mouse down'})
+    Tooltip = 'Only activates while the left mouse button is held',
     Count = Scaffold:CreateToggle({
         Name = 'Block Count',
+        Tooltip = 'Shows the remaining block count while scaffolding',
         Function = function(callback)
             if callback then
                 label = Instance.new('TextLabel')
@@ -11770,6 +11982,7 @@ run(function()
     
     ShopTierBypass = vain.Categories.Utility:CreateModule({
         Name = 'Shop Tier Bypass',
+        Tooltip = 'Bypasses shop tier locks to buy higher-tier items early',
         Function = function(callback)
             if callback then
                 repeat task.wait() until store.shopLoaded or not ShopTierBypass.Enabled
@@ -11935,6 +12148,7 @@ run(function()
     
     StaffDetector = vain.Categories.Utility:CreateModule({
         Name = 'Staff Detector',
+        Tooltip = 'Enables the Staff Detector module',
         Function = function(callback)
             if callback then
                 StaffDetector:Clean(playersService.PlayerAdded:Connect(playerAdded))
@@ -11949,6 +12163,7 @@ run(function()
     })
     Mode = StaffDetector:CreateDropdown({
         Name = 'Mode',
+        Tooltip = 'Selects the operating mode',
         List = {'Uninject', 'Profile', 'Requeue', 'AutoConfig', 'Notify'},
         Function = function(val)
             if Profile.Object then
@@ -11958,10 +12173,12 @@ run(function()
     })
     Clans = StaffDetector:CreateToggle({
         Name = 'Blacklist clans',
+        Tooltip = 'Skips players from clans on your whitelist',
         Default = true
     })
     Party = StaffDetector:CreateToggle({
         Name = 'Leave party'
+        Tooltip = 'Automatically leaves the party when triggered',
     })
     Profile = StaffDetector:CreateTextBox({
         Name = 'Profile',
@@ -11989,6 +12206,7 @@ end)
 run(function()
     vain.Categories.World:CreateModule({
         Name = 'Anti-AFK',
+        Tooltip = 'Prevents AFK kick by simulating activity periodically',
         Function = function(callback)
             if callback then
                 for _, v in getconnections(lplr.Idled) do
@@ -12021,6 +12239,7 @@ run(function()
     
     AutoSuffocate = vain.Categories.World:CreateModule({
         Name = 'Auto Suffocate',
+        Tooltip = 'Pushes enemies into blocks to deal suffocation damage',
         Function = function(callback)
             if callback then
                 repeat
@@ -12068,6 +12287,7 @@ run(function()
     })
     Range = AutoSuffocate:CreateSlider({
         Name = 'Range',
+        Tooltip = 'Maximum distance in studs',
         Min = 1,
         Max = 20,
         Default = 20,
@@ -12077,6 +12297,7 @@ run(function()
     })
     LimitItem = AutoSuffocate:CreateToggle({
         Name = 'Limit to Items',
+        Tooltip = 'Only activates when a required item is in your hand',
         Default = true
     })
 end)
@@ -12105,6 +12326,7 @@ run(function()
     
     AutoTool = vain.Categories.World:CreateModule({
         Name = 'Auto Tool',
+        Tooltip = 'Automatically switches to the best tool for the block',
         Function = function(callback)
             if callback then
                 event = Instance.new('BindableEvent')
@@ -12209,6 +12431,7 @@ run(function()
     
     BedAssist = vain.Categories.World:CreateModule({
         Name = 'Bed Assist',
+        Tooltip = 'Automatically breaks the enemy bed when in range',
         Function = function(call)
             if call then
                 repeat
@@ -12276,27 +12499,32 @@ run(function()
     end
     AimMode = BedAssist:CreateDropdown({
         Name = 'Mode',
+        Tooltip = 'Selects the operating mode',
         List = {'Simple', 'Adaptive'},
         Default = 'Simple',
     })
     Mode = BedAssist:CreateDropdown({
         Name = 'Aim Mode',
+        Tooltip = 'Selects the aiming technique',
         List = list,
         Default = 'Camera',
     })
     Sort = BedAssist:CreateDropdown({
         Name = 'Target Mode',
+        Tooltip = 'Selects how targets are prioritized and selected',
         List = {'Distance', 'Health'},
         Default = 'Distance',
     })
     Speed = BedAssist:CreateSlider({
         Name = 'Aim Speed',
+        Tooltip = 'How fast aim snaps or lerps to the target',
         Min = 1,
         Max = 20,
         Default = 7,
     })
     Range = BedAssist:CreateSlider({
         Name = 'Assist Range',
+        Tooltip = 'Distance in studs within which bed assist activates',
         Min = 1,
         Max = 30,
         Default = 20,
@@ -12306,17 +12534,20 @@ run(function()
     })
     Shake = BedAssist:CreateSlider({
         Name = 'Shake',
+        Tooltip = 'Adds randomized aim jitter for a more legit appearance',
         Min = 1,
         Max = 100,
         Default = 3,
     })
     Angle = BedAssist:CreateSlider({
         Name = 'Max angle',
+        Tooltip = 'Maximum angle in degrees from your look direction to engage',
         Min = 1,
         Max = 360,
         Default = 200,
     })
     Limit = BedAssist:CreateToggle({Name = 'Limit to item', Default = true})
+    Tooltip = 'Only activates when a required item is in your hand',
 end)
 
 run(function()
@@ -12371,6 +12602,7 @@ run(function()
     
     BedProtector = vain.Categories.World:CreateModule({
         Name = 'Bed Protector',
+        Tooltip = 'Automatically places blocks to cover your bed',
         Function = function(callback)
             if callback then
                 repeat
@@ -12425,6 +12657,7 @@ run(function()
     
     Mode = BedProtector:CreateDropdown({
         Name = 'Mode',
+        Tooltip = 'Selects the operating mode',
         List = {'Toggle', 'On Key'},
         Default = 'Toggle',
         Function = function(val)
@@ -12439,12 +12672,15 @@ run(function()
     })
     PlaceRange = BedProtector:CreateSlider({
         Name = 'Place Range',
+        Tooltip = 'Maximum distance in studs to place protection blocks',
         Min = 1,
         Max = 30,
         Default = 15,
     })
     Switch = BedProtector:CreateToggle({Name = 'Auto Switch'})
+    Tooltip = 'Automatically switches to the required tool or item',
     Smart = BedProtector:CreateToggle({Name = 'Smart', Default = true})
+    Tooltip = 'Uses smart detection to avoid triggering unnecessarily',
 end)
 
 run(function()
@@ -12547,6 +12783,7 @@ run(function()
     
     BlockIn = vain.Categories.World:CreateModule({
     	Name = 'Block-In',
+    	Tooltip = 'Rapidly places blocks around yourself for protection',
     	Function = function(callback)
     		if callback then
     			local selfpos = entitylib.isAlive and entitylib.character.RootPart.Position or nil
@@ -12661,6 +12898,7 @@ run(function()
     })
     PlaceMode = BlockIn:CreateDropdown({
     	Name = 'Placement Mode',
+    	Tooltip = 'Selects the block placement strategy',
     	List = { 'Normal', 'Smart' },
     	Default = 'Normal',
     })
@@ -12673,12 +12911,14 @@ run(function()
     	Decimal = 5,
     })
     Bedfinder = BlockIn:CreateToggle({ Name = 'Bed finder' })
+    Tooltip = 'Enables or disables bed finder',
     LimitItem = BlockIn:CreateToggle({
     	Name = 'Limit to items',
     	Tooltip = 'Only block-in with the block you are holding',
     })
     UseBlacklist = BlockIn:CreateToggle({
     	Name = 'Use blacklist',
+    	Tooltip = 'Enables a block type blacklist for filtering targets',
     	Default = true,
     	Function = function(call)
     		if Blacklist then
@@ -12727,6 +12967,7 @@ run(function()
     
     ChestSteal = vain.Categories.World:CreateModule({
         Name = 'Chest Steal',
+        Tooltip = 'Automatically steals items from nearby chests',
         Function = function(callback)
             if callback then
                 local chests = collection('chest', ChestSteal)
@@ -12756,6 +12997,7 @@ run(function()
     })
     Range = ChestSteal:CreateSlider({
         Name = 'Range',
+        Tooltip = 'Maximum distance in studs',
         Min = 0,
         Max = 18,
         Default = 18,
@@ -12764,8 +13006,10 @@ run(function()
         end
     })
     Open = ChestSteal:CreateToggle({Name = 'GUI Check'})
+    Tooltip = 'Pauses the module when a GUI menu is open',
     Skywars = ChestSteal:CreateToggle({
         Name = 'Only Skywars',
+        Tooltip = 'Only activates in SkyWars game mode',
         Function = function()
             if ChestSteal.Enabled then
                 ChestSteal:Toggle()
@@ -12784,6 +13028,7 @@ run(function()
     
     FastPlace = vain.Categories.World:CreateModule({
     	Name = 'Fast Place',
+    	Tooltip = 'Enables the Fast Place module',
     	Function = function(call)
     		bedwars.SharedConstants.BLOCK_PLACE_CPS = call and CPS.Value or old
     	end,
@@ -12791,6 +13036,7 @@ run(function()
     })
     CPS = FastPlace:CreateSlider({
     	Name = 'Cps',
+    	Tooltip = 'Clicks per second for block placement',
     	Min = 1,
     	Max = 100,
     	Default = 13,
@@ -12977,6 +13223,7 @@ run(function()
     
     Schematica = vain.Categories.World:CreateModule({
         Name = 'Schematica',
+        Tooltip = 'Displays a ghost structure to guide your building',
         Function = function(callback)
             if callback then
                 if not File.Value:find('.json') then
@@ -13018,10 +13265,12 @@ run(function()
     })
     Mode = Schematica:CreateDropdown({
         Name = 'Mode',
+        Tooltip = 'Selects the operating mode',
         List = {'Load', 'Save'}
     })
     Transparency = Schematica:CreateSlider({
         Name = 'Transparency',
+        Tooltip = 'Opacity of the rendered element (0 = fully opaque)',
         Min = 0,
         Max = 1,
         Default = 0.7,
@@ -13046,6 +13295,7 @@ run(function()
     
     ArmorSwitch = vain.Categories.Inventory:CreateModule({
         Name = 'Armor Switch',
+        Tooltip = 'Automatically equips the best available armor',
         Function = function(callback)
             if callback then
                 if Mode.Value == 'Toggle' then
@@ -13087,14 +13337,17 @@ run(function()
     })
     Mode = ArmorSwitch:CreateDropdown({
         Name = 'Mode',
+        Tooltip = 'Selects the operating mode',
         List = {'Toggle', 'On Key'}
     })
     Targets = ArmorSwitch:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
         Players = true,
         NPCs = true
     })
     Range = ArmorSwitch:CreateSlider({
         Name = 'Range',
+        Tooltip = 'Maximum distance in studs',
         Min = 1,
         Max = 30,
         Default = 30,
@@ -13180,6 +13433,7 @@ run(function()
     
     AutoBank = vain.Categories.Inventory:CreateModule({
         Name = 'Auto Bank',
+        Tooltip = 'Automatically deposits resources into your bank',
         Function = function(callback)
             if callback then
                 Chests = collection('personal-chest', AutoBank)
@@ -13223,6 +13477,7 @@ run(function()
     })
     UIToggle = AutoBank:CreateToggle({
         Name = 'UI',
+        Tooltip = 'Shows this module\'s state in the on-screen UI',
         Function = function(callback)
             if AutoBank.Enabled then
                 UI.Visible = callback
@@ -13387,6 +13642,7 @@ run(function()
     
     AutoBuy = vain.Categories.Inventory:CreateModule({
         Name = 'Auto Buy',
+        Tooltip = 'Automatically purchases configured items from the shop',
         Function = function(callback)
             if callback then
                 repeat task.wait() until store.queueType ~= 'bedwars_test'
@@ -13434,6 +13690,7 @@ run(function()
     })
     Sword = AutoBuy:CreateToggle({
         Name = 'Buy Sword',
+        Tooltip = 'Automatically buys sword upgrades from the shop',
         Function = function(callback)
             npctick = tick()
             Functions[2] = callback and function(currencytable, shop)
@@ -13461,6 +13718,7 @@ run(function()
     })
     Armor = AutoBuy:CreateToggle({
         Name = 'Buy Armor',
+        Tooltip = 'Automatically buys armor upgrades from the shop',
         Function = function(callback)
             npctick = tick()
             Functions[1] = callback and function(currencytable, shop)
@@ -13474,6 +13732,7 @@ run(function()
     })
     AutoBuy:CreateToggle({
         Name = 'Buy Axe',
+        Tooltip = 'Automatically buys axe upgrades from the shop',
         Function = function(callback)
             npctick = tick()
             Functions[3] = callback and function(currencytable, shop)
@@ -13484,6 +13743,7 @@ run(function()
     })
     AutoBuy:CreateToggle({
         Name = 'Buy Pickaxe',
+        Tooltip = 'Automatically buys pickaxe upgrades from the shop',
         Function = function(callback)
             npctick = tick()
             Functions[4] = callback and function(currencytable, shop)
@@ -13494,6 +13754,7 @@ run(function()
     })
     Upgrades = AutoBuy:CreateToggle({
         Name = 'Buy Upgrades',
+        Tooltip = 'Automatically buys team upgrades from the shop',
         Function = function(callback)
             for _, v in UpgradeToggles do
                 v.Object.Visible = callback
@@ -13506,6 +13767,7 @@ run(function()
         local toggleCount = count
         table.insert(UpgradeToggles, AutoBuy:CreateToggle({
             Name = 'Buy '..(v.name == 'Armor' and 'Protection' or v.name),
+            Tooltip = 'Enables or disables buy ',
             Function = function(callback)
                 npctick = tick()
                 Functions[5 + toggleCount + (v.name == 'Armor' and 20 or 0)] = callback and function(currencytable, shop, upgrades)
@@ -13520,8 +13782,10 @@ run(function()
         count += 1
     end
     TierCheck = AutoBuy:CreateToggle({Name = 'Tier Check'})
+    Tooltip = 'Skips purchase if the item is already at max tier',
     BedwarsCheck = AutoBuy:CreateToggle({
         Name = 'Only Bedwars',
+        Tooltip = 'Only activates in the BedWars game mode',
         Function = function()
             if AutoBuy.Enabled then
                 AutoBuy:Toggle()
@@ -13531,6 +13795,7 @@ run(function()
         Default = true
     })
     GUI = AutoBuy:CreateToggle({Name = 'GUI check'})
+    Tooltip = 'Pauses the module when a GUI menu is open',
     SmartCheck = AutoBuy:CreateToggle({
         Name = 'Smart check',
         Default = true,
@@ -13613,6 +13878,7 @@ run(function()
     
     AutoConsume = vain.Categories.Inventory:CreateModule({
         Name = 'Auto Consume',
+        Tooltip = 'Enables the Auto Consume module',
         Function = function(callback)
             if callback then
                 AutoConsume:Clean(vapeEvents.InventoryAmountChanged.Event:Connect(consumeCheck))
@@ -13628,6 +13894,7 @@ run(function()
     })
     Health = AutoConsume:CreateSlider({
         Name = 'Health Percent',
+        Tooltip = 'Health percentage below which this action triggers',
         Min = 1,
         Max = 99,
         Default = 70,
@@ -13635,14 +13902,17 @@ run(function()
     })
     SpeedPotion = AutoConsume:CreateToggle({
         Name = 'Speed Potions',
+        Tooltip = 'Automatically uses speed potions when available',
         Default = true
     })
     Apple = AutoConsume:CreateToggle({
         Name = 'Apple',
+        Tooltip = 'Automatically eats golden apples when available',
         Default = true
     })
     ShieldPotion = AutoConsume:CreateToggle({
         Name = 'Shield Potions',
+        Tooltip = 'Automatically uses shield potions when available',
         Default = true
     })
 end)
@@ -13669,6 +13939,7 @@ run(function()
     
     AutoFish = vain.Categories.Inventory:CreateModule({
     	Name = 'Auto Fish',
+    	Tooltip = 'Automates casting, waiting, and reeling while fishing',
     	Function = function(call)
     		if call then
     			old = bedwars.FishingMinigameController.startMinigame
@@ -14330,6 +14601,7 @@ run(function()
     
     AutoHotbar = vain.Categories.Inventory:CreateModule({
         Name = 'Auto Hotbar',
+        Tooltip = 'Enables the Auto Hotbar module',
         Function = function(callback)
             if callback then
                 task.spawn(sortCallback)
@@ -14345,6 +14617,7 @@ run(function()
     })
     Mode = AutoHotbar:CreateDropdown({
         Name = 'Activation',
+        Tooltip = 'Selects what triggers this module to activate',
         List = {'Toggle', 'On Key'},
         Function = function()
             if AutoHotbar.Enabled then
@@ -14354,6 +14627,7 @@ run(function()
         end
     })
     Clear = AutoHotbar:CreateToggle({Name = 'Clear Hotbar'})
+    Tooltip = 'Clears relevant hotbar slots before item switch',
     List = AutoHotbar:CreateHotbarList({})
 end)
 
@@ -14367,6 +14641,7 @@ run(function()
     
     AutoSteal = vain.Categories.Inventory:CreateModule({
     	Name = 'Auto Steal',
+    	Tooltip = 'Automatically steals resources from nearby players',
     	Function = function(call)
     		if call then
     			repeat
@@ -14437,6 +14712,7 @@ run(function()
     
     Range = AutoSteal:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 18,
     	Suffix = function(val)
@@ -14446,6 +14722,7 @@ run(function()
     })
     Delay = AutoSteal:CreateSlider({
     	Name = 'Delay',
+    	Tooltip = 'Seconds between consecutive actions',
     	Min = 0,
     	Max = 1,
     	Decimal = 100,
@@ -14454,6 +14731,7 @@ run(function()
     })
     GUI = AutoSteal:CreateToggle({
     	Name = 'GUI Check',
+    	Tooltip = 'Pauses the module when a GUI menu is open',
     })
 end)
 
@@ -14463,6 +14741,7 @@ run(function()
     
     local FastConsume = vain.Categories.Inventory:CreateModule({
         Name = 'Fast Consume',
+        Tooltip = 'Speeds up item consumption (eating, drinking)',
         Function = function(callback)
             if callback then
                 oldclickhold = bedwars.ClickHold.startClick
@@ -14524,6 +14803,7 @@ run(function()
     })
     Value = FastConsume:CreateSlider({
         Name = 'Multiplier',
+        Tooltip = 'Speed multiplier applied to this action',
         Min = 0,
         Max = 100
     })
@@ -14534,6 +14814,7 @@ run(function()
     
     FastDrop = vain.Categories.Inventory:CreateModule({
         Name = 'Fast Drop',
+        Tooltip = 'Enables the Fast Drop module',
         Function = function(callback)
             if callback then
                 repeat
@@ -14695,6 +14976,7 @@ run(function()
     
     BedPlates = vain.Categories.Minigames:CreateModule({
     	Name = 'Bed Plates',
+    	Tooltip = 'Displays the number of protection layers on your bed',
     	Function = function(callback)
     		if callback then
     			for _, v in collectionService:GetTagged('bed') do
@@ -14719,6 +15001,7 @@ run(function()
     })
     Background = BedPlates:CreateToggle({
     	Name = 'Background',
+    	Tooltip = 'Renders a background box behind this ESP element',
     	Function = function(callback)
     		if Color and Color.Object then
     			Color.Object.Visible = callback
@@ -14744,6 +15027,7 @@ run(function()
     })
     LayerCounter = BedPlates:CreateToggle({
     	Name = 'Layer Counter',
+    	Tooltip = 'Shows the number of protection layers on your bed',
     	Function = function(callback)
     		if LayerColor and LayerColor.Object then
     			LayerColor.Object.Visible = callback
@@ -14919,6 +15203,7 @@ run(function()
     
     Breaker = vain.Categories.Minigames:CreateModule({
         Name = 'Breaker',
+        Tooltip = 'Automatically breaks target blocks within range',
         Function = function(callback)
             if callback then
                 for _ = 1, 30 do
@@ -14998,11 +15283,13 @@ run(function()
     end
     Mode = Breaker:CreateDropdown({
         Name = 'Break mode',
+        Tooltip = 'Selects the block-breaking strategy',
         List = methods,
         Default = methods[1]
     })
     Range = Breaker:CreateSlider({
         Name = 'Break range',
+        Tooltip = 'Maximum distance in studs to break blocks',
         Min = 1,
         Max = 30,
         Default = 30,
@@ -15012,6 +15299,7 @@ run(function()
     })
     BreakSpeed = Breaker:CreateSlider({
         Name = 'Break speed',
+        Tooltip = 'How fast blocks are broken (higher = faster)',
         Min = 0,
         Max = 0.3,
         Default = 0.25,
@@ -15020,12 +15308,14 @@ run(function()
     })
     Angle = Breaker:CreateSlider({
         Name = 'Max angle',
+        Tooltip = 'Maximum angle in degrees from your look direction to engage',
         Min = 1,
         Max = 360,
         Default = 120
     })
     UpdateRate = Breaker:CreateSlider({
         Name = 'Update rate',
+        Tooltip = 'How often to scan for targets (seconds)',
         Min = 1,
         Max = 120,
         Default = 60,
@@ -15045,26 +15335,32 @@ run(function()
     })
     Bed = Breaker:CreateToggle({
         Name = 'Break Bed',
+        Tooltip = 'Targets enemy beds for automatic breaking',
         Default = true
     })
     Tesla = Breaker:CreateToggle({
     	Name = 'Break Tesla',
+    	Tooltip = 'Targets Tesla coil structures for automatic breaking',
     	Default = true,
     })
     Hive = Breaker:CreateToggle({
     	Name = 'Break Hive',
+    	Tooltip = 'Targets beehive structures for automatic breaking',
     	Default = true,
     })
     LuckyBlock = Breaker:CreateToggle({
         Name = 'Break Lucky Block',
+        Tooltip = 'Targets lucky blocks for automatic breaking',
         Default = true
     })
     IronOre = Breaker:CreateToggle({
         Name = 'Break Iron Ore',
+        Tooltip = 'Targets iron ore deposits for automatic breaking',
         Default = true
     })
     Effect = Breaker:CreateToggle({
         Name = 'Show Healthbar & Effects',
+        Tooltip = 'Renders health bars and status effects on the target',
         Function = function(callback)
             if CustomHealth.Object then
                 CustomHealth.Object.Visible = callback
@@ -15074,13 +15370,18 @@ run(function()
     })
     CustomHealth = Breaker:CreateToggle({
         Name = 'Custom Healthbar',
+        Tooltip = 'Enables a custom-styled health bar overlay on the target',
         Default = true,
         Darker = true
     })
     Animation = Breaker:CreateToggle({Name = 'Animation'})
+    Tooltip = 'Shows the kit ability animation when activated',
     SelfBreak = Breaker:CreateToggle({Name = 'Self Break'})
+    Tooltip = 'Enables or disables self break',
     InstantBreak = Breaker:CreateToggle({Name = 'Instant Break'})
+    Tooltip = 'Enables or disables instant break',
     AutoTool = Breaker:CreateToggle({Name = 'Auto Tool'})
+    Tooltip = 'Enables or disables auto tool',
     LimitItem = Breaker:CreateToggle({
         Name = 'Limit to items',
         Tooltip = 'Only breaks when tools are held'
@@ -15096,6 +15397,7 @@ run(function()
 
     AutoAdetunde = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Adetunde',
+    	Tooltip = 'Automates the Adetunde kit ability',
     	Function = function(callback)
     		if callback then
     			repeat
@@ -15128,6 +15430,7 @@ run(function()
     for i in bedwars.AdetundeUpgradeMeta do
     	AutoAdetunde:CreateToggle({
     		Name = 'Buy ' .. i,
+    		Tooltip = 'Enables or disables buy ',
     		Default = true,
     	})
     end
@@ -15145,6 +15448,7 @@ run(function()
 
     AutoBee = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Beekeeper',
+    	Tooltip = 'Automates Beekeeper — collects and deposits bees automatically',
     	Function = function(callback)
     		if callback then
     			local hives = collection('beehive', AutoBee)
@@ -15191,6 +15495,7 @@ run(function()
     })
     Collect = AutoBee:CreateToggle({
     	Name = 'Collect bees',
+    	Tooltip = 'Automatically collects bees from beehives',
     	Default = true,
     	Function = function(call)
     		pcall(function()
@@ -15202,6 +15507,7 @@ run(function()
     })
     CollectRange = AutoBee:CreateSlider({
     	Name = 'Collect Range',
+    	Tooltip = 'Distance in studs to collect items or resources',
     	Min = 1,
     	Max = 22,
     	Default = 20,
@@ -15212,6 +15518,7 @@ run(function()
     })
     CollectDelay = AutoBee:CreateSlider({
     	Name = 'Collect delay',
+    	Tooltip = 'Seconds between collection attempts',
     	Min = 0,
     	Max = 2,
     	Decimal = 100,
@@ -15220,10 +15527,12 @@ run(function()
     })
     LimitCollect = AutoBee:CreateToggle({
     	Name = 'Limit to item',
+    	Tooltip = 'Only activates when a required item is in your hand',
     	Darker = true
     })
     Deposit = AutoBee:CreateToggle({
     	Name = 'Deposit bees',
+    	Tooltip = 'Enables or disables deposit bees',
     	Function = function(call)
     		pcall(function()
     			DepositRange.Object.Visible = call
@@ -15234,6 +15543,7 @@ run(function()
     })
     DepositRange = AutoBee:CreateSlider({
     	Name = 'Deposit Range',
+    	Tooltip = 'Distance in studs to deposit items',
     	Min = 1,
     	Max = 14,
     	Default = 14,
@@ -15245,6 +15555,7 @@ run(function()
     })
     DepositDelay = AutoBee:CreateSlider({
     	Name = 'Deposit Delay',
+    	Tooltip = 'Seconds between deposit attempts',
     	Min = 0,
     	Max = 2,
     	Decimal = 100,
@@ -15276,6 +15587,7 @@ run(function()
 
     AutoBuilder = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Builder',
+    	Tooltip = 'Automatically builds a preset structure',
     	Function = function(callback)
     		if callback then
     			repeat
@@ -15332,6 +15644,7 @@ run(function()
     })
     Limit = AutoBuilder:CreateToggle({
     	Name = 'Limit to items',
+    	Tooltip = 'Only activates when a required item is in your hand',
     	Default = true
     })
     Blacklist = AutoBuilder:CreateTextList({
@@ -15349,6 +15662,7 @@ run(function()
 
     AutoCaitlyn = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Caitlyn',
+    	Tooltip = 'Automates the Caitlyn kit trap ability',
     	Function = function(callback)
     		if callback then
     			AutoCaitlyn:Clean(vapeEvents.EntityDamageEvent.Event:Connect(function(damageTable)
@@ -15392,6 +15706,7 @@ run(function()
     })
     Range = AutoCaitlyn:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 50,
     	Default = 50,
@@ -15411,6 +15726,7 @@ run(function()
 
     AutoDavey = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Davey',
+    	Tooltip = 'Automates the Davey kit cannon',
     	Function = function(call)
     		if call then
     			old = bedwars.CannonHandController.launchSelf
@@ -15442,8 +15758,11 @@ run(function()
     })
 
     Jump = AutoDavey:CreateToggle({Name = 'Jump on impact'})
+    Tooltip = 'Jumps when the ability makes contact',
     Break = AutoDavey:CreateToggle({Name = 'Break on impact'})
+    Tooltip = 'Breaks the item on impact with a surface',
     Switch = AutoDavey:CreateToggle({Name = 'Legit switch'})
+    Tooltip = 'Switches to a more legit-looking mode automatically',
 end)
 
 run(function()
@@ -15557,6 +15876,7 @@ run(function()
 
     AutoDrill = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Drill',
+    	Tooltip = 'Automates the Drill kit — drills and collects automatically',
     	Function = function(callback)
     		if callback then
     			local tagged = collection('Drill', AutoDrill)
@@ -15608,6 +15928,7 @@ run(function()
     })
     AutoCollect = AutoDrill:CreateToggle({
     	Name = 'Auto collect',
+    	Tooltip = 'Automatically collects drill output',
     	Default = true,
     	Function = function(callback)
     		pcall(function()
@@ -15618,15 +15939,18 @@ run(function()
     })
     Notify = AutoDrill:CreateToggle({
     	Name = 'Notify on collect',
+    	Tooltip = 'Sends a notification when drill output is collected',
     	Darker = true
     })
     AutoAttack = AutoDrill:CreateToggle({
     	Name = 'Auto attack',
+    	Tooltip = 'Automatically attacks with the kit weapon',
     	Default = true,
     	Function = updateAttackControls
     })
     Range = AutoDrill:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 10,
     	Default = 10,
@@ -15636,11 +15960,13 @@ run(function()
     })
     Legit = AutoDrill:CreateToggle({
     	Name = 'Legit Range',
+    	Tooltip = 'Restricts range to a value indistinguishable from vanilla',
     	Default = true,
     	Function = updateAttackControls
     })
     AttackDelay = AutoDrill:CreateSlider({
     	Name = 'Attack delay',
+    	Tooltip = 'Seconds between consecutive attacks',
     	Min = 0.1,
     	Max = 1,
     	Default = 0.3,
@@ -15651,6 +15977,7 @@ run(function()
     })
     CollectDelay = AutoDrill:CreateSlider({
     	Name = 'Collect delay',
+    	Tooltip = 'Seconds between collection attempts',
     	Min = 0.1,
     	Max = 3,
     	Default = 0.5,
@@ -15660,6 +15987,7 @@ run(function()
     	end
     })
     Targets = AutoDrill:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
     	Players = true,
     	NPCs = false
     })
@@ -15671,6 +15999,7 @@ run(function()
     end
     Sort = AutoDrill:CreateDropdown({
     	Name = 'Sort',
+    	Tooltip = 'Selects how targets are sorted/prioritized',
     	List = methods,
     	Default = 'Distance'
     })
@@ -15686,6 +16015,7 @@ run(function()
 
     AutoElder = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Elder',
+    	Tooltip = 'Automates the Elder kit ability',
     	Function = function(call)
     		if call then
     			AutoElder:Clean(proximityPromptService.PromptShown:Connect(function(prompt)
@@ -15742,6 +16072,7 @@ run(function()
     })
     Range = AutoElder:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 20,
     	Default = 12,
@@ -15751,6 +16082,7 @@ run(function()
     })
     Delay = AutoElder:CreateSlider({
     	Name = 'Delay',
+    	Tooltip = 'Seconds between consecutive actions',
     	Min = 0,
     	Max = 1,
     	Suffix = function(val)
@@ -15770,6 +16102,7 @@ run(function()
 
     AutoEmber = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Ember',
+    	Tooltip = 'Automates the Ember kit fire ability',
     	Function = function(call)
     		if call then
     			local clock = os.clock()
@@ -15798,11 +16131,13 @@ run(function()
     })
 
     Targets = AutoEmber:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
     	Players = true,
     	NPCs = false
     })
     Delay = AutoEmber:CreateSlider({
     	Name = 'Delay',
+    	Tooltip = 'Seconds between consecutive actions',
     	Min = 0,
     	Max = 1,
     	Default = 0.1,
@@ -15810,6 +16145,7 @@ run(function()
     })
     Range = AutoEmber:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 22,
     	Default = 22,
@@ -15818,6 +16154,7 @@ run(function()
     	end
     })
     Limit = AutoEmber:CreateToggle({Name = 'Limit to item'})
+    Tooltip = 'Only activates when a required item is in your hand',
 end)
 
 run(function()
@@ -15851,6 +16188,7 @@ run(function()
 
     AutoGingerbread = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Gingerbread Man',
+    	Tooltip = 'Automates Gingerbread Man kit launch pads',
     	Function = function(callback)
     		if callback then
     			old = bedwars.LaunchPadController.attemptLaunch
@@ -15884,6 +16222,7 @@ run(function()
 
     Break = AutoGingerbread:CreateToggle({
     	Name = 'Break launch pad',
+    	Tooltip = 'Automatically breaks used launch pads',
     	Default = true,
     	Function = function(call)
     		pcall(function()
@@ -15895,21 +16234,26 @@ run(function()
     	end
     })
     Jump = AutoGingerbread:CreateToggle({Name = 'Jump after launch'})
+    Tooltip = 'Jumps immediately after being launched by a pad',
     Switch = AutoGingerbread:CreateToggle({
     	Name = 'Legit switch',
+    	Tooltip = 'Switches to a more legit-looking mode automatically',
     	Darker = true
     })
     OwnOnly = AutoGingerbread:CreateToggle({
     	Name = 'Own pads only',
+    	Tooltip = 'Only activates on launch pads you placed yourself',
     	Default = true,
     	Darker = true
     })
     SuccessfulOnly = AutoGingerbread:CreateToggle({
     	Name = 'Successful launch only',
+    	Tooltip = 'Only activates after a confirmed successful launch',
     	Default = true
     })
     Range = AutoGingerbread:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 30,
     	Default = 30,
@@ -15920,6 +16264,7 @@ run(function()
     })
     Delay = AutoGingerbread:CreateSlider({
     	Name = 'Break delay',
+    	Tooltip = 'Seconds between break attempts',
     	Min = 0,
     	Max = 1,
     	Default = 0.05,
@@ -15937,6 +16282,7 @@ run(function()
 
     AutoHannah = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Hannah',
+    	Tooltip = 'Automates the Hannah kit ability',
     	Function = function(callback)
     		if callback then
     			local objs = collection('HannahExecuteInteraction', AutoHannah)
@@ -15969,8 +16315,10 @@ run(function()
     })
 
     AutoHannah:CreateTargets({Players = true}) -- cosmetic settings lmao
+    	Tooltip = 'Configure which types of targets to include',
     Range = AutoHannah:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 30,
     	Default = 30,
@@ -15986,6 +16334,7 @@ run(function()
     end
     AutoHannah:CreateDropdown({
     	Name = 'Target mode', 
+    	Tooltip = 'Selects how targets are prioritized and selected',
     	List = methods,
     	Default = 'Health'
     })
@@ -16027,6 +16376,7 @@ run(function()
 
     AutoKaliyah = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Kaliyah',
+    	Tooltip = 'Automates the Kaliyah kit ability',
     	Function = function(call)
     		if call then
     			local objs = collection('KaliyahPunchInteraction', AutoKaliyah)
@@ -16059,6 +16409,7 @@ run(function()
     })
     Range = AutoKaliyah:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 20,
     	Default = 18,
@@ -16068,6 +16419,7 @@ run(function()
     })
     Delay = AutoKaliyah:CreateSlider({
     	Name = 'Delay',
+    	Tooltip = 'Seconds between consecutive actions',
     	Min = 0,
     	Max = 1,
     	Default = 0.1,
@@ -16089,6 +16441,7 @@ run(function()
 
     AutoLani = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Lani',
+    	Tooltip = 'Automates the Lani kit ability',
     	Function = function(call)
     		if call then
     			local oldstart = 0
@@ -16149,6 +16502,7 @@ run(function()
     })
     UseEnemy = AutoLani:CreateToggle({
     	Name = 'Use enemy',
+    	Tooltip = 'Enables or disables use enemy',
     	Function = function(call)
     		Enemy.Object.Visible = call
     		Player.Object.Visible = not call
@@ -16178,6 +16532,7 @@ run(function()
 
     AutoMarina = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Marina',
+    	Tooltip = 'Automates the Marina kit ability',
     	Function = function(call)
     		if call then
     			local jellies = collection('jellyfish', AutoMarina, function(tab, obj)
@@ -16214,6 +16569,7 @@ run(function()
 
     Range = AutoMarina:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 65,
     	Default = 50,
@@ -16231,6 +16587,7 @@ run(function()
 
     AutoMelody = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Melody',
+    	Tooltip = 'Automates the Melody kit heal',
     	Function = function(call)
     		if call then
     			repeat
@@ -16262,14 +16619,17 @@ run(function()
 
     SelfHeal = AutoMelody:CreateToggle({
     	Name = 'Self Heal',
+    	Tooltip = 'Heals yourself with the kit ability',
     	Default = true
     })
     TeammateHeal = AutoMelody:CreateToggle({
     	Name = 'Teammate Heal',
+    	Tooltip = 'Heals nearby teammates with the kit ability',
     	Default = true
     })
     Range = AutoMelody:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 30,
     	Default = 30,
@@ -16289,6 +16649,7 @@ run(function()
 
     AutoMetal = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Metal',
+    	Tooltip = 'Automates the Metal kit shield ability',
     	Function = function(call)
     		if call then
     			AutoMetal:Clean(proximityPromptService.PromptShown:Connect(function(prompt)
@@ -16330,8 +16691,10 @@ run(function()
     })
 
     Limit = AutoMetal:CreateToggle({Name = 'Limit to item'})
+    Tooltip = 'Only activates when a required item is in your hand',
     StreamerMode = AutoMetal:CreateToggle({
     	Name = 'Streamer mode',
+    	Tooltip = 'Enables or disables streamer mode',
     	Function = function(call)
     		pcall(function()
     			Duration.Object.Visible = not call
@@ -16348,6 +16711,7 @@ run(function()
     })
     Range = AutoMetal:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 20,
     	Default = 12,
@@ -16357,6 +16721,7 @@ run(function()
     })
     Duration = AutoMetal:CreateSlider({
     	Name = 'Delay',
+    	Tooltip = 'Seconds between consecutive actions',
     	Min = 0,
     	Max = 1,
     	Suffix = function(val)
@@ -16405,6 +16770,7 @@ run(function()
 
     AutoNoelle = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Noelle',
+    	Tooltip = 'Automates the Noelle kit ability',
     	Function = function(call)
     		if call then
     			repeat
@@ -16461,7 +16827,9 @@ run(function()
     end
 
     Notify = AutoNoelle:CreateToggle({ Name = 'Notify on direct' })
+    Tooltip = 'Enables or disables notify on direct',
     Limit = AutoNoelle:CreateToggle({ Name = 'Limit to item' })
+    Tooltip = 'Only activates when a required item is in your hand',
     FrostySlime = AutoNoelle:CreateDropdown({
     	Name = 'Frosty Slime Target',
     	List = {},
@@ -16495,6 +16863,7 @@ run(function()
 
     AutoNyx = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Nyx',
+    	Tooltip = 'Automates the Nyx kit stealth ability',
     	Function = function(call)
     		if call then
     			AutoNyx:Clean(vapeEvents.EntityDamageEvent.Event:Connect(function(damageTable)
@@ -16513,6 +16882,7 @@ run(function()
     })
 
     Targets = AutoNyx:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
     	Players = true,
     	NPCs = false
     })
@@ -16525,6 +16895,7 @@ run(function()
 
     AutoPyro = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Pyro',
+    	Tooltip = 'Automates the Pyro kit fire ability',
     	Function = function(call)
     		if call then
     			repeat
@@ -16561,6 +16932,7 @@ run(function()
     for _, i in list do
     	AutoPyro:CreateToggle({
     		Name = 'Buy ' .. i,
+    		Tooltip = 'Enables or disables buy ',
     		Default = true
     	})
     end
@@ -16576,6 +16948,7 @@ run(function()
 
     AutoRamil = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Ramil',
+    	Tooltip = 'Automates the Ramil tornado placement',
     	Function = function(callback)
     		if callback then
     			repeat
@@ -16608,6 +16981,7 @@ run(function()
     })
 
     Targets = AutoRamil:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
     	Players = true,
     	NPCs = false
     })
@@ -16619,11 +16993,13 @@ run(function()
     end
     Sorts = AutoRamil:CreateDropdown({
     	Name = 'Target Mode',
+    	Tooltip = 'Selects how targets are prioritized and selected',
     	List = methods,
     	Default = 'Distance'
     })
     Range = AutoRamil:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 25,
     	Default = 25,
@@ -16633,6 +17009,7 @@ run(function()
     })
     UseTornando = AutoRamil:CreateToggle({
     	Name = 'Use Moving Tornado',
+    	Tooltip = 'Places a moving tornado instead of a static one',
     	Function = function(call)
     		pcall(function()
     			TonradoRange.Object.Visible = call
@@ -16641,6 +17018,7 @@ run(function()
     })
     TonradoRange = AutoRamil:CreateSlider({
     	Name = 'Tornado Range',
+    	Tooltip = 'Distance in studs for tornado placement',
     	Min = 1,
     	Max = 35,
     	Default = 25,
@@ -16659,6 +17037,7 @@ run(function()
 
     AutoSheep = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Sheep Herder',
+    	Tooltip = 'Automates the Sheep Herder kit',
     	Function = function(callback)
     		if callback then
     			repeat
@@ -16684,6 +17063,7 @@ run(function()
 
     Range = AutoSheep:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 20,
     	Suffix = function(val)
@@ -16693,6 +17073,7 @@ run(function()
     })
     Delay = AutoSheep:CreateSlider({
     	Name = 'Delay',
+    	Tooltip = 'Seconds between consecutive actions',
     	Min = 0,
     	Max = 1,
     	Default = 0.1,
@@ -16709,6 +17090,7 @@ run(function()
 
     AutoStar = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Star Collector',
+    	Tooltip = 'Automates the Star Collector kit — collects stars automatically',
     	Function = function(callback)
     		if callback then
     			AutoStar:Clean(proximityPromptService.PromptShown:Connect(function(prompt)
@@ -16753,6 +17135,7 @@ run(function()
 
     Streamer = AutoStar:CreateToggle({
     	Name = 'Streamer mode',
+    	Tooltip = 'Enables or disables streamer mode',
     	Function = function(call)
     		pcall(function()
     			Delay.Object.Visible = not call
@@ -16769,6 +17152,7 @@ run(function()
     })
     Range = AutoStar:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 20,
     	Default = 12,
@@ -16778,6 +17162,7 @@ run(function()
     })
     Delay = AutoStar:CreateSlider({
     	Name = 'Delay',
+    	Tooltip = 'Seconds between consecutive actions',
     	Min = 0,
     	Max = 1,
     	Suffix = function(val)
@@ -16909,6 +17294,7 @@ run(function()
 
     AutoUma = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Uma',
+    	Tooltip = 'Automates the Uma kit spirit abilities',
     	Function = function(call)
     		if call then
     			repeat
@@ -16971,6 +17357,7 @@ run(function()
 
     Range = AutoUma:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 80,
     	Default = 50,
@@ -16981,14 +17368,17 @@ run(function()
     })
     Animation = AutoUma:CreateToggle({
     	Name = 'Animation',
+    	Tooltip = 'Shows the kit ability animation when activated',
     	Default = true
     })
     Limit = AutoUma:CreateToggle({
     	Name = 'Limit to item',
+    	Tooltip = 'Only activates when a required item is in your hand',
     	Default = true
     })
     AutoSummon = AutoUma:CreateToggle({
     	Name = 'Auto Summon',
+    	Tooltip = 'Enables or disables auto summon',
     	Function = function(call)
     		pcall(function()
     			AttackSpirit.Object.Visible = call
@@ -16999,18 +17389,21 @@ run(function()
     })
     HealSpirit = AutoUma:CreateToggle({
     	Name = 'Use heal spirit',
+    	Tooltip = 'Automatically deploys the healing spirit',
     	Default = true,
     	Visible = false,
     	Darker = true
     })
     AttackSpirit = AutoUma:CreateToggle({
     	Name = 'Use attack spirit',
+    	Tooltip = 'Automatically deploys the attack spirit',
     	Default = true,
     	Visible = false,
     	Darker = true
     })
     TargetItemDrops = AutoUma:CreateToggle({
     	Name = 'Target item drops',
+    	Tooltip = 'Targets item drops for automatic collection',
     	Default = true,
     	Function = function(call)
     		pcall(function()
@@ -17021,11 +17414,13 @@ run(function()
     })
     Emerald = AutoUma:CreateToggle({
     	Name = 'Emerald',
+    	Tooltip = 'Includes emerald resources',
     	Darker = true,
     	Default = true
     })
     Diamond = AutoUma:CreateToggle({
     	Name = 'Diamond',
+    	Tooltip = 'Includes diamond resources',
     	Darker = true,
     	Default = true
     })
@@ -17040,6 +17435,7 @@ run(function()
 
     AutoWhisper = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Whisper',
+    	Tooltip = 'Automates the Whisper kit heal and flight abilities',
     	Function = function(callback)
     		if callback then
     			local lowestpoint = math.huge
@@ -17088,6 +17484,7 @@ run(function()
 
     Heal = AutoWhisper:CreateToggle({
     	Name = 'Heal',
+    	Tooltip = 'Uses the kit healing ability automatically',
     	Default = true,
     	Function = function(call)
     		if Threshold then
@@ -17097,6 +17494,7 @@ run(function()
     })
     Threshold = AutoWhisper:CreateSlider({
     	Name = 'Health',
+    	Tooltip = 'Health threshold that triggers this action',
     	Min = 1,
     	Max = 100,
     	Default = 99,
@@ -17105,6 +17503,7 @@ run(function()
     })
     Fly = AutoWhisper:CreateToggle({
     	Name = 'Fly',
+    	Tooltip = 'Uses the kit flight ability automatically',
     	Default = true,
     	Function = function(call)
     		if Level then
@@ -17114,6 +17513,7 @@ run(function()
     })
     Level = AutoWhisper:CreateSlider({
     	Name = 'Level',
+    	Tooltip = 'Target level value to set or compare against',
     	Min = 1,
     	Max = 100,
     	Default = 100,
@@ -17153,6 +17553,7 @@ run(function()
 
     AutoZeno = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Zeno',
+    	Tooltip = 'Automates the Zeno kit lightning and shockwave',
     	Function = function(call)
     		if call then
     			repeat
@@ -17209,6 +17610,7 @@ run(function()
     })
 
     Targets = AutoZeno:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
     	Players = true,
     	NPCs = false,
     })
@@ -17220,20 +17622,25 @@ run(function()
     end
     TargetMode = AutoZeno:CreateDropdown({
     	Name = 'Target Mode',
+    	Tooltip = 'Selects how targets are prioritized and selected',
     	List = methods,
     	Default = 'Distance'
     })
     Limit = AutoZeno:CreateToggle({
     	Name = 'Limit to item',
+    	Tooltip = 'Only activates when a required item is in your hand',
     	Default = true
     })
     UseStrike = AutoZeno:CreateToggle({
     	Name = 'Use Lightning Strike',
+    	Tooltip = 'Uses the lightning strike ability automatically',
     	Default = true
     })
     UseStorm = AutoZeno:CreateToggle({Name = 'Use Lightning Storm'})
+    Tooltip = 'Enables or disables use lightning storm',
     AutoShockWave = AutoZeno:CreateToggle({
     	Name = 'Auto Shockwave',
+    	Tooltip = 'Enables or disables auto shockwave',
     	Function = function(call)
     		pcall(function()
     			ShockwaveRange.Object.Visible = call
@@ -17243,6 +17650,7 @@ run(function()
     })
     ShockwaveRange = AutoZeno:CreateSlider({
     	Name = 'Shockwave Range',
+    	Tooltip = 'Radius in studs of the shockwave effect',
     	Visible = false,
     	Darker = true,
     	Min = 1,
@@ -17255,6 +17663,7 @@ run(function()
     })
     Range = AutoZeno:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 60,
     	Default = 35,
@@ -17265,6 +17674,7 @@ run(function()
     })
     Delay = AutoZeno:CreateSlider({
     	Name = 'Delay',
+    	Tooltip = 'Seconds between consecutive actions',
     	Min = 0,
     	Max = 10,
     	Default = 0.5,
@@ -17286,6 +17696,7 @@ run(function()
 
     DaveyAim = vain.Categories.Kits:CreateModule({
     	Name = 'Davey Aim',
+    	Tooltip = 'Automatically aims the Davey kit cannon at enemies',
     	Function = function(call)
     		if call then
     			DaveyAim:Toggle()
@@ -17348,16 +17759,19 @@ run(function()
 
     Mode = DaveyAim:CreateDropdown({
     	Name = 'Aim Mode',
+    	Tooltip = 'Selects the aiming technique',
     	List = {'Fast', 'Legit'},
     	Default = 'Fast'
     })
     DaveyAim:CreateDropdown({
     	Name = 'Position Mode',
+    	Tooltip = 'Selects the reference position for aiming',
     	List = {'Mouse', 'Camera'},
     	Default = 'Mouse'
     })
     Range = DaveyAim:CreateSlider({
     	Name = 'Search Range',
+    	Tooltip = 'Distance in studs to search for targets',
     	Min = 1,
     	Max = 30,
     	Default = 10,
@@ -17367,6 +17781,7 @@ run(function()
     })
     Launch = DaveyAim:CreateToggle({
     	Name = 'Launch Cannon',
+    	Tooltip = 'Automatically launches the Davey cannon at enemies',
     	Default = true
     })
 end)
@@ -17377,6 +17792,7 @@ run(function()
 
     FishermanSpy = vain.Categories.Kits:CreateModule({
     	Name = 'Fisherman Spy',
+    	Tooltip = 'Reveals targets caught by the Fisherman kit',
     	Function = function(call)
     		if call then
     			FishermanSpy:Clean(bedwars.Client:Get('FishCaught'):Connect(function(data)
@@ -17398,6 +17814,7 @@ run(function()
 
     Teammates = FishermanSpy:CreateToggle({
     	Name = 'Ignore teammate',
+    	Tooltip = 'Ignores players on your own team',
     	Default = true
     })
 end)
@@ -17456,6 +17873,7 @@ run(function()
     
     ArmorTrims = vain.Legit:CreateModule({
         Name = 'Armor Trims',
+        Tooltip = 'Applies custom cosmetic trim patterns to your armor',
         Function = function(callback)
             if callback then
                 ArmorTrims:Clean(entitylib.Events.LocalAdded:Connect(function(ent)
@@ -17475,6 +17893,7 @@ run(function()
     end
     Type = ArmorTrims:CreateDropdown({
         Name = 'Trim type',
+        Tooltip = 'Selects the armor trim pattern',
         List = list,
         Default = list[1],
         Function = function(val)
@@ -17520,6 +17939,7 @@ run(function()
     
     BedAlarm = vain.Legit:CreateModule({
     	Name = 'Bed Alarm',
+    	Tooltip = 'Plays a sound and notification when your bed is attacked',
     	Function = function(callback)
     		if callback then
     			local Notifytick = os.clock()
@@ -17572,6 +17992,7 @@ run(function()
     })
     Range = BedAlarm:CreateSlider({
     	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs',
     	Min = 1,
     	Max = 100,
     	Default = 70,
@@ -17581,6 +18002,7 @@ run(function()
     })
     Volume = BedAlarm:CreateSlider({
     	Name = 'Volume multiplier',
+    	Tooltip = 'Multiplier applied to the alarm sound volume',
     	Min = 0.1,
     	Max = 2,
     	Default = 1.4,
@@ -17596,6 +18018,7 @@ run(function()
     
     BedBreakEffect = vain.Legit:CreateModule({
         Name = 'Bed Break Effect',
+        Tooltip = 'Plays a visual effect when an enemy bed is broken',
         Function = function(callback)
             if callback then
                 BedBreakEffect:Clean(vapeEvents.BedwarsBedBreak.Event:Connect(function(data)
@@ -17619,6 +18042,7 @@ run(function()
     table.sort(BreakEffectName)
     List = BedBreakEffect:CreateDropdown({
         Name = 'Effect',
+        Tooltip = 'Selects the visual effect to display',
         List = BreakEffectName
     })
 end)
@@ -17630,6 +18054,7 @@ run(function()
     
     BlockOverlay = vain.Legit:CreateModule({
         Name = 'Block Overlay',
+        Tooltip = 'Enables the Block Overlay module',
         Function = function(callback)
             if callback then
                 BlockOverlay:Clean(workspace.ChildAdded:Connect(function(v)
@@ -17659,6 +18084,7 @@ end)
 run(function()
     vain.Legit:CreateModule({
         Name = 'Clean Kit',
+        Tooltip = 'Enables the Clean Kit module',
         Function = function(callback)
             if callback then
                 bedwars.WindWalkerController.spawnOrb = function() end
@@ -17679,6 +18105,7 @@ run(function()
     
     local Crosshair = vain.Legit:CreateModule({
         Name = 'Crosshair',
+        Tooltip = 'Enables the Crosshair module',
         Function = function(callback)
             if callback then
                 old = debug.getconstant(bedwars.ViewmodelController.showCrosshair, 25)
@@ -17724,6 +18151,7 @@ run(function()
     
     DamageIndicator = vain.Legit:CreateModule({
         Name = 'Damage Indicator',
+        Tooltip = 'Displays floating damage numbers above hit enemies',
         Function = function(callback)
             if callback then
                 oldvalues = table.clone(tab)
@@ -17755,6 +18183,7 @@ run(function()
     end
     FontOption = DamageIndicator:CreateDropdown({
         Name = 'Font',
+        Tooltip = 'Selects the font for rendered text',
         List = fontitems,
         Function = function(val)
             if DamageIndicator.Enabled then
@@ -17773,6 +18202,7 @@ run(function()
     })
     Size = DamageIndicator:CreateSlider({
         Name = 'Size',
+        Tooltip = 'Display size of this element',
         Min = 1,
         Max = 32,
         Default = 32,
@@ -17785,6 +18215,7 @@ run(function()
     })
     Anchor = DamageIndicator:CreateSlider({
         Name = 'Anchor',
+        Tooltip = 'Vertical anchor point for the damage number',
         Min = 0,
         Max = 1,
         Decimal = 10,
@@ -17796,6 +18227,7 @@ run(function()
     })
     Stroke = DamageIndicator:CreateToggle({
         Name = 'Stroke',
+        Tooltip = 'Adds an outline stroke to the text',
         Function = function(callback)
             if DamageIndicator.Enabled then
                 debug.setconstant(bedwars.DamageIndicator, 119, callback and 'Thickness' or 'Enabled')
@@ -17811,6 +18243,7 @@ run(function()
     
     DeviceSpoofer = vain.Legit:CreateModule({
         Name = 'Device Spoofer',
+        Tooltip = 'Spoofs the device type reported to the server',
         Function = function(callback)
             if callback then
                 DeviceSpoofer:Clean(lplr:GetAttributeChangedSignal('UserInputType'):Connect(function()
@@ -17824,6 +18257,7 @@ run(function()
     
     Device = DeviceSpoofer:CreateDropdown({
         Name = 'Device',
+        Tooltip = 'Selects the device type to report to the server',
         List = {'Mobile', 'PC', 'Gamepad'},
         Function = function(val)
             if DeviceSpoofer.Enabled then
@@ -17840,6 +18274,7 @@ run(function()
     
     FOV = vain.Legit:CreateModule({
         Name = 'FOV',
+        Tooltip = 'Enables the FOV module',
         Function = function(callback)
             if callback then
                 old = bedwars.FovController.setFOV
@@ -17861,6 +18296,7 @@ run(function()
     })
     Value = FOV:CreateSlider({
         Name = 'FOV',
+        Tooltip = 'Field-of-view cone in degrees for target detection',
         Min = 70,
         Max = 360,
         Function = function(val)
@@ -17879,6 +18315,7 @@ run(function()
     
     FPSBoost = vain.Legit:CreateModule({
         Name = 'FPS Boost',
+        Tooltip = 'Improves FPS by removing unnecessary visual effects',
         Function = function(callback)
             if callback then
                 if Kill.Enabled then
@@ -17929,6 +18366,7 @@ run(function()
     })
     Kill = FPSBoost:CreateToggle({
         Name = 'Kill Effects',
+        Tooltip = 'Disables kill particle effects to improve FPS',
         Function = function()
             if FPSBoost.Enabled then
                 FPSBoost:Toggle()
@@ -17939,6 +18377,7 @@ run(function()
     })
     Visualizer = FPSBoost:CreateToggle({
         Name = 'Visualizer',
+        Tooltip = 'Shows a hit visualizer overlay during attacks',
         Function = function()
             if FPSBoost.Enabled then
                 FPSBoost:Toggle()
@@ -17956,6 +18395,7 @@ run(function()
     
     HitColor = vain.Legit:CreateModule({
         Name = 'Hit Color',
+        Tooltip = 'Changes the color of hit particle effects on enemies',
         Function = function(callback)
             if callback then 
                 repeat
@@ -17990,6 +18430,7 @@ end)
 run(function()
     vain.Legit:CreateModule({
         Name = 'Hit Fix',
+        Tooltip = 'Enables the Hit Fix module',
         Function = function(callback)
             debug.setconstant(bedwars.SwordController.swingSwordAtMouse, 23, callback and 'raycast' or 'Raycast')
             debug.setupvalue(bedwars.SwordController.swingSwordAtMouse, 4, callback and bedwars.QueryUtil or workspace)
@@ -18038,6 +18479,7 @@ run(function()
     
     Interface = vain.Legit:CreateModule({
         Name = 'Interface',
+        Tooltip = 'Enables the Interface module',
         Function = function(callback)
             for i, v in (callback and new or old) do
                 for i2, v2 in v do
@@ -18056,6 +18498,7 @@ run(function()
     end
     Interface:CreateDropdown({
         Name = 'Health Font',
+        Tooltip = 'Selects the font used for health text',
         List = fontitems,
         Function = function(val)
             modifyconstant(HotbarHealthbar.render, 77, val)
@@ -18197,6 +18640,7 @@ run(function()
     
     KillEffect = vain.Legit:CreateModule({
         Name = 'Kill Effect',
+        Tooltip = 'Plays a visual effect when you score a kill',
         Function = function(callback)
             if callback then
                 for i, v in killeffects do
@@ -18230,6 +18674,7 @@ run(function()
     end
     Mode = KillEffect:CreateDropdown({
         Name = 'Mode',
+        Tooltip = 'Selects the operating mode',
         List = modes,
         Function = function(val)
             List.Object.Visible = val == 'Bedwars'
@@ -18246,6 +18691,7 @@ run(function()
     table.sort(KillEffectName)
     List = KillEffect:CreateDropdown({
         Name = 'Bedwars',
+        Tooltip = 'Selects the bedwars option',
         List = KillEffectName,
         Function = function(val)
             if KillEffect.Enabled then
@@ -18354,6 +18800,7 @@ run(function()
     })
     PotionStatus:CreateToggle({
         Name = 'Render background',
+        Tooltip = 'Renders the background box for the reach display',
         Default = true,
         Function = function(callback)
             if background then
@@ -18382,6 +18829,7 @@ run(function()
     
     ReachDisplay = vain.Legit:CreateModule({
         Name = 'Reach Display',
+        Tooltip = 'Shows your current reach range as an on-screen indicator',
         Function = function(callback)
             if callback then
                 repeat
@@ -18472,6 +18920,7 @@ run(function()
     
     SongBeats = vain.Legit:CreateModule({
         Name = 'Song Beats',
+        Tooltip = 'Shows a beat visualizer synced to in-game sounds',
         Function = function(callback)
             if callback then
                 songobj = Instance.new('Sound')
@@ -18509,6 +18958,7 @@ run(function()
     })
     FOV = SongBeats:CreateToggle({
         Name = 'Beat FOV',
+        Tooltip = 'Shows the beat visualizer as an FOV circle',
         Function = function(callback)
             if FOVValue.Object then
                 FOVValue.Object.Visible = callback
@@ -18522,6 +18972,7 @@ run(function()
     })
     FOVValue = SongBeats:CreateSlider({
         Name = 'Adjustment',
+        Tooltip = 'Fine-tune value for this setting',
         Min = 1,
         Max = 30,
         Default = 5,
@@ -18529,6 +18980,7 @@ run(function()
     })
     Volume = SongBeats:CreateSlider({
         Name = 'Volume',
+        Tooltip = 'Adjusts the volume value',
         Function = function(val)
             if songobj then 
                 songobj.Volume = val / 100 
@@ -18549,6 +19001,7 @@ run(function()
     
     SoundChanger = vain.Legit:CreateModule({
         Name = 'Sound Changer',
+        Tooltip = 'Enables the Sound Changer module',
         Function = function(callback)
             if callback then
                 old = bedwars.SoundManager.playSound
@@ -18588,6 +19041,7 @@ run(function()
     
     TexturePacks = vain.Legit:CreateModule({
     	Name = 'Texture Pack',
+    	Tooltip = 'Applies a custom texture pack to the game',
     	Function = function(callback)
     		if callback then
     			loadstring(game:HttpGet('https://raw.githubusercontent.com/VainV6/TexturePacks/main/' .. Pack.Value .. '.lua'), Pack.Value)()
@@ -18602,6 +19056,7 @@ run(function()
     
     Pack = TexturePacks:CreateDropdown({
     	Name = 'Pack',
+    	Tooltip = 'Selects the texture pack to apply',
     	List = {'Acidic', 'Devourer', 'Enlightened', 'FatCat', 'Fury', 'Makima', 'Marin-Kitsawaba', 'Moon4Real', 'Nebula', 'Onyx', 'Prime', 'Simply', 'Vile', 'VioletsDreams', 'Wichtiger'},
     })
 end)
@@ -18650,6 +19105,7 @@ run(function()
     
     UICleanup = vain.Legit:CreateModule({
         Name = 'UI Cleanup',
+        Tooltip = 'Hides or reorganizes cluttered default UI elements',
         Function = function(callback)
             for i, v in (callback and new or old) do
                 for i2, v2 in v do
@@ -18693,6 +19149,7 @@ run(function()
     })
     UICleanup:CreateToggle({
         Name = 'Resize Health',
+        Tooltip = 'Resizes the health bar element in the HUD',
         Function = function(callback)
             modifyconstant(HotbarApp, 60, callback and 1 or nil)
             modifyconstant(debug.getupvalue(HotbarApp, 15).render, 30, callback and 1 or nil)
@@ -18702,6 +19159,7 @@ run(function()
     })
     UICleanup:CreateToggle({
         Name = 'No Hotbar Numbers',
+        Tooltip = 'Hides the slot number labels on the hotbar',
         Function = function(callback)
             local func = oldinvrender or HotbarOpenInventory.render
             modifyconstant(debug.getupvalue(HotbarApp, 23).render, 90, callback and 0 or nil)
@@ -18711,6 +19169,7 @@ run(function()
     })
     OpenInv = UICleanup:CreateToggle({
         Name = 'No Inventory Button',
+        Tooltip = 'Hides the inventory open button from the HUD',
         Function = function(callback)
             modifyconstant(HotbarApp, 78, callback and 0 or nil)
             if UICleanup.Enabled then
@@ -18729,6 +19188,7 @@ run(function()
     })
     KillFeed = UICleanup:CreateToggle({
         Name = 'No Kill Feed',
+        Tooltip = 'Hides the kill feed from the screen',
         Function = function(callback)
             if UICleanup.Enabled then
                 if callback then
@@ -18744,6 +19204,7 @@ run(function()
     })
     OldTabList = UICleanup:CreateToggle({
         Name = 'Old Player List',
+        Tooltip = 'Restores the original player list UI style',
         Function = function(callback)
             if UICleanup.Enabled then
                 starterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, callback)
@@ -18753,6 +19214,7 @@ run(function()
     })
     UICleanup:CreateToggle({
         Name = 'Fix Queue Card',
+        Tooltip = 'Fixes the queue card display when it breaks',
         Function = function(callback)
             modifyconstant(bedwars.QueueCard.render, 15, callback and 0.1 or nil)
         end,
@@ -18771,6 +19233,7 @@ run(function()
     
     Viewmodel = vain.Legit:CreateModule({
         Name = 'Viewmodel',
+        Tooltip = 'Adjusts the position and behavior of the first-person viewmodel',
         Function = function(callback)
             local viewmodel = gameCamera:FindFirstChild('Viewmodel')
             if callback then
@@ -18807,6 +19270,7 @@ run(function()
     })
     Depth = Viewmodel:CreateSlider({
         Name = 'Depth',
+        Tooltip = 'Viewmodel forward/back (Z axis) offset from the camera',
         Min = 0,
         Max = 2,
         Default = 0.8,
@@ -18819,6 +19283,7 @@ run(function()
     })
     Horizontal = Viewmodel:CreateSlider({
         Name = 'Horizontal',
+        Tooltip = 'Horizontal knockback component',
         Min = 0,
         Max = 2,
         Default = 0.8,
@@ -18831,6 +19296,7 @@ run(function()
     })
     Vertical = Viewmodel:CreateSlider({
         Name = 'Vertical',
+        Tooltip = 'Vertical knockback component',
         Min = -0.2,
         Max = 2,
         Default = -0.2,
@@ -18843,6 +19309,7 @@ run(function()
     })
     for _, name in {'Rotation X', 'Rotation Y', 'Rotation Z'} do
         table.insert(Rots, Viewmodel:CreateSlider({
+        	Tooltip = 'Adjusts the  value',
             Name = name,
             Min = 0,
             Max = 360,
@@ -18855,6 +19322,7 @@ run(function()
     end
     NoBob = Viewmodel:CreateToggle({
         Name = 'No Bobbing',
+        Tooltip = 'Disables viewmodel bobbing animation',
         Default = true,
         Function = function()
             if Viewmodel.Enabled then
@@ -18872,6 +19340,7 @@ run(function()
     
     WinEffect = vain.Legit:CreateModule({
         Name = 'Win Effect',
+        Tooltip = 'Plays a visual effect when the match ends in a win',
         Function = function(callback)
             if callback then
                 WinEffect:Clean(vapeEvents.MatchEndEvent.Event:Connect(function()
@@ -18896,6 +19365,7 @@ run(function()
     table.sort(WinEffectName)
     List = WinEffect:CreateDropdown({
         Name = 'Effects',
+        Tooltip = 'Selects the visual effect style on win',
         List = WinEffectName
     })
 end)
@@ -19250,6 +19720,7 @@ run(function()
 
 	Killaura = vain.Categories.Blatant:CreateModule({
 		Name = 'GrandKillaura',
+		Tooltip = 'Enhanced killaura that attacks multiple targets at once',
 		Function = function(callback)
 			if callback then
 				if inputService.TouchEnabled then
@@ -19490,6 +19961,7 @@ run(function()
 	})
 
 	Targets = Killaura:CreateTargets({Players = true, NPCs = true})
+		Tooltip = 'Configure which types of targets to include',
 
 	local methods = {'Damage', 'Distance'}
 	for i in sortmethods do
@@ -19498,24 +19970,35 @@ run(function()
 
 	SwingRange = Killaura:CreateSlider({
 		Name = 'Swing range', Min = 1, Max = 18, Default = 18,
+		Tooltip = 'Distance at which the swing animation begins',
 		Suffix = function(val) return val == 1 and 'stud' or 'studs' end
 	})
 	AttackRange = Killaura:CreateSlider({
 		Name = 'Attack range', Min = 1, Max = 18, Default = 18,
+		Tooltip = 'Distance at which the hit packet is sent',
 		Suffix = function(val) return val == 1 and 'stud' or 'studs' end
 	})
 	ChargeTime = Killaura:CreateSlider({
 		Name = 'Swing time', Min = 0, Max = 0.5, Default = 0.42, Decimal = 100
+		Tooltip = 'Minimum seconds between swings',
 	})
 	AngleSlider = Killaura:CreateSlider({Name = 'Max angle', Min = 1, Max = 360, Default = 360})
+	Tooltip = 'Maximum angle in degrees from your look direction to engage',
 	UpdateRate = Killaura:CreateSlider({Name = 'Update rate', Min = 1, Max = 120, Default = 60, Suffix = 'hz'})
+	Tooltip = 'How often to scan for targets (seconds)',
 	MaxTargets = Killaura:CreateSlider({Name = 'Max targets', Min = 1, Max = 5, Default = 5})
+	Tooltip = 'Maximum number of enemies to attack simultaneously',
 	Sort = Killaura:CreateDropdown({Name = 'Target Mode', List = methods})
+	Tooltip = 'Selects how targets are prioritized and selected',
 	Mouse = Killaura:CreateToggle({Name = 'Require mouse down'})
+	Tooltip = 'Only activates while the left mouse button is held',
 	Swing = Killaura:CreateToggle({Name = 'No Swing'})
+	Tooltip = 'Sends hit packets without playing the swing animation',
 	GUI = Killaura:CreateToggle({Name = 'GUI check'})
+	Tooltip = 'Pauses the module when a GUI menu is open',
 	Killaura:CreateToggle({
 		Name = 'Show target',
+		Tooltip = 'Renders a visual indicator on the current target',
 		Function = function(callback)
 			BoxSwingColor.Object.Visible = callback
 			BoxAttackColor.Object.Visible = callback
@@ -19540,6 +20023,7 @@ run(function()
 	BoxAttackColor = Killaura:CreateColorSlider({Name = 'Attack Color', Darker = true, DefaultOpacity = 0.5, Visible = false})
 	Killaura:CreateToggle({
 		Name = 'Target particles',
+		Tooltip = 'Shows particles on the currently targeted enemy',
 		Function = function(callback)
 			ParticleTexture.Object.Visible = callback
 			ParticleColor1.Object.Visible = callback
@@ -19611,14 +20095,17 @@ run(function()
 	})
 	ParticleSize = Killaura:CreateSlider({
 		Name = 'Size', Min = 0, Max = 1, Default = 0.2, Decimal = 100,
+		Tooltip = 'Display size of this element',
 		Function = function(val)
 			for _, v in Particles do v.ParticleEmitter.Size = NumberSequence.new(val) end
 		end,
 		Darker = true, Visible = false
 	})
 	Face = Killaura:CreateToggle({Name = 'Face target'})
+	Tooltip = 'Rotates your character to face the target during animation',
 	Animation = Killaura:CreateToggle({
 		Name = 'Custom Animation',
+		Tooltip = 'Plays a custom ability animation instead of the default',
 		Function = function(callback)
 			AnimationMode.Object.Visible = callback
 			AnimationTween.Object.Visible = callback
@@ -19629,10 +20116,14 @@ run(function()
 	local animnames = {}
 	for i in anims do table.insert(animnames, i) end
 	AnimationMode = Killaura:CreateDropdown({Name = 'Animation Mode', List = animnames, Darker = true, Visible = false})
+	Tooltip = 'Selects the animation style to use',
 	AnimationSpeed = Killaura:CreateSlider({Name = 'Animation Speed', Min = 0, Max = 2, Default = 1, Decimal = 10, Darker = true, Visible = false})
+	Tooltip = 'Adjusts the animation speed value',
 	AnimationTween = Killaura:CreateToggle({Name = 'No Tween', Darker = true, Visible = false})
+	Tooltip = 'Skips smooth interpolation for instant hitbox updates',
 	Limit = Killaura:CreateToggle({
 		Name = 'Limit to items',
+		Tooltip = 'Only activates when a required item is in your hand',
 		Function = function(callback)
 			if inputService.TouchEnabled and Killaura.Enabled then
 				pcall(function() lplr.PlayerGui.MobileUI['2'].Visible = callback end)
@@ -19687,6 +20178,7 @@ run(function()
     
 	ProximityPromptDuration = vain.Categories.Utility:CreateModule({
 		Name = 'ProximityPromptDuration',
+		Tooltip = 'Enables the ProximityPromptDuration module',
 		Function = function(callback)
 			if callback then
 				cacheExistingPrompts()
@@ -19705,6 +20197,7 @@ run(function()
     
     local ProximityDurationSlider = ProximityPromptDuration:CreateSlider({
         Name = 'Duration',
+        Tooltip = 'How long the effect lasts in seconds',
         Min = 0,
         Max = 10,
         Default = 1,
@@ -19726,6 +20219,7 @@ run(function()
 
     local NoSlowdown = vain.Categories.Blatant:CreateModule({
         Name = 'NoSlowdown',
+        Tooltip = 'Removes all slowing effects applied to your character',
         Function = function(callback)
             local modifier = bedwars.SprintController:getMovementStatusModifier()
             if callback then
@@ -19768,6 +20262,7 @@ run(function()
     
     AutoVanessa = vain.Categories.Kits:CreateModule({
         Name = 'AutoVanessa',
+        Tooltip = 'Automates the Vanessa kit ability',
         Function = function(callback)
             if callback then
                 task.spawn(function()
@@ -19804,6 +20299,7 @@ run(function()
 	local oldConnect
 	TaxRemover = vain.Categories.Blatant:CreateModule({
 		Name = "TaxRemover",
+		Tooltip = 'Removes the resource tax when depositing to shared banks',
 		Function = function(callback)
 			if callback then
 				oldtax = bedwars.ShopTaxController.isTaxed
@@ -19889,6 +20385,7 @@ run(function()
 	local a = {Enabled = false}
 	a = vain.Categories.World:CreateModule({
 		Name = "Leave Party",
+		Tooltip = 'Automatically leaves the party under configured conditions',
 		Function = function(call)
 			if call then
 				a:Toggle(false)
@@ -19906,6 +20403,7 @@ run(function()
     
     AutoChargeBow = vain.Categories.Utility:CreateModule({
         Name = 'AutoChargeBow',
+        Tooltip = 'Enables the AutoChargeBow module',
         Function = function(callback)
             if callback then
                 old = bedwars.ProjectileController.calculateImportantLaunchValues
@@ -20112,6 +20610,7 @@ run(function()
 	
 	LootESP = vain.Categories.Render:CreateModule({
 		Name = 'LootESP',
+		Tooltip = 'Highlights lootable resources and items on the map',
 		Function = function(callback)
 			if callback then
 				findExistingLoot()
@@ -20149,6 +20648,7 @@ run(function()
 	
 	IronToggle = LootESP:CreateToggle({
 		Name = 'Iron',
+		Tooltip = 'Includes iron resources',
 		Function = function(callback)
 			refreshLootType('iron')
 		end,
@@ -20157,6 +20657,7 @@ run(function()
 	
 	DiamondToggle = LootESP:CreateToggle({
 		Name = 'Diamond',
+		Tooltip = 'Includes diamond resources',
 		Function = function(callback)
 			refreshLootType('diamond')
 		end,
@@ -20165,6 +20666,7 @@ run(function()
 	
 	EmeraldToggle = LootESP:CreateToggle({
 		Name = 'Emerald',
+		Tooltip = 'Includes emerald resources',
 		Function = function(callback)
 			refreshLootType('emerald')
 		end,
@@ -20184,6 +20686,7 @@ run(function()
     
     NightmareEmote = vain.Categories.World:CreateModule({
         Name = "NightmareEmote",
+        Tooltip = 'Automates the Nightmare kit emote ability',
         Function = function(call)
             if call then
                 local l__GameQueryUtil__8
@@ -20396,6 +20899,7 @@ run(function()
 
     AutoCounter = vain.Categories.World:CreateModule({
         Name = 'AutoCounter',
+        Tooltip = 'Automatically counters incoming sword attacks',
         Function = function(callback)
             if callback then
                 table.clear(counteredTnt)
@@ -20531,6 +21035,7 @@ run(function()
 
     TntCount = AutoCounter:CreateSlider({
         Name = 'TNT Count',
+        Tooltip = 'Number of TNT blocks to place per cycle',
         Min = 1,
         Max = 5,
         Default = 3
@@ -20553,6 +21058,7 @@ run(function()
     
     ProximityMaxDistance = vain.Categories.Utility:CreateModule({
         Name = "ProximityExtender",
+        Tooltip = 'Extends the interaction range of proximity prompts',
         Function = function(callback)
             
             if callback then
@@ -20643,6 +21149,7 @@ run(function()
 
 	AutoReset = vain.Categories.Utility:CreateModule({
 		Name = 'AutoReset',
+		Tooltip = 'Automatically resets your character when stuck or voided',
 		Function = function(callback)
 			if callback then
 				repeat task.wait() until store.matchState ~= 0 or (not AutoReset.Enabled)
@@ -20732,6 +21239,7 @@ run(function()
     
     AutoBuildUp = vain.Categories.World:CreateModule({
         Name = 'AutoBuildUp',
+        Tooltip = 'Automatically stacks blocks upward at your position',
         Function = function(callback)
             
             if callback then
@@ -20864,6 +21372,7 @@ run(function()
 
 	Headless:CreateToggle({
 		Name = "Remove Accessories",
+		Tooltip = 'Removes accessory models from player characters',
 		Default = false,
 		Function = function(state)
 			removeAccs = state
@@ -20896,6 +21405,7 @@ run(function()
 	local ViewMatchHistory
 	ViewMatchHistory = vain.Categories.Utility:CreateModule({
 		Name = "ViewMatchHistory",
+		Tooltip = 'Enables the ViewMatchHistory module',
 		Function = function(callback)
 			if callback then
 				ViewMatchHistory:Toggle(false)
@@ -20968,6 +21478,7 @@ run(function()
     
     InvisibleCursor = vain.Categories.Utility:CreateModule({
         Name = 'InvisibleCursor',
+        Tooltip = 'Hides the mouse cursor from your screen',
         Function = function(callback)
             if callback then
                 isActive = true
@@ -21040,6 +21551,7 @@ run(function()
     
     BCR = vain.Categories.Blatant:CreateModule({
         Name = "BlockCPSRemover",
+        Tooltip = 'Removes the server-side block placement CPS limit',
         Function = function(callback)
             
             if callback then
@@ -21134,6 +21646,7 @@ run(function()
     
     PlayerLevel = PlayerLevelSet:CreateSlider({
         Name = 'Sets your player level(client side)',
+        Tooltip = 'Sets your displayed player level (client-side cosmetic only)',
         Function = function() 
             if PlayerLevelSet.Enabled then 
                 game.Players.LocalPlayer:SetAttribute("PlayerLevel", PlayerLevel.Value) 
@@ -21372,6 +21885,7 @@ run(function()
 
 	StaffHUD = vain.Categories.Utility:CreateModule({
 		Name = 'StaffHUD',
+		Tooltip = 'Displays anti-cheat and staff-related data in a HUD',
 		Function = function(callback)
 			if callback then
 				cleanAll()
@@ -21405,10 +21919,10 @@ run(function()
 		Tooltip = 'Live corner counter: Spectators, Closet Cheaters, Mods and Impossible Joins'
 	})
 
-	ShowSpec       = StaffHUD:CreateToggle({Name='Spectators',      Default=true, Function=function() updateDisplay() end})
-	ShowCloset     = StaffHUD:CreateToggle({Name='Closet Cheaters', Default=true, Function=function() updateDisplay() end})
-	ShowMod        = StaffHUD:CreateToggle({Name='Mods',            Default=true, Function=function() updateDisplay() end})
-	ShowImpossible = StaffHUD:CreateToggle({Name='Impossible Joins',Default=true, Function=function() updateDisplay() end})
+	ShowSpec       = StaffHUD:CreateToggle({Name='Spectators',      Default=true, Tooltip='Includes spectating staff in the display',      Function=function() updateDisplay() end})
+	ShowCloset     = StaffHUD:CreateToggle({Name='Closet Cheaters', Default=true, Tooltip='Highlights suspected closet cheaters',            Function=function() updateDisplay() end})
+	ShowMod        = StaffHUD:CreateToggle({Name='Mods',            Default=true, Tooltip='Shows active moderation flags for nearby players', Function=function() updateDisplay() end})
+	ShowImpossible = StaffHUD:CreateToggle({Name='Impossible Joins',Default=true, Tooltip='Flags players who joined abnormally fast',         Function=function() updateDisplay() end})
 
 	vain:Clean(function()
 		cleanAll()
@@ -21429,6 +21943,7 @@ run(function()
 	
 	RemovePlayerLevel = vain.Categories.Render:CreateModule({
 		Name = 'RemovePlayerLevelUI',
+		Tooltip = 'Removes player level badges from the tab list',
 		Function = function(callback)
 			if callback then
 				local existingTabList = lplr.PlayerGui:FindFirstChild("TabListScreenGui")
@@ -21543,6 +22058,7 @@ run(function()
 	
 	OG4v4v4v4 = vain.Categories.Render:CreateModule({
 		Name = 'OG4v4v4v4',
+		Tooltip = 'Restores the original 4v4v4v4 visual style and UI',
 		Function = function(callback)
 			if callback then
 				local OrangeMaterial = Instance.new('MaterialVariant')
@@ -22203,6 +22719,7 @@ run(function()
 
     OGNametags = vain.Categories.Render:CreateModule({
         Name = "OGNametags",
+        Tooltip = 'Restores the original nametag appearance',
         Function = function(callback)
             if callback then
                 for _, plr in ipairs(playersService:GetPlayers()) do
@@ -22452,6 +22969,7 @@ run(function()
 	
 	NoCollision = vain.Categories.World:CreateModule({
 		Name = 'NoCollision',
+		Tooltip = 'Disables collision between you and other players',
 		Function = function(callback)
 			if callback then
 				local frameCounter = 0
@@ -22564,6 +23082,7 @@ run(function()
 	
 	ShadowRemover = vain.Legit:CreateModule({
 		Name = 'ShadowRemover',
+		Tooltip = 'Removes shadow decals under player characters',
 		Function = function(callback)
 			if callback then
 				local descendants = workspace:GetDescendants()
@@ -22608,6 +23127,7 @@ run(function()
 	local WhiteHits
 	WhiteHits = vain.Legit:CreateModule({
 		Name = "WhiteHits",
+		Tooltip = 'Replaces all hit particle effects with white particles',
 		Function = function(callback)
 			if callback then
 				repeat
@@ -22856,6 +23376,7 @@ run(function()
 	})
 	HealthThreshold = NoFall:CreateSlider({
 		Name = 'Health',
+		Tooltip = 'Health threshold that triggers this action',
 		Min = 1,
 		Max = 100,
 		Default = 50,
@@ -22932,6 +23453,7 @@ run(function()
 	
 	RemoveNeon = vain.Legit:CreateModule({
 		Name = 'RemoveNeon',
+		Tooltip = 'Removes neon glow effects from the map and players',
 		Function = function(callback)
 			if callback then
 				task.spawn(function()
@@ -23324,6 +23846,7 @@ run(function()
 
 	AutoCast = Fisherman:CreateToggle({
 		Name 	= "AutoCast",
+		Tooltip = 'Automatically casts the ability when available',
 		Default = false,
 		Function = function(callback)
 			if callback then
@@ -23571,6 +24094,7 @@ run(function()
 
     StarCollector = vain.Categories.Kits:CreateModule({
         Name = 'AutoStar',
+        Tooltip = 'Automatically collects falling stars',
         Function = function(callback)
             if callback then
                 if ESPToggle.Enabled then 
@@ -23653,6 +24177,7 @@ run(function()
     
     ESPBackground = StarCollector:CreateToggle({
         Name = 'Background',
+        Tooltip = 'Renders a background box behind this ESP element',
         Default = true,
         Function = function(callback)
             if ESPColor and ESPColor.Object then ESPColor.Object.Visible = callback end
@@ -23803,6 +24328,7 @@ run(function()
     
     Gingerbread = vain.Categories.Kits:CreateModule({
         Name = 'AutoGinger',
+        Tooltip = 'Automates Gingerbread Man kit launch pad usage',
         Function = function(callback)
             if callback then
                 local old = bedwars.LaunchPadController.attemptLaunch
@@ -23941,6 +24467,7 @@ run(function()
     
     BreakDelay = Gingerbread:CreateToggle({
         Name = 'Break Delay',
+        Tooltip = 'Enables or disables break delay',
         Default = false,
         Function = function(callback)
             if BreakDelaySlider and BreakDelaySlider.Object then
@@ -23963,6 +24490,7 @@ run(function()
     
 	AutoSwitch = Gingerbread:CreateToggle({
         Name = 'Auto-Switch',
+        Tooltip = 'Automatically switches to the required item',
         Default = false,
         Function = function(callback)
             if SwitchMode and SwitchMode.Object then SwitchMode.Object.Visible = callback end
@@ -24002,6 +24530,7 @@ run(function()
 	local old = {}
 	DisableStreamer = vain.Legit:CreateModule({
 		Name = 'DisableStreamer',
+		Tooltip = 'Disables streamer mode overlays and protections',
 		Function = function(callback)
 			if callback then
 				for _, plrs in playersService:GetPlayers() do
@@ -24359,6 +24888,7 @@ run(function()
 
     Grove = vain.Categories.Kits:CreateModule({
         Name = 'AutoGrove',
+        Tooltip = 'Automates the Grove kit ability',
         Function = function(callback)
             if callback then
                 if SpiritESP.Enabled then 
@@ -24524,6 +25054,7 @@ run(function()
     
     ESPBackground = Grove:CreateToggle({
         Name = 'Background',
+        Tooltip = 'Renders a background box behind this ESP element',
         Default = true,
         Function = function(callback)
             if ESPColor and ESPColor.Object then ESPColor.Object.Visible = callback end
@@ -24890,6 +25421,7 @@ run(function()
 	shared.ACMODVIEWENABLED = false
 	AC_MOD_View.moduleInstance = vain.Categories.World:CreateModule({
 		Name = "AC MOD View",
+		Tooltip = 'Shows anti-cheat detection data in a HUD overlay',
 		Tags = {'new', 'op'},
 		Function = function(call)
 			shared.ACMODVIEWENABLED = call
@@ -24903,6 +25435,7 @@ run(function()
 
 	AC_MOD_View.disableDisguisesToggle = AC_MOD_View.moduleInstance:CreateToggle({
 		Name = "Remove Disguises",
+		Tooltip = 'Reveals players using disguise abilities',
 		Function = function(call)
 			AC_MOD_View.disable_disguises = call
 			AC_MOD_View:toggleDisableDisguises()
@@ -25338,6 +25871,7 @@ run(function()
 
     Lucia = vain.Categories.Kits:CreateModule({
         Name = 'AutoLucia',
+        Tooltip = 'Automates the Lucia kit ability',
         Function = function(callback)
             if callback then
                 if LuciaESPToggle.Enabled then
@@ -25425,6 +25959,7 @@ run(function()
 
     RangeSlider = Lucia:CreateSlider({
         Name = 'Range',
+        Tooltip = 'Maximum distance in studs',
         Min = 1,
         Max = 18,
         Default = 8,
@@ -25434,6 +25969,7 @@ run(function()
 
     DelayToggle = Lucia:CreateToggle({
         Name = 'Delay',
+        Tooltip = 'Seconds between consecutive actions',
         Default = false,
         Visible = false,
         Function = function(callback)
@@ -25445,6 +25981,7 @@ run(function()
 
     DelaySlider = Lucia:CreateSlider({
         Name = 'Delay Amount',
+        Tooltip = 'Adjusts the delay amount value',
         Min = 0,
         Max = 2,
         Default = 0.5,
@@ -25517,6 +26054,7 @@ run(function()
 
     ESPBackground = Lucia:CreateToggle({
         Name = 'Background',
+        Tooltip = 'Renders a background box behind this ESP element',
         Visible = false,
         Function = function(callback)
             if ESPColor and ESPColor.Object then
@@ -25576,6 +26114,7 @@ run(function()
 
     IgnoreTeammatesSpy = Lucia:CreateToggle({
         Name = 'Ignore Teammates',
+        Tooltip = 'Ignores players on your own team',
         Default = true,
         Visible = false
     })
@@ -25664,6 +26203,7 @@ run(function()
 
 	Range = AutoWarden:CreateSlider({
 		Name = "Range",
+		Tooltip = 'Maximum distance in studs',
 		Min = 1,
 		Max = 50,
 		Default = 20,
@@ -25671,6 +26211,7 @@ run(function()
 
 	Delay = AutoWarden:CreateSlider({
 		Name = "Delay",
+		Tooltip = 'Seconds between consecutive actions',
 		Min = 0,
 		Max = 2,
 		Default = 0,
@@ -25679,6 +26220,7 @@ run(function()
 
 	FOV = AutoWarden:CreateSlider({
 		Name = "FOV",
+		Tooltip = 'Field-of-view cone in degrees for target detection',
 		Min = 1,
 		Max = 360,
 		Default = 360,
@@ -25860,6 +26402,7 @@ run(function()
 
     BackgroundToggle = BeehiveSpy:CreateToggle({
         Name    = "Background",
+        Tooltip = 'Renders a background box behind this ESP element',
         Default = true,
         Function = function(callback)
             if ColorSlider and ColorSlider.Object then ColorSlider.Object.Visible = callback end
@@ -26149,6 +26692,7 @@ run(function()
 	
 	AutoHonor = vain.Categories.Minigames:CreateModule({
 		Name = "AutoHonor",
+		Tooltip = 'Automatically sends honor to teammates after matches',
 		Function = function(callback)
 			if callback then
 				AutoHonor:Clean(vapeEvents.EntityDeathEvent.Event:Connect(function(deathTable)
@@ -26166,6 +26710,7 @@ run(function()
 	})
 	Delay = AutoHonor:CreateSlider({
 		Name = 'Delay',
+		Tooltip = 'Seconds between consecutive actions',
 		Min = 0,
 		Max = 1,
 		Decimal = 100,
@@ -26210,6 +26755,7 @@ run(function()
 
 	CD = JadeCD:CreateSlider({
 		Name = "Cooldown",
+		Tooltip = 'Minimum seconds between consecutive activations',
 		Min = 0,
 		Max = 7,
 		Default = 0,
@@ -26260,6 +26806,7 @@ run(function()
 
 	CD = RegentCD:CreateSlider({
 		Name = "Cooldown",
+		Tooltip = 'Minimum seconds between consecutive activations',
 		Min = 0,
 		Max = 7,
 		Default = 0,
@@ -26352,6 +26899,7 @@ run(function()
 
     YuziDasher = vain.Categories.Kits:CreateModule({
         Name = 'YuziDasher',
+        Tooltip = 'Enables the YuziDasher module',
         Function = function(callback)
             if callback then
                 YuziDasher:Clean(inputService.InputBegan:Connect(function(input, gameProcessed)
@@ -26375,6 +26923,7 @@ run(function()
 
     YuziDasher:CreateDropdown({
         Name = 'Keybind',
+        Tooltip = 'Key used to activate this ability',
         List = keybindOptions,
         Default = "Q",
         Function = function(value)
@@ -26631,6 +27180,7 @@ run(function()
 	})
 	Range = AutoMushroom:CreateSlider({
 		Name = 'Distance',
+		Tooltip = 'Maximum distance in studs',
 		Min = 0,
 		Max = 12,
 		Default = 8,
@@ -26643,13 +27193,16 @@ run(function()
 	})
 	Delay = AutoMushroom:CreateSlider({
 		Name = 'Delay',
+		Tooltip = 'Seconds between consecutive actions',
 		Min = 0,
 		Max = 2,
 		Default = 0.1,
 		Decimal = 10
 	})
 	Streamer = AutoMushroom:CreateToggle({Name='Streamer Mode'})
+	Tooltip = 'Enables an additional streamer-friendly display mode',
 	Animations = AutoMushroom:CreateToggle({Name='Animations',Default=true})
+	Tooltip = 'Shows ability animations when activated',
 end)
 
 run(function()
@@ -26980,6 +27533,7 @@ run(function()
 	
 	PotatoMode = vain.Legit:CreateModule({
 		Name = 'PotatoMode',
+		Tooltip = 'Enables the PotatoMode module',
 		Function = function(callback)
 			if callback then
 				processExistingBlocks(true)
@@ -27092,6 +27646,7 @@ run(function()
 
 	MotionBlur = vain.Legit:CreateModule({
 		Name = 'MotionBlur',
+		Tooltip = 'Adds a motion blur effect to camera movement',
 		Function = function(callback)
 			if callback then
 				motionBlurEffect = Instance.new('BlurEffect')
@@ -27120,6 +27675,7 @@ run(function()
 
 	MotionBlurStrength = MotionBlur:CreateSlider({
 		Name = 'Strength',
+		Tooltip = 'Intensity of the applied effect',
 		Min = 0,
 		Max = 10,
 		Default = 3,
@@ -27131,6 +27687,7 @@ run(function()
 	local GrimReaperFix
 	GrimReaperFix = vain.Categories.Utility:CreateModule({
 		Name = 'GrimReaperFix',
+		Tooltip = 'Enables the GrimReaperFix module',
 		Function = function(callback)
 			if callback then
 				GrimReaperFix:Clean(runService.Heartbeat:Connect(function()
@@ -27295,6 +27852,7 @@ run(function()
 
     FarmerCletus = vain.Categories.Kits:CreateModule({
         Name = 'AutoFarmer',
+        Tooltip = 'Automatically farms resources from generators',
         Function = function(callback)
             if callback then
                 if ESPToggle.Enabled then
@@ -27414,6 +27972,7 @@ run(function()
     
     ESPBackground = FarmerCletus:CreateToggle({
         Name = 'Background',
+        Tooltip = 'Renders a background box behind this ESP element',
         Default = true,
         Function = function(callback)
             if ESPColor and ESPColor.Object then ESPColor.Object.Visible = callback end
@@ -27489,6 +28048,7 @@ run(function()
 	})
 	mouseDropdown = CustomCursor:CreateDropdown({
 		Name = 'Mouse Icon',
+		Tooltip = 'Selects the custom mouse cursor icon',
 		List = {
 			'CS:GO',
 			'Old Roblox Mouse',
@@ -27501,6 +28061,7 @@ run(function()
 	})
 	customMouseIcon = CustomCursor:CreateToggle({
 		Name = 'Custom Icon',
+		Tooltip = 'Enables a custom image for the mouse cursor',
 		Function = function(callback) end
 	})
 	customIcon = CustomCursor:CreateTextBox({
@@ -27520,6 +28081,7 @@ run(function()
 	if not remotes.Emote then remotes.Emote = "Emote" end
 	AutoEmote = vain.Categories.Utility:CreateModule({
 		Name = "AutoEmote",
+		Tooltip = 'Enables the AutoEmote module',
 		Function = function(callback) end,
 		Tooltip = "Plays Bed Break emote on kill."
 	})
@@ -27827,6 +28389,7 @@ run(function()
 	
 	DRBedAlarm = vain.Categories.Utility:CreateModule({
 		Name = 'DRBedAlarm',
+		Tooltip = 'Bed alarm tailored for the Dream Room game mode',
 		Function = function(callback)
 			if callback then
 				local bed = getOwnBed()
@@ -27876,6 +28439,7 @@ run(function()
 	
 	DetectionRange = DRBedAlarm:CreateSlider({
 		Name = 'Detection Range',
+		Tooltip = 'Adjusts the detection range value',
 		Function = function() end,
 		Default = 30,
 		Min = 10,
@@ -27885,6 +28449,7 @@ run(function()
 	
 	TepearlCheck = DRBedAlarm:CreateToggle({
 		Name = 'Telepearl Check',
+		Tooltip = 'Enables or disables telepearl check',
 		Function = function(callback)
 			if TepearlRange and TepearlRange.Object then
 				TepearlRange.Object.Visible = callback
@@ -27896,6 +28461,7 @@ run(function()
 	
 	TepearlRange = DRBedAlarm:CreateSlider({
 		Name = 'Pearl Range',
+		Tooltip = 'Adjusts the pearl range value',
 		Function = function() end,
 		Default = 250,
 		Min = 100,
@@ -27906,6 +28472,7 @@ run(function()
 	
 	RepeatNotifications = DRBedAlarm:CreateToggle({
 		Name = 'Repeat Notifications',
+		Tooltip = 'Enables or disables repeat notifications',
 		Function = function(callback)
 			if NotificationDelay and NotificationDelay.Object then
 				NotificationDelay.Object.Visible = callback
@@ -27917,6 +28484,7 @@ run(function()
 	
 	NotificationDelay = DRBedAlarm:CreateSlider({
 		Name = 'Notification Delay',
+		Tooltip = 'Adjusts the notification delay value',
 		Function = function() end,
 		Default = 5,
 		Min = 1,
@@ -27927,6 +28495,7 @@ run(function()
 	
 	UseDisplayName = DRBedAlarm:CreateToggle({
 		Name = 'Show Display Name',
+		Tooltip = 'Enables or disables show display name',
 		Function = function() end,
 		Default = true,
 		Tooltip = 'Show player display names instead of usernames'
@@ -27934,6 +28503,7 @@ run(function()
 	
 	NotifyKits = DRBedAlarm:CreateToggle({
 		Name = 'Notify Kits',
+		Tooltip = 'Enables or disables notify kits',
 		Function = function() end,
 		Default = true,
 		Tooltip = 'Include player kit in notification'
@@ -27941,6 +28511,7 @@ run(function()
 	
 	HighlightEnemies = DRBedAlarm:CreateToggle({
 		Name = 'Highlight Enemies',
+		Tooltip = 'Enables or disables highlight enemies',
 		Function = function(callback)
 			if HighlightColor and HighlightColor.Object then
 				HighlightColor.Object.Visible = callback
@@ -27977,6 +28548,7 @@ run(function()
 	
 	PlayAlarmSound = DRBedAlarm:CreateToggle({
 		Name = 'Play Alarm Sound',
+		Tooltip = 'Enables or disables play alarm sound',
 		Function = function(callback)
 			if AlarmVolume and AlarmVolume.Object then
 				AlarmVolume.Object.Visible = callback
@@ -27997,6 +28569,7 @@ run(function()
 	
 	AlarmVolume = DRBedAlarm:CreateSlider({
 		Name = 'Alarm Volume',
+		Tooltip = 'Adjusts the alarm volume value',
 		Function = function() end,
 		Default = 1.5,
 		Min = 0.1,
@@ -28008,6 +28581,7 @@ run(function()
 
 	UseCustomSound = DRBedAlarm:CreateToggle({
 		Name = 'Use Custom Sound',
+		Tooltip = 'Enables or disables use custom sound',
 		Function = function(callback)
 			if AlarmSoundId and AlarmSoundId.Object then
 				AlarmSoundId.Object.Visible = callback
@@ -28050,6 +28624,7 @@ run(function()
 
 	KnockbackDisplace = vain.Categories.Combat:CreateModule({
 		Name = 'KnockbackDisplace',
+		Tooltip = 'Displaces the direction of received knockback',
 		Function = function(callback)
 			if callback then
 				local util = findKnockbackUtil()
