@@ -37,6 +37,7 @@ local httpService = cloneref(game:GetService('HttpService'))
 local fontsize = Instance.new('GetTextBoundsParams')
 fontsize.Width = math.huge
 local notifications
+local notificationStack = {}
 local assetfunction = getcustomasset
 local getcustomasset
 local clickgui
@@ -2512,21 +2513,19 @@ function mainapi:CreateGUI()
 	addBlur(window)
 	addCorner(window)
 	makeDraggable(window)
-	local logo = Instance.new('ImageLabel')
-	logo.Name = 'VapeLogo'
-	logo.Size = UDim2.fromOffset(48, 18)
-	logo.Position = UDim2.fromOffset(11, 10)
+	local logo = Instance.new('TextLabel')
+	logo.Name = 'VainLogo'
+	logo.Size = UDim2.fromOffset(60, 20)
+	logo.Position = UDim2.fromOffset(11, 9)
 	logo.BackgroundTransparency = 1
-	logo.Image = getcustomasset('newvain/assets/new/guivape.png')
-	logo.ImageColor3 = select(3, uipallet.Main:ToHSV()) > 0.5 and uipallet.Text or Color3.new(1, 1, 1)
+	logo.Text = 'Vain'
+	logo.TextXAlignment = Enum.TextXAlignment.Left
+	logo.TextYAlignment = Enum.TextYAlignment.Center
+	logo.TextSize = 16
+	logo.FontFace = uipallet.FontSemiBold
+	logo.RichText = false
+	logo.TextColor3 = select(3, uipallet.Main:ToHSV()) > 0.5 and uipallet.Text or Color3.new(1, 1, 1)
 	logo.Parent = window
-	local logov4 = Instance.new('ImageLabel')
-	logov4.Name = 'V4Logo'
-	logov4.Size = UDim2.fromOffset(28, 16)
-	logov4.Position = UDim2.new(1, 1, 0, 1)
-	logov4.BackgroundTransparency = 1
-	logov4.Image = getcustomasset('newvain/assets/new/guiv4.png')
-	logov4.Parent = logo
 	local children = Instance.new('Frame')
 	children.Name = 'Children'
 	children.Size = UDim2.new(1, 0, 1, -33)
@@ -2709,12 +2708,15 @@ function mainapi:CreateGUI()
 		button.BackgroundColor3 = uipallet.Main
 		button.BorderSizePixel = 0
 		button.AutoButtonColor = false
-		button.Text = (categorysettings.Icon and '                                 ' or '             ')..categorysettings.Name
+		button.Text = categorysettings.Name
 		button.TextXAlignment = Enum.TextXAlignment.Left
 		button.TextColor3 = color.Dark(uipallet.Text, 0.16)
 		button.TextSize = 14
 		button.FontFace = uipallet.Font
 		button.Parent = children
+		local buttonPadding = Instance.new('UIPadding')
+		buttonPadding.PaddingLeft = UDim.new(0, categorysettings.Icon and 38 or 13)
+		buttonPadding.Parent = button
 		local icon
 		if categorysettings.Icon then
 			icon = Instance.new('ImageLabel')
@@ -5413,6 +5415,23 @@ function mainapi:CreateLegit()
 	return legitapi
 end
 
+local function restackNotifications()
+	local yOffset = 29
+	for i = 1, #notificationStack do
+		local entry = notificationStack[i]
+		if entry.notification and entry.notification.Parent then
+			if tween.Tween then
+				tween:Tween(entry.notification, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+					Position = UDim2.new(1, 0, 1, -yOffset)
+				})
+			else
+				entry.notification.Position = UDim2.new(1, 0, 1, -yOffset)
+			end
+			yOffset = yOffset + entry.height + 3
+		end
+	end
+end
+
 function mainapi:CreateNotification(title, text, duration, type)
 	if not self.Notifications.Enabled then return end
 	local color = type == 'alert' and Color3.fromRGB(250, 50, 56) or type == 'warning' and Color3.fromRGB(236, 129, 43) or type == 'success' and Color3.fromRGB(80, 200, 100) or Color3.fromRGB(220, 220, 220)
@@ -5443,11 +5462,30 @@ function mainapi:CreateNotification(title, text, duration, type)
 		if self.ThreadFix then
 			setthreadidentity(8)
 		end
-		local i = #notifications:GetChildren() + 1
+
+		-- Measure single-line width, cap at 400px
+		local notifWidth = math.min(math.max(getfontsize(removeTags(text), 14, uipallet.Font).X + 80, 266), 400)
+
+		-- Measure text height with wrapping at actual render width (notification width - left padding 47 - right padding 9)
+		local contentWidth = notifWidth - 56
+		fontsize.Width = contentWidth
+		local wrappedSize = getfontsize(removeTags(text), 14, uipallet.Font)
+		fontsize.Width = math.huge
+		local textHeight = wrappedSize.Y
+		local notifHeight = math.max(75, 44 + textHeight + 14)
+
+		-- Insert into stack before computing Y so concurrent notifications stack correctly
+		local entry = {notification = nil, height = notifHeight}
+		table.insert(notificationStack, entry)
+		local initialY = 29
+		for k = 1, #notificationStack - 1 do
+			initialY = initialY + notificationStack[k].height + 3
+		end
+
 		local notification = Instance.new('ImageButton')
 		notification.Name = 'Notification'
-		notification.Size = UDim2.fromOffset(math.max(getfontsize(removeTags(text), 14, uipallet.Font).X + 80, 266), 75)
-		notification.Position = UDim2.new(1, 0, 1, -(29 + (78 * i)))
+		notification.Size = UDim2.fromOffset(notifWidth, notifHeight)
+		notification.Position = UDim2.new(1, 0, 1, -initialY)
 		notification.ZIndex = 5
 		notification.BackgroundTransparency = 1
 		notification.AutoButtonColor = false
@@ -5456,9 +5494,31 @@ function mainapi:CreateNotification(title, text, duration, type)
 		notification.SliceCenter = Rect.new(7, 7, 9, 9)
 		notification.Parent = notifications
 		addBlur(notification, true)
-		notification.MouseButton1Click:Connect(function()
-			setclipboard(title .. '\n' .. removeTags(text))
-		end)
+		entry.notification = notification
+
+		local dismissed = false
+		local function dismiss()
+			if dismissed then return end
+			dismissed = true
+			if tween.Tween then
+				tween:Tween(notification, TweenInfo.new(0.4, Enum.EasingStyle.Exponential), {
+					AnchorPoint = Vector2.new(0, 0)
+				}, tween.tweenstwo)
+			end
+			task.wait(0.2)
+			notification:ClearAllChildren()
+			notification:Destroy()
+			for k, e in ipairs(notificationStack) do
+				if e == entry then
+					table.remove(notificationStack, k)
+					break
+				end
+			end
+			restackNotifications()
+		end
+
+		notification.MouseButton1Click:Connect(dismiss)
+
 		local iconshadow = Instance.new('ImageLabel')
 		iconshadow.Name = 'Icon'
 		iconshadow.Size = UDim2.fromOffset(60, 60)
@@ -5491,11 +5551,13 @@ function mainapi:CreateNotification(title, text, duration, type)
 		titlelabel.Parent = notification
 		local textshadow = titlelabel:Clone()
 		textshadow.Name = 'Text'
+		textshadow.Size = UDim2.new(1, -56, 0, textHeight)
 		textshadow.Position = UDim2.fromOffset(47, 44)
 		textshadow.Text = removeTags(text)
 		textshadow.TextColor3 = Color3.new()
 		textshadow.TextTransparency = 0.5
 		textshadow.RichText = false
+		textshadow.TextWrapped = true
 		textshadow.FontFace = uipallet.Font
 		textshadow.Parent = notification
 		local textlabel = textshadow:Clone()
@@ -5510,8 +5572,7 @@ function mainapi:CreateNotification(title, text, duration, type)
 		progress.Size = UDim2.new(1, -13, 0, 2)
 		progress.Position = UDim2.new(0, 3, 1, -4)
 		progress.ZIndex = 5
-		progress.BackgroundColor3 =
-			color
+		progress.BackgroundColor3 = color
 		progress.BorderSizePixel = 0
 		progress.Parent = notification
 		if tween.Tween then
@@ -5522,16 +5583,7 @@ function mainapi:CreateNotification(title, text, duration, type)
 				Size = UDim2.fromOffset(0, 2)
 			})
 		end
-		task.delay(duration, function()
-			if tween.Tween then
-				tween:Tween(notification, TweenInfo.new(0.4, Enum.EasingStyle.Exponential), {
-					AnchorPoint = Vector2.new(0, 0)
-				}, tween.tweenstwo)
-			end
-			task.wait(0.2)
-			notification:ClearAllChildren()
-			notification:Destroy()
-		end)
+		task.delay(duration, dismiss)
 	end)
 end
 
@@ -7047,8 +7099,10 @@ function mainapi:UpdateGUI(hue, sat, val, default)
 
 	for i, v in mainapi.Categories do
 		if i == 'Main' then
-			v.Object.VapeLogo.V4Logo.ImageColor3 = Color3.fromHSV(hue, sat, val)
-			for _, button in v.Buttons do
+			if v.Object:FindFirstChild('VainLogo') then
+					v.Object.VainLogo.TextColor3 = Color3.fromHSV(hue, sat, val)
+				end
+				for _, button in v.Buttons do
 				if button.Enabled then
 					button.Object.TextColor3 = rainbow and Color3.fromHSV(mainapi:Color((hue - (button.Index * 0.025)) % 1)) or Color3.fromHSV(hue, sat, val)
 					if button.Icon then
