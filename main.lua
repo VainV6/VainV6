@@ -25,7 +25,7 @@ local httpService = cloneref(game:GetService('HttpService'))
 local function downloadFile(path, func)
 	if not isfile(path) then
 		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('newvain/profiles/commit.txt')..'/'..select(1, path:gsub('newvain/', '')), true)
+			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('vain/profiles/commit.txt')..'/'..select(1, path:gsub('vain/', '')), true)
 		end)
 		if not suc or res == '404: Not Found' then
 			error(res)
@@ -134,15 +134,15 @@ end
 
 local function detectUpdates()
 	pcall(function()
-		if not isfile('newvain/profiles/commit.txt') then return end
-		local commit = readfile('newvain/profiles/commit.txt'):match('^%s*(.-)%s*$')
+		if not isfile('vain/profiles/commit.txt') then return end
+		local commit = readfile('vain/profiles/commit.txt'):match('^%s*(.-)%s*$')
 
-		local prevCommit = isfile('newvain/profiles/prev_commit.txt')
-		                   and readfile('newvain/profiles/prev_commit.txt'):match('^%s*(.-)%s*$')
+		local prevCommit = isfile('vain/profiles/prev_commit.txt')
+		                   and readfile('vain/profiles/prev_commit.txt'):match('^%s*(.-)%s*$')
 		                   or nil
 
 		-- Always record this commit as the last-seen one for next session
-		writefile('newvain/profiles/prev_commit.txt', commit)
+		writefile('vain/profiles/prev_commit.txt', commit)
 
 		-- First run or already up to date — nothing to do
 		if not prevCommit or prevCommit == '' or prevCommit == commit then return end
@@ -409,31 +409,31 @@ local function finishLoading()
 	end
 end
 
-if not isfile('newvain/profiles/gui.txt') then
-	writefile('newvain/profiles/gui.txt', 'new')
+if not isfile('vain/profiles/gui.txt') then
+	writefile('vain/profiles/gui.txt', 'new')
 end
 local gui = 'new'
 
-if not isfolder('newvain/assets/'..gui) then
-	makefolder('newvain/assets/'..gui)
+if not isfolder('vain/assets/'..gui) then
+	makefolder('vain/assets/'..gui)
 end
-local guiLoader = loadstring(downloadFile('newvain/guis/'..gui..'.lua'), 'gui')
+local guiLoader = loadstring(downloadFile('vain/guis/'..gui..'.lua'), 'gui')
 vain = guiLoader and guiLoader()
 shared.vain = vain
 
 if not shared.VainIndependent then
-	local universalLoader = loadstring(downloadFile('newvain/games/universal.lua'), 'universal')
+	local universalLoader = loadstring(downloadFile('vain/games/universal.lua'), 'universal')
 	if universalLoader then universalLoader() end
-	if isfile('newvain/games/'..game.PlaceId..'.lua') then
-		local gameLoader = loadstring(readfile('newvain/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))
+	if isfile('vain/games/'..game.PlaceId..'.lua') then
+		local gameLoader = loadstring(readfile('vain/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))
 		if gameLoader then gameLoader() end
 	else
 		if not shared.VainDeveloper then
 			local suc, res = pcall(function()
-				return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('newvain/profiles/commit.txt')..'/games/'..game.PlaceId..'.lua', true)
+				return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('vain/profiles/commit.txt')..'/games/'..game.PlaceId..'.lua', true)
 			end)
 			if suc and res ~= '404: Not Found' then
-				local gameLoader = loadstring(downloadFile('newvain/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))
+				local gameLoader = loadstring(downloadFile('vain/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))
 				if gameLoader then gameLoader() end
 			end
 		end

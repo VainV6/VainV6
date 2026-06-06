@@ -16,7 +16,7 @@ local isfile = isfile
 local function downloadFile(path, func)
 	if not isfile(path) then
 		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/' .. readfile('newvain/profiles/commit.txt') .. '/' .. select(1, path:gsub('newvain/', '')), true)
+			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/' .. readfile('vain/profiles/commit.txt') .. '/' .. select(1, path:gsub('vain/', '')), true)
 		end)
 		if not suc or res == '404: Not Found' then
 			error(res)
@@ -73,7 +73,7 @@ local function addBlur(parent)
 	blur.Size = UDim2.new(1, 89, 1, 52)
 	blur.Position = UDim2.fromOffset(-48, -31)
 	blur.BackgroundTransparency = 1
-	blur.Image = getcustomasset('newvain/assets/new/blur.png')
+	blur.Image = getcustomasset('vain/assets/new/blur.png')
 	blur.ScaleType = Enum.ScaleType.Slice
 	blur.SliceCenter = Rect.new(52, 31, 261, 502)
 	blur.Parent = parent
@@ -217,7 +217,7 @@ vain:Clean(lplr.OnTeleport:Connect(function()
 	end
 end))
 
-vain.Libraries.string = loadstring(downloadFile('newvain/libraries/string.lua'), 'string')()
+vain.Libraries.string = loadstring(downloadFile('vain/libraries/string.lua'), 'string')()
 local frictionTable, oldfrict, entitylib = {}, {}
 local function updateVelocity()
 	if getTableSize(frictionTable) > 0 then
@@ -249,9 +249,9 @@ local function motorMove(target, cf)
 	task.delay(0, part.Destroy, part)
 end
 
-local hash = loadstring(downloadFile('newvain/libraries/hash.lua'), 'hash')()
-local prediction = loadstring(downloadFile('newvain/libraries/prediction.lua'), 'prediction')()
-entitylib = loadstring(downloadFile('newvain/libraries/entity.lua'), 'entitylibrary')()
+local hash = loadstring(downloadFile('vain/libraries/hash.lua'), 'hash')()
+local prediction = loadstring(downloadFile('vain/libraries/prediction.lua'), 'prediction')()
+entitylib = loadstring(downloadFile('vain/libraries/entity.lua'), 'entitylibrary')()
 local whitelist = {
 	alreadychecked = {},
 	customtags = {},
@@ -660,7 +660,7 @@ run(function()
 
 		if not first or whitelist.textdata ~= whitelist.olddata then
 			if not first then
-				whitelist.olddata = isfile('newvain/profiles/whitelist.json') and readfile('newvain/profiles/whitelist.json') or nil
+				whitelist.olddata = isfile('vain/profiles/whitelist.json') and readfile('vain/profiles/whitelist.json') or nil
 			end
 
 			local suc, res = pcall(function()
@@ -707,7 +707,7 @@ run(function()
 				end
 				whitelist.olddata = whitelist.textdata
 				pcall(function()
-					writefile('newvain/profiles/whitelist.json', whitelist.textdata)
+					writefile('vain/profiles/whitelist.json', whitelist.textdata)
 				end)
 			end
 
@@ -904,7 +904,7 @@ run(function()
 
 	Radar = vain:CreateOverlay({
 		Name = 'Radar',
-		Icon = getcustomasset('newvain/assets/new/radaricon.png'),
+		Icon = getcustomasset('vain/assets/new/radaricon.png'),
 		Size = UDim2.fromOffset(14, 14),
 		Position = UDim2.fromOffset(12, 13),
 		Function = function(callback)
@@ -1055,7 +1055,7 @@ run(function()
 
 	SessionInfo = vain:CreateOverlay({
 		Name = 'Session Info',
-		Icon = getcustomasset('newvain/assets/new/textguiicon.png'),
+		Icon = getcustomasset('vain/assets/new/textguiicon.png'),
 		Size = UDim2.fromOffset(16, 12),
 		Position = UDim2.fromOffset(12, 14),
 		Function = function(callback)
@@ -1131,8 +1131,8 @@ run(function()
 	Hide = SessionInfo:CreateTextList({
 		Name = 'Blacklist',
 		Tooltip = 'Name of entry to hide.',
-		Icon = getcustomasset('newvain/assets/new/blockedicon.png'),
-		Tab = getcustomasset('newvain/assets/new/blockedtab.png'),
+		Icon = getcustomasset('vain/assets/new/blockedicon.png'),
+		Tab = getcustomasset('vain/assets/new/blockedtab.png'),
 		TabSize = UDim2.fromOffset(21, 16),
 		Color = Color3.fromRGB(250, 50, 56),
 	})
@@ -4143,7 +4143,7 @@ run(function()
     	arrow.BackgroundTransparency = 1
     	arrow.BorderSizePixel = 0
     	arrow.Visible = false
-    	arrow.Image = getcustomasset('newvain/assets/new/arrowmodule.png')
+    	arrow.Image = getcustomasset('vain/assets/new/arrowmodule.png')
     	arrow.ImageColor3 = entitylib.getEntityColor(ent) or Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
     	arrow.Parent = Folder
     	Reference[ent] = arrow
