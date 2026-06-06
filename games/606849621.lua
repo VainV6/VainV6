@@ -402,6 +402,7 @@ run(function()
     local CircleFilled
     local CircleObject
     local Instant
+    local Wallbang
     local gunHook
     local taserHook
     local ProjectileRaycast = RaycastParams.new()
@@ -410,7 +411,7 @@ run(function()
     local function getAimPos(self)
         local ent = entitylib['Entity'..Mode.Value]({
             Range = Range.Value,
-            Wallcheck = Target.Walls.Enabled or nil,
+            Wallcheck = (not Wallbang.Enabled) and (Target.Walls.Enabled or nil),
             Part = 'RootPart',
             Origin = entitylib.isAlive and entitylib.character.RootPart.Position or nil,
             Players = Target.Players.Enabled,
@@ -429,7 +430,7 @@ run(function()
                 or Vector3.zero
             ProjectileRaycast.FilterDescendantsInstances = {gameCamera, ent.Character}
             ProjectileRaycast.CollisionGroup = ent.RootPart.CollisionGroup
-            local calc = prediction.SolveTrajectory(origin, item.Config.BulletSpeed or 1000, gravity, ent.RootPart.Position, Instant.Enabled and Vector3.zero or ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight, nil, ProjectileRaycast)
+            local calc = prediction.SolveTrajectory(origin, item.Config.BulletSpeed or 1000, gravity, ent.RootPart.Position, Instant.Enabled and Vector3.zero or ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight, nil, Wallbang.Enabled and nil or ProjectileRaycast)
             return calc or ent.RootPart.CFrame.Position
         end
 
@@ -457,10 +458,13 @@ run(function()
     				if CircleObject then
     					CircleObject.Position = inputService:GetMouseLocation()
     				end
-    				if Instant.Enabled then
-    					local item = jb.ItemSystemController:GetLocalEquipped()
-    					if item and item.BulletEmitter then
+    				local item = jb.ItemSystemController:GetLocalEquipped()
+    				if item and item.BulletEmitter then
+    					if Instant.Enabled then
     						rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.1))
+    					end
+    					if Wallbang.Enabled then
+    						rawset(item.BulletEmitter, 'IgnoreList', {workspace})
     					end
     				end
     				task.wait()
@@ -565,6 +569,7 @@ run(function()
     	Visible = false
     })
     Instant = SilentAim:CreateToggle({Name = 'Hitscan Bullets', Tooltip = 'Forces bullets to register hits instantly regardless of travel time'})
+    Wallbang = SilentAim:CreateToggle({Name = 'Wallbang', Tooltip = 'Bullets pass through walls and other geometry'})
 end)
 
 --[[
