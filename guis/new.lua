@@ -6328,8 +6328,7 @@ do
 	local uploadBtn  = makeBottomBtn('Upload Current', 124)
 	local loadMoreBtn = makeBottomBtn('Load More', 100)
 
-	-- Upload visibility is set lazily when the browser opens (tier may not be set yet at init)
-	uploadBtn.Visible = false
+	uploadBtn.Visible = true
 
 	-- ── Data & state ──────────────────────────────────────────────────────────
 	local cachedProfiles = nil
@@ -6668,7 +6667,6 @@ do
 		browseBtn.MouseButton1Click:Connect(function()
 			browserWindow.Visible = not browserWindow.Visible
 			if browserWindow.Visible then
-				uploadBtn.Visible = (mainapi.Tier or 0) >= 1
 				fetchProfiles(true)
 			end
 		end)
