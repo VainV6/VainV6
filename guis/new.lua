@@ -5561,6 +5561,7 @@ function mainapi:CreateNotification(title, text, duration, type)
 		textshadow.FontFace = uipallet.Font
 		textshadow.Parent = notification
 		local textlabel = textshadow:Clone()
+		textlabel.Size = UDim2.new(1, 0, 1, 0)
 		textlabel.Position = UDim2.fromOffset(-1, -1)
 		textlabel.Text = text
 		textlabel.TextColor3 = Color3.fromRGB(170, 170, 170)
