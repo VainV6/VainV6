@@ -2715,14 +2715,15 @@ function mainapi:CreateGUI()
 		button.FontFace = uipallet.Font
 		button.Parent = children
 		local buttonPadding = Instance.new('UIPadding')
-		buttonPadding.PaddingLeft = UDim.new(0, categorysettings.Icon and 38 or 13)
+		buttonPadding.PaddingLeft = UDim.new(0, categorysettings.Icon and 44 or 13)
 		buttonPadding.Parent = button
 		local icon
 		if categorysettings.Icon then
 			icon = Instance.new('ImageLabel')
 			icon.Name = 'Icon'
 			icon.Size = categorysettings.Size
-			icon.Position = UDim2.fromOffset(13, 13)
+			local iconH = categorysettings.Size.Y.Offset
+			icon.Position = UDim2.fromOffset(13, math.floor((40 - iconH) / 2))
 			icon.BackgroundTransparency = 1
 			icon.Image = categorysettings.Icon
 			icon.ImageColor3 = color.Dark(uipallet.Text, 0.16)
@@ -6021,37 +6022,37 @@ mainapi.Categories.Main:CreateDivider()
 mainapi:CreateCategory({
 	Name = 'Combat',
 	Icon = getcustomasset('newvain/assets/new/combaticon.png'),
-	Size = UDim2.fromOffset(13, 14)
+	Size = UDim2.fromOffset(18, 20)
 })
 mainapi:CreateCategory({
 	Name = 'Blatant',
 	Icon = getcustomasset('newvain/assets/new/blatanticon.png'),
-	Size = UDim2.fromOffset(14, 14)
+	Size = UDim2.fromOffset(20, 20)
 })
 mainapi:CreateCategory({
 	Name = 'Render',
 	Icon = getcustomasset('newvain/assets/new/rendericon.png'),
-	Size = UDim2.fromOffset(15, 14)
+	Size = UDim2.fromOffset(20, 20)
 })
 mainapi:CreateCategory({
 	Name = 'Utility',
 	Icon = getcustomasset('newvain/assets/new/utilityicon.png'),
-	Size = UDim2.fromOffset(15, 14)
+	Size = UDim2.fromOffset(20, 20)
 })
 mainapi:CreateCategory({
 	Name = 'World',
 	Icon = getcustomasset('newvain/assets/new/worldicon.png'),
-	Size = UDim2.fromOffset(14, 14)
+	Size = UDim2.fromOffset(20, 20)
 })
 mainapi:CreateCategory({
 	Name = 'Inventory',
 	Icon = getcustomasset('newvain/assets/new/inventoryicon.png'),
-	Size = UDim2.fromOffset(15, 14)
+	Size = UDim2.fromOffset(20, 20)
 })
 mainapi:CreateCategory({
 	Name = 'Minigames',
 	Icon = getcustomasset('newvain/assets/new/miniicon.png'),
-	Size = UDim2.fromOffset(19, 12)
+	Size = UDim2.fromOffset(24, 18)
 })
 if game.GameId == 2619619496 then
 	mainapi:CreateCategory({
