@@ -430,13 +430,16 @@ run(function()
     				if ent then
     					local item = jb.ItemSystemController:GetLocalEquipped()
     					if item and item.BulletEmitter then
-    						ProjectileRaycast.FilterDescendantsInstances = {gameCamera, ent.Character}
-    						ProjectileRaycast.CollisionGroup = ent.RootPart.CollisionGroup
-    						local calc = prediction.SolveTrajectory(self.Tip.CFrame.Position, item.Config.BulletSpeed or 1000, math.abs(item.BulletEmitter.GravityVector.Y), ent.RootPart.Position, Instant.Enabled and Vector3.zero or ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight, nil, ProjectileRaycast)
-    						if calc then
-    							targetinfo.Targets[ent] = tick() + 1
-    							return calc
+    						local bulletGravity = math.abs(item.BulletEmitter.GravityVector.Y)
+    						local calc
+    						if bulletGravity > 0 then
+    							ProjectileRaycast.FilterDescendantsInstances = {gameCamera, ent.Character}
+    							ProjectileRaycast.CollisionGroup = ent.RootPart.CollisionGroup
+    							calc = prediction.SolveTrajectory(self.Tip.CFrame.Position, item.Config.BulletSpeed or 1000, bulletGravity, ent.RootPart.Position, Instant.Enabled and Vector3.zero or ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight, nil, ProjectileRaycast)
     						end
+    						targetinfo.Targets[ent] = tick() + 1
+    						-- Fall back to direct targeting if gravity=0 (sniper) or solver returned nil
+    						return calc or (ent.Head or ent.RootPart).CFrame.Position
     					else
     						-- Hitscan weapon (no BulletEmitter): redirect straight to target
     						targetinfo.Targets[ent] = tick() + 1
