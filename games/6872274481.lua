@@ -251,6 +251,10 @@ local function getWool()
 	end
 end
 
+local function getWorldFolder()
+	return store.map
+end
+
 local function getStrength(plr)
 	if not plr.Player then
 		return 0
