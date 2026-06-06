@@ -10,6 +10,16 @@ export async function getByRoblox(db: D1Database, username: string): Promise<Whi
     .bind(username).first<WhitelistRow>();
 }
 
+export async function getByRobloxUserId(db: D1Database, userId: string): Promise<WhitelistRow | null> {
+  return db.prepare('SELECT * FROM whitelist WHERE roblox_user_id = ?')
+    .bind(userId).first<WhitelistRow>();
+}
+
+export async function updateRobloxUsername(db: D1Database, discordId: string, newUsername: string): Promise<void> {
+  await db.prepare('UPDATE whitelist SET roblox_username = ?, updated_at = ? WHERE discord_id = ?')
+    .bind(newUsername, Date.now(), discordId).run();
+}
+
 export async function isBlacklisted(db: D1Database, userId: string): Promise<boolean> {
   const row = await db.prepare('SELECT 1 FROM blacklist WHERE roblox_user_id = ?')
     .bind(userId).first();

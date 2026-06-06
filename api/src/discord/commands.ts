@@ -114,18 +114,6 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
       return json(ok(`Linked **${username}** to your Discord. Your tier: **${TIER_NAME[callerTier]}**`));
     }
 
-    if (sub.name === 'remove') {
-      // Anyone can unlink themselves; Owner can unlink others
-      if (!username) return json(err('Missing Roblox username'));
-      const row = await getByRoblox(env.DB, username);
-      if (!row) return json(err(`**${username}** is not whitelisted`));
-      if (row.discord_id !== discord && callerTier < TIER.Owner) {
-        return json(err('Only **Owner** can remove other users'));
-      }
-      await removeLink(env.DB, row.discord_id);
-      return json(ok(`**${username}** removed from whitelist`));
-    }
-
     if (sub.name === 'info') {
       if (!username) return json(err('Missing Roblox username'));
       const row = await getByRoblox(env.DB, username);

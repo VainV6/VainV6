@@ -18,11 +18,6 @@ async function main() {
           options: [{ type: 3, name: 'username', description: 'Your Roblox username', required: true }],
         },
         {
-          type: 1, name: 'remove',
-          description: 'Unlink a Roblox account (Owner can remove others)',
-          options: [{ type: 3, name: 'username', description: 'Roblox username', required: true }],
-        },
-        {
           type: 1, name: 'info',
           description: 'View whitelist info for a user',
           options: [{ type: 3, name: 'username', description: 'Roblox username', required: true }],
