@@ -3,6 +3,10 @@ import { verifyDiscordSignature } from './discord/verify';
 import { handleCommand, syncAllTiers } from './discord/commands';
 import { handleCheck } from './routes/check';
 import { handlePoll, handleQueueCommand } from './routes/commands';
+import {
+  handleListProfiles, handleCreateProfile, handleUpdateProfile,
+  handleDeleteProfile, handleInstallProfile,
+} from './routes/globalProfiles';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -34,6 +38,19 @@ export default {
 
     if (method === 'POST' && path === '/queue-command') {
       return withCors(await handleQueueCommand(request, env));
+    }
+
+    // Global profiles
+    if (path === '/profiles') {
+      if (method === 'GET')  return withCors(await handleListProfiles(request, env));
+      if (method === 'POST') return withCors(await handleCreateProfile(request, env));
+    }
+    const profileMatch = path.match(/^\/profiles\/([^/]+)(\/install)?$/);
+    if (profileMatch) {
+      const id = profileMatch[1];
+      if (method === 'PUT')    return withCors(await handleUpdateProfile(request, env, id));
+      if (method === 'DELETE') return withCors(await handleDeleteProfile(request, env, id));
+      if (method === 'POST' && profileMatch[2]) return withCors(await handleInstallProfile(request, env, id));
     }
 
     return new Response('Not found', { status: 404 });

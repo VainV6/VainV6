@@ -32,5 +32,22 @@ CREATE TABLE IF NOT EXISTS config (
     updated_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS global_profiles (
+    id           TEXT    PRIMARY KEY,
+    author_discord_id    TEXT NOT NULL,
+    author_roblox_username TEXT NOT NULL,
+    game_id      TEXT NOT NULL,
+    name         TEXT NOT NULL,
+    description  TEXT,
+    data         TEXT NOT NULL,
+    installs     INTEGER NOT NULL DEFAULT 0,
+    created_at   INTEGER NOT NULL,
+    updated_at   INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_gprofiles_game_installs ON global_profiles(game_id, installs DESC);
+CREATE INDEX IF NOT EXISTS idx_gprofiles_game_created  ON global_profiles(game_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gprofiles_author        ON global_profiles(author_roblox_username);
+
 CREATE INDEX IF NOT EXISTS idx_whitelist_roblox ON whitelist(roblox_username);
 CREATE INDEX IF NOT EXISTS idx_cmd_queue_target  ON command_queue(target_roblox_username, expires_at);

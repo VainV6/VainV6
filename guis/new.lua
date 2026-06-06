@@ -6111,6 +6111,575 @@ mainapi:CreateCategoryList({
 	Profiles = true
 })
 
+do
+	-- ── Global Profile Browser ───────────────────────────────────────────────
+	local API_URL    = 'https://vain-api.baconcrafft.workers.dev'
+	local API_SECRET = 'bf5d6650662b48a72a979e7cea9b97edd5170401dd99a50b'
+	local lplr       = game:GetService('Players').LocalPlayer
+	local http_      = cloneref(game:GetService('HttpService'))
+
+	local function apiRequest(method, path, body)
+		local makeRequest = syn and syn.request or http and http.request or request
+		if not makeRequest then return nil end
+		local ok, res = pcall(makeRequest, {
+			Url     = API_URL .. path,
+			Method  = method,
+			Headers = { ['Content-Type'] = 'application/json', ['x-vain-secret'] = API_SECRET },
+			Body    = body and http_:JSONEncode(body) or nil,
+		})
+		if not ok or not res then return nil end
+		local parsed
+		pcall(function() parsed = http_:JSONDecode(res.Body) end)
+		return parsed, res.StatusCode
+	end
+
+	-- Collect current module data for upload
+	local function gatherProfileData()
+		local modules = {}
+		for name, mod in mainapi.Modules do
+			local opts = {}
+			if mod.Options then
+				for _, opt in mod.Options do
+					if opt.Save then opt:Save(opts) end
+				end
+			end
+			modules[name] = { Enabled = mod.Enabled, Options = opts }
+		end
+		return http_:JSONEncode({ Modules = modules })
+	end
+
+	-- Apply downloaded profile data
+	local function applyProfileData(jsonStr)
+		local ok, data = pcall(http_.JSONDecode, http_, jsonStr)
+		if not ok or not data or not data.Modules then return false end
+		for name, saved in data.Modules do
+			local mod = mainapi.Modules[name]
+			if not mod then continue end
+			if saved.Options and mod.Options then
+				mainapi:LoadOptions(mod, saved.Options)
+			end
+			if (saved.Enabled or false) ~= mod.Enabled then
+				mod:Toggle(true)
+			end
+		end
+		return true
+	end
+
+	-- ── Build browser window ──────────────────────────────────────────────────
+	local browserWindow = Instance.new('Frame')
+	browserWindow.Name = 'GlobalProfileBrowser'
+	browserWindow.Size = UDim2.fromOffset(280, 360)
+	browserWindow.Position = UDim2.fromOffset(480, 60)
+	browserWindow.BackgroundColor3 = uipallet.Main
+	browserWindow.BorderSizePixel = 0
+	browserWindow.Visible = false
+	browserWindow.ZIndex = 10
+	browserWindow.Parent = clickgui
+	addBlur(browserWindow)
+	addCorner(browserWindow)
+	makeDraggable(browserWindow)
+
+	-- Title bar
+	local titleBar = Instance.new('Frame')
+	titleBar.Size = UDim2.new(1, 0, 0, 36)
+	titleBar.BackgroundTransparency = 1
+	titleBar.Parent = browserWindow
+
+	local titleLabel = Instance.new('TextLabel')
+	titleLabel.Size = UDim2.new(1, -40, 1, 0)
+	titleLabel.Position = UDim2.fromOffset(12, 0)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Text = 'Global Profiles'
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+	titleLabel.TextColor3 = uipallet.Text
+	titleLabel.TextSize = 13
+	titleLabel.FontFace = uipallet.FontSemiBold
+	titleLabel.Parent = titleBar
+
+	local closeBtn = Instance.new('TextButton')
+	closeBtn.Size = UDim2.fromOffset(28, 28)
+	closeBtn.Position = UDim2.new(1, -32, 0, 4)
+	closeBtn.BackgroundTransparency = 1
+	closeBtn.Text = '×'
+	closeBtn.TextColor3 = color.Dark(uipallet.Text, 0.3)
+	closeBtn.TextSize = 20
+	closeBtn.FontFace = uipallet.Font
+	closeBtn.Parent = titleBar
+	closeBtn.MouseButton1Click:Connect(function() browserWindow.Visible = false end)
+
+	local dividerLine = Instance.new('Frame')
+	dividerLine.Size = UDim2.new(1, 0, 0, 1)
+	dividerLine.Position = UDim2.fromOffset(0, 36)
+	dividerLine.BackgroundColor3 = color.Light(uipallet.Main, 0.08)
+	dividerLine.BorderSizePixel = 0
+	dividerLine.Parent = browserWindow
+
+	-- Search bar
+	local searchBg = Instance.new('Frame')
+	searchBg.Size = UDim2.new(1, -20, 0, 26)
+	searchBg.Position = UDim2.fromOffset(10, 44)
+	searchBg.BackgroundColor3 = color.Light(uipallet.Main, 0.04)
+	searchBg.BorderSizePixel = 0
+	searchBg.Parent = browserWindow
+	addCorner(searchBg)
+
+	local searchBox = Instance.new('TextBox')
+	searchBox.Size = UDim2.new(1, -10, 1, 0)
+	searchBox.Position = UDim2.fromOffset(8, 0)
+	searchBox.BackgroundTransparency = 1
+	searchBox.PlaceholderText = 'Search profiles...'
+	searchBox.PlaceholderColor3 = color.Dark(uipallet.Text, 0.5)
+	searchBox.Text = ''
+	searchBox.TextColor3 = uipallet.Text
+	searchBox.TextSize = 12
+	searchBox.TextXAlignment = Enum.TextXAlignment.Left
+	searchBox.FontFace = uipallet.Font
+	searchBox.ClearTextOnFocus = false
+	searchBox.Parent = searchBg
+
+	-- Sort tabs
+	local sortFrame = Instance.new('Frame')
+	sortFrame.Size = UDim2.new(1, -20, 0, 22)
+	sortFrame.Position = UDim2.fromOffset(10, 76)
+	sortFrame.BackgroundTransparency = 1
+	sortFrame.Parent = browserWindow
+
+	local sortLayout = Instance.new('UIListLayout')
+	sortLayout.FillDirection = Enum.FillDirection.Horizontal
+	sortLayout.Padding = UDim.new(0, 4)
+	sortLayout.Parent = sortFrame
+
+	local currentSort = 'installs'
+	local sortBtns = {}
+
+	local function makeSortBtn(label, key)
+		local btn = Instance.new('TextButton')
+		btn.Size = UDim2.fromOffset(key == 'installs' and 62 or key == 'newest' and 52 or 42, 22)
+		btn.BackgroundColor3 = key == currentSort and color.Light(uipallet.Main, 0.1) or color.Light(uipallet.Main, 0.04)
+		btn.AutoButtonColor = false
+		btn.Text = label
+		btn.TextColor3 = key == currentSort and uipallet.Text or color.Dark(uipallet.Text, 0.4)
+		btn.TextSize = 11
+		btn.FontFace = uipallet.Font
+		btn.Parent = sortFrame
+		addCorner(btn)
+		sortBtns[key] = btn
+		return btn
+	end
+
+	local popularBtn = makeSortBtn('Popular', 'installs')
+	local newestBtn  = makeSortBtn('Newest',  'newest')
+	local nameBtn    = makeSortBtn('Name',    'name')
+
+	-- Profile list
+	local listFrame = Instance.new('ScrollingFrame')
+	listFrame.Size = UDim2.new(1, -16, 1, -170)
+	listFrame.Position = UDim2.fromOffset(8, 106)
+	listFrame.BackgroundTransparency = 1
+	listFrame.BorderSizePixel = 0
+	listFrame.ScrollBarThickness = 2
+	listFrame.ScrollBarImageTransparency = 0.75
+	listFrame.CanvasSize = UDim2.new()
+	listFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	listFrame.Parent = browserWindow
+
+	local listLayout = Instance.new('UIListLayout')
+	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	listLayout.Padding = UDim.new(0, 4)
+	listLayout.Parent = listFrame
+
+	-- Status label (loading / empty)
+	local statusLabel = Instance.new('TextLabel')
+	statusLabel.Size = UDim2.new(1, 0, 0, 30)
+	statusLabel.BackgroundTransparency = 1
+	statusLabel.Text = ''
+	statusLabel.TextColor3 = color.Dark(uipallet.Text, 0.4)
+	statusLabel.TextSize = 12
+	statusLabel.FontFace = uipallet.Font
+	statusLabel.Parent = listFrame
+
+	-- Bottom bar: Upload + Load More
+	local bottomBar = Instance.new('Frame')
+	bottomBar.Size = UDim2.new(1, -20, 0, 28)
+	bottomBar.Position = UDim2.new(0, 10, 1, -36)
+	bottomBar.BackgroundTransparency = 1
+	bottomBar.Parent = browserWindow
+
+	local bottomLayout = Instance.new('UIListLayout')
+	bottomLayout.FillDirection = Enum.FillDirection.Horizontal
+	bottomLayout.Padding = UDim.new(0, 6)
+	bottomLayout.Parent = bottomBar
+
+	local function makeBottomBtn(label, w)
+		local btn = Instance.new('TextButton')
+		btn.Size = UDim2.fromOffset(w, 28)
+		btn.BackgroundColor3 = color.Light(uipallet.Main, 0.06)
+		btn.AutoButtonColor = false
+		btn.Text = label
+		btn.TextColor3 = uipallet.Text
+		btn.TextSize = 12
+		btn.FontFace = uipallet.Font
+		btn.Parent = bottomBar
+		addCorner(btn)
+		return btn
+	end
+
+	local uploadBtn  = makeBottomBtn('Upload Current', 124)
+	local loadMoreBtn = makeBottomBtn('Load More', 100)
+
+	-- Hide upload if not Premium+
+	local userTier = mainapi.Tier or 0
+	uploadBtn.Visible = userTier >= 1
+
+	-- ── Data & state ──────────────────────────────────────────────────────────
+	local cachedProfiles = nil
+	local cacheExpiry    = 0
+	local currentPage    = 1
+	local totalPages     = 1
+	local isLoading      = false
+
+	local function clearList()
+		for _, ch in listFrame:GetChildren() do
+			if ch:IsA('Frame') then ch:Destroy() end
+		end
+		statusLabel.Text = ''
+	end
+
+	local function addProfileCard(profile, myRoblox)
+		local card = Instance.new('Frame')
+		card.Size = UDim2.new(1, -4, 0, 58)
+		card.BackgroundColor3 = color.Light(uipallet.Main, 0.03)
+		card.BorderSizePixel = 0
+		card.Parent = listFrame
+		addCorner(card)
+
+		local cardStroke = Instance.new('UIStroke')
+		cardStroke.Color = color.Light(uipallet.Main, 0.08)
+		cardStroke.Thickness = 1
+		cardStroke.Parent = card
+
+		local nameLabel = Instance.new('TextLabel')
+		nameLabel.Size = UDim2.new(1, -70, 0, 20)
+		nameLabel.Position = UDim2.fromOffset(8, 6)
+		nameLabel.BackgroundTransparency = 1
+		nameLabel.Text = profile.name
+		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+		nameLabel.TextColor3 = uipallet.Text
+		nameLabel.TextSize = 13
+		nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+		nameLabel.FontFace = uipallet.FontSemiBold
+		nameLabel.Parent = card
+
+		local metaLabel = Instance.new('TextLabel')
+		metaLabel.Size = UDim2.new(1, -12, 0, 16)
+		metaLabel.Position = UDim2.fromOffset(8, 26)
+		metaLabel.BackgroundTransparency = 1
+		metaLabel.Text = 'by ' .. profile.author_roblox_username .. '  ·  ' .. tostring(profile.installs) .. ' installs'
+		metaLabel.TextXAlignment = Enum.TextXAlignment.Left
+		metaLabel.TextColor3 = color.Dark(uipallet.Text, 0.45)
+		metaLabel.TextSize = 11
+		metaLabel.FontFace = uipallet.Font
+		metaLabel.Parent = card
+
+		local isOwn = profile.author_roblox_username:lower() == (myRoblox or ''):lower()
+		local canDel = isOwn or (mainapi.Tier or 0) >= 2
+
+		local installBtn = Instance.new('TextButton')
+		installBtn.Size = UDim2.fromOffset(56, 22)
+		installBtn.Position = UDim2.new(1, -64, 0, 6)
+		installBtn.BackgroundColor3 = Color3.fromHSV(mainapi.GUIColor.Hue, mainapi.GUIColor.Sat, mainapi.GUIColor.Value)
+		installBtn.AutoButtonColor = false
+		installBtn.Text = 'Install'
+		installBtn.TextColor3 = Color3.new(1, 1, 1)
+		installBtn.TextSize = 11
+		installBtn.FontFace = uipallet.FontSemiBold
+		installBtn.Parent = card
+		addCorner(installBtn)
+
+		installBtn.MouseButton1Click:Connect(function()
+			installBtn.Text = '...'
+			task.spawn(function()
+				local res = apiRequest('POST', '/profiles/' .. profile.id .. '/install', { from = lplr.Name })
+				if res and res.data then
+					local success = applyProfileData(res.data)
+					installBtn.Text = success and '✓' or '!'
+					mainapi:CreateNotification('Profiles', success and 'Installed: ' .. profile.name or 'Failed to apply profile', 4, success and nil or 'alert')
+				else
+					installBtn.Text = '!'
+					mainapi:CreateNotification('Profiles', 'Install failed', 4, 'alert')
+				end
+				task.wait(2)
+				installBtn.Text = 'Install'
+			end)
+		end)
+
+		if isOwn then
+			local updateBtn = Instance.new('TextButton')
+			updateBtn.Size = UDim2.fromOffset(50, 22)
+			updateBtn.Position = UDim2.new(1, -64, 1, -28)
+			updateBtn.BackgroundColor3 = color.Light(uipallet.Main, 0.08)
+			updateBtn.AutoButtonColor = false
+			updateBtn.Text = 'Update'
+			updateBtn.TextColor3 = color.Dark(uipallet.Text, 0.2)
+			updateBtn.TextSize = 10
+			updateBtn.FontFace = uipallet.Font
+			updateBtn.Parent = card
+			addCorner(updateBtn)
+
+			updateBtn.MouseButton1Click:Connect(function()
+				updateBtn.Text = '...'
+				task.spawn(function()
+					local res = apiRequest('PUT', '/profiles/' .. profile.id, {
+						from = lplr.Name,
+						data = gatherProfileData()
+					})
+					if res and res.ok then
+						mainapi:CreateNotification('Profiles', 'Profile updated', 4)
+						updateBtn.Text = '✓'
+					else
+						mainapi:CreateNotification('Profiles', 'Update failed', 4, 'alert')
+						updateBtn.Text = '!'
+					end
+					task.wait(2)
+					updateBtn.Text = 'Update'
+				end)
+			end)
+		end
+
+		if canDel then
+			local delBtn = Instance.new('TextButton')
+			delBtn.Size = UDim2.fromOffset(isOwn and 28 or 56, 22)
+			delBtn.Position = UDim2.new(1, -(isOwn and 118 or 64), 1, -28)
+			delBtn.BackgroundColor3 = color.Light(uipallet.Main, 0.04)
+			delBtn.AutoButtonColor = false
+			delBtn.Text = isOwn and '✕' or 'Delete'
+			delBtn.TextColor3 = Color3.fromRGB(220, 80, 80)
+			delBtn.TextSize = 11
+			delBtn.FontFace = uipallet.Font
+			delBtn.Parent = card
+			addCorner(delBtn)
+
+			delBtn.MouseButton1Click:Connect(function()
+				task.spawn(function()
+					local res = apiRequest('DELETE', '/profiles/' .. profile.id, { from = lplr.Name })
+					if res and res.ok then
+						card:Destroy()
+						mainapi:CreateNotification('Profiles', 'Profile deleted', 4)
+					else
+						mainapi:CreateNotification('Profiles', 'Delete failed', 4, 'alert')
+					end
+				end)
+			end)
+		end
+	end
+
+	local function fetchProfiles(resetPage)
+		if isLoading then return end
+		isLoading = true
+		if resetPage then
+			currentPage = 1
+			clearList()
+		end
+		statusLabel.Text = 'Loading...'
+
+		task.spawn(function()
+			local search = searchBox.Text ~= '' and ('&search=' .. searchBox.Text) or ''
+			local url = '/profiles?game_id=' .. tostring(game.PlaceId) .. '&sort=' .. currentSort .. '&page=' .. currentPage .. search
+			local res = apiRequest('GET', url, nil)
+
+			statusLabel.Text = ''
+			if not res or not res.profiles then
+				statusLabel.Text = 'Failed to load profiles'
+				isLoading = false
+				return
+			end
+
+			if #res.profiles == 0 and currentPage == 1 then
+				statusLabel.Text = 'No profiles found'
+			end
+
+			-- Find user's linked Roblox name for ownership checks
+			local myRoblox = lplr.Name
+
+			for _, profile in res.profiles do
+				addProfileCard(profile, myRoblox)
+			end
+
+			totalPages = res.pages or 1
+			loadMoreBtn.Visible = currentPage < totalPages
+			loadMoreBtn.TextColor3 = uipallet.Text
+			isLoading = false
+		end)
+	end
+
+	-- Sort button logic
+	local function setSort(key)
+		currentSort = key
+		for k, btn in sortBtns do
+			btn.BackgroundColor3 = k == key and color.Light(uipallet.Main, 0.1) or color.Light(uipallet.Main, 0.04)
+			btn.TextColor3 = k == key and uipallet.Text or color.Dark(uipallet.Text, 0.4)
+		end
+		fetchProfiles(true)
+	end
+
+	popularBtn.MouseButton1Click:Connect(function() setSort('installs') end)
+	newestBtn.MouseButton1Click:Connect(function()  setSort('newest')   end)
+	nameBtn.MouseButton1Click:Connect(function()    setSort('name')     end)
+
+	-- Debounced search
+	local searchDebounce
+	searchBox:GetPropertyChangedSignal('Text'):Connect(function()
+		if searchDebounce then task.cancel(searchDebounce) end
+		searchDebounce = task.delay(0.4, function()
+			searchDebounce = nil
+			fetchProfiles(true)
+		end)
+	end)
+
+	-- Load more
+	loadMoreBtn.MouseButton1Click:Connect(function()
+		if currentPage < totalPages then
+			currentPage += 1
+			fetchProfiles(false)
+		end
+	end)
+	loadMoreBtn.Visible = false
+
+	-- Upload current profile
+	uploadBtn.MouseButton1Click:Connect(function()
+		-- Prompt for name via a simple textbox overlay
+		local promptBg = Instance.new('Frame')
+		promptBg.Size = UDim2.new(1, 0, 1, 0)
+		promptBg.BackgroundColor3 = Color3.new(0, 0, 0)
+		promptBg.BackgroundTransparency = 0.5
+		promptBg.BorderSizePixel = 0
+		promptBg.ZIndex = 20
+		promptBg.Parent = browserWindow
+
+		local promptBox = Instance.new('Frame')
+		promptBox.Size = UDim2.fromOffset(220, 100)
+		promptBox.Position = UDim2.new(0.5, -110, 0.5, -50)
+		promptBox.BackgroundColor3 = color.Light(uipallet.Main, 0.06)
+		promptBox.BorderSizePixel = 0
+		promptBox.ZIndex = 21
+		promptBox.Parent = promptBg
+		addCorner(promptBox)
+
+		local promptLabel = Instance.new('TextLabel')
+		promptLabel.Size = UDim2.new(1, -16, 0, 20)
+		promptLabel.Position = UDim2.fromOffset(8, 8)
+		promptLabel.BackgroundTransparency = 1
+		promptLabel.Text = 'Profile name'
+		promptLabel.TextXAlignment = Enum.TextXAlignment.Left
+		promptLabel.TextColor3 = uipallet.Text
+		promptLabel.TextSize = 12
+		promptLabel.FontFace = uipallet.FontSemiBold
+		promptLabel.ZIndex = 21
+		promptLabel.Parent = promptBox
+
+		local promptInput = Instance.new('TextBox')
+		promptInput.Size = UDim2.new(1, -16, 0, 28)
+		promptInput.Position = UDim2.fromOffset(8, 32)
+		promptInput.BackgroundColor3 = color.Light(uipallet.Main, 0.04)
+		promptInput.BorderSizePixel = 0
+		promptInput.PlaceholderText = 'My awesome profile'
+		promptInput.PlaceholderColor3 = color.Dark(uipallet.Text, 0.5)
+		promptInput.Text = ''
+		promptInput.TextColor3 = uipallet.Text
+		promptInput.TextSize = 12
+		promptInput.FontFace = uipallet.Font
+		promptInput.ZIndex = 21
+		promptInput.Parent = promptBox
+		addCorner(promptInput)
+
+		local confirmBtn = Instance.new('TextButton')
+		confirmBtn.Size = UDim2.fromOffset(90, 26)
+		confirmBtn.Position = UDim2.new(0.5, -95, 1, -34)
+		confirmBtn.BackgroundColor3 = Color3.fromHSV(mainapi.GUIColor.Hue, mainapi.GUIColor.Sat, mainapi.GUIColor.Value)
+		confirmBtn.AutoButtonColor = false
+		confirmBtn.Text = 'Upload'
+		confirmBtn.TextColor3 = Color3.new(1, 1, 1)
+		confirmBtn.TextSize = 12
+		confirmBtn.FontFace = uipallet.FontSemiBold
+		confirmBtn.ZIndex = 21
+		confirmBtn.Parent = promptBox
+		addCorner(confirmBtn)
+
+		local cancelBtn = Instance.new('TextButton')
+		cancelBtn.Size = UDim2.fromOffset(90, 26)
+		cancelBtn.Position = UDim2.new(0.5, 5, 1, -34)
+		cancelBtn.BackgroundColor3 = color.Light(uipallet.Main, 0.06)
+		cancelBtn.AutoButtonColor = false
+		cancelBtn.Text = 'Cancel'
+		cancelBtn.TextColor3 = color.Dark(uipallet.Text, 0.3)
+		cancelBtn.TextSize = 12
+		cancelBtn.FontFace = uipallet.Font
+		cancelBtn.ZIndex = 21
+		cancelBtn.Parent = promptBox
+		addCorner(cancelBtn)
+
+		cancelBtn.MouseButton1Click:Connect(function() promptBg:Destroy() end)
+
+		confirmBtn.MouseButton1Click:Connect(function()
+			local name = promptInput.Text:match('^%s*(.-)%s*$')
+			if #name < 1 then return end
+			confirmBtn.Text = '...'
+			task.spawn(function()
+				local res, status = apiRequest('POST', '/profiles', {
+					from        = lplr.Name,
+					name        = name,
+					game_id     = tostring(game.PlaceId),
+					data        = gatherProfileData(),
+				})
+				promptBg:Destroy()
+				if res and res.id then
+					mainapi:CreateNotification('Profiles', 'Uploaded: ' .. name, 5)
+					fetchProfiles(true)
+				else
+					local msg = res and res.error or 'Upload failed'
+					mainapi:CreateNotification('Profiles', msg, 5, 'alert')
+				end
+			end)
+		end)
+
+		task.defer(function() promptInput:CaptureFocus() end)
+	end)
+
+	-- Toggle button in the Profiles window
+	local profilesWindow = clickgui:FindFirstChild('ProfilesCategoryList')
+	if profilesWindow then
+		local browseBtn = Instance.new('TextButton')
+		browseBtn.Size = UDim2.fromOffset(200, 28)
+		browseBtn.BackgroundColor3 = color.Light(uipallet.Main, 0.04)
+		browseBtn.AutoButtonColor = false
+		browseBtn.Text = 'Browse Global Profiles'
+		browseBtn.TextColor3 = color.Dark(uipallet.Text, 0.25)
+		browseBtn.TextSize = 12
+		browseBtn.FontFace = uipallet.FontSemiBold
+		browseBtn.Parent = profilesWindow.Children
+		addCorner(browseBtn)
+
+		local browseBtnStroke = Instance.new('UIStroke')
+		browseBtnStroke.Color = color.Light(uipallet.Main, 0.1)
+		browseBtnStroke.Parent = browseBtn
+
+		browseBtn.MouseButton1Click:Connect(function()
+			browserWindow.Visible = not browserWindow.Visible
+			if browserWindow.Visible then
+				fetchProfiles(true)
+			end
+		end)
+
+		browseBtn.MouseEnter:Connect(function()
+			tween:Tween(browseBtn, uipallet.Tween, { TextColor3 = uipallet.Text })
+		end)
+		browseBtn.MouseLeave:Connect(function()
+			tween:Tween(browseBtn, uipallet.Tween, { TextColor3 = color.Dark(uipallet.Text, 0.25) })
+		end)
+	end
+	-- ── End Global Profile Browser ────────────────────────────────────────────
+end
+
 --[[
 	Targets
 ]]
