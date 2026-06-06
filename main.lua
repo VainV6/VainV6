@@ -20,6 +20,7 @@ local cloneref = cloneref or function(obj)
 	return obj
 end
 local playersService = cloneref(game:GetService('Players'))
+local httpService = cloneref(game:GetService('HttpService'))
 
 local function downloadFile(path, func)
 	if not isfile(path) then
@@ -37,37 +38,174 @@ local function downloadFile(path, func)
 	return (func or readfile)(path)
 end
 
-local function applyModuleIndicators()
-	pcall(function()
-		local content
-		if isfile('newvain/changed_modules.txt') then
-			content = readfile('newvain/changed_modules.txt')
-		elseif isfile('newvain/profiles/commit.txt') then
-			local res = game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('newvain/profiles/commit.txt')..'/changed_modules.txt', true)
-			if res ~= '404: Not Found' then content = res end
+-- Build a map of line number → module display name for a file's content
+local function buildLineModuleMap(content)
+	local allLines = {}
+	for line in content:gmatch('[^\n]+') do
+		table.insert(allLines, line)
+	end
+
+	-- First pass: find every CreateModule and its display Name
+	local moduleStarts = {}
+	for i, line in ipairs(allLines) do
+		if line:find(':CreateModule%(') then
+			for j = i, math.min(i + 8, #allLines) do
+				local name = allLines[j]:match("Name%s*=%s*'([^']+)'")
+				          or allLines[j]:match('Name%s*=%s*"([^"]+)"')
+				if name then
+					table.insert(moduleStarts, { line = i, name = name })
+					break
+				end
+			end
 		end
-		if not content or not vain then return end
-		for line in content:gmatch('[^\n]+') do
-			local tag, name = line:match('^([A-Z]+):(.+)$')
-			if tag and name then
-				local mod = vain.Modules[name]
-				if mod then
-					local t = tag
-					mod.ExtraText = function() return t end
-					if mod.Object then
-						mod.Object.RichText = true
-						local tagColor = tag == 'NEW' and '#00DD55' or '#FF8800'
-						mod.Object.Text = mod.Object.Text.." <font color='"..tagColor.."' size='10'><b>"..tag.."</b></font>"
+	end
+
+	-- Second pass: each line belongs to the nearest preceding module declaration
+	table.sort(moduleStarts, function(a, b) return a.line < b.line end)
+	local lineModules = {}
+	local mi = 1
+	for i = 1, #allLines do
+		while mi < #moduleStarts and i >= moduleStarts[mi + 1].line do
+			mi = mi + 1
+		end
+		if moduleStarts[mi] and i >= moduleStarts[mi].line then
+			lineModules[i] = moduleStarts[mi].name
+		end
+	end
+
+	return lineModules, moduleStarts
+end
+
+-- Parse @@ hunk headers from a patch to get new-file line ranges
+local function parsePatchRanges(patch)
+	local ranges = {}
+	for newStart, newCount in patch:gmatch('@@ %-%d+,%d+ %+(%d+),(%d+) @@') do
+		local s = tonumber(newStart)
+		local c = tonumber(newCount)
+		if s and c and c > 0 then
+			table.insert(ranges, { s, s + c - 1 })
+		end
+	end
+	-- Also handle hunks like @@ -1 +1 @@ (no count means count=1)
+	for newStart in patch:gmatch('@@ %-%d+ %+(%d+) @@') do
+		local s = tonumber(newStart)
+		if s then table.insert(ranges, { s, s }) end
+	end
+	return ranges
+end
+
+-- Detect NEW modules: CreateModule lines that are pure additions in the patch
+local function detectNewModulesFromPatch(patch)
+	local newMods = {}
+	local patchLines = {}
+	for line in patch:gmatch('[^\n]+') do
+		table.insert(patchLines, line)
+	end
+	for i, line in ipairs(patchLines) do
+		if line:sub(1, 1) == '+' and line:find(':CreateModule%(') then
+			for j = i, math.min(i + 8, #patchLines) do
+				local name = patchLines[j]:match("Name%s*=%s*'([^']+)'")
+				          or patchLines[j]:match('Name%s*=%s*"([^"]+)"')
+				if name then
+					newMods[name] = true
+					break
+				end
+			end
+		end
+	end
+	return newMods
+end
+
+local function applyBadges(changed)
+	if not vain then return end
+	for name, tag in changed do
+		local mod = vain.Modules[name]
+		if mod then
+			local t = tag
+			mod.ExtraText = function() return t end
+			if mod.Object then
+				mod.Object.RichText = true
+				local tagColor = tag == 'NEW' and '#00DD55' or '#FF8800'
+				mod.Object.Text = mod.Object.Text.." <font color='"..tagColor.."' size='10'><b>"..tag.."</b></font>"
+			end
+		end
+	end
+end
+
+local function detectUpdates()
+	pcall(function()
+		if not isfile('newvain/profiles/commit.txt') then return end
+		local commit = readfile('newvain/profiles/commit.txt'):match('^%s*(.-)%s*$')
+
+		local prevCommit = isfile('newvain/profiles/prev_commit.txt')
+		                   and readfile('newvain/profiles/prev_commit.txt'):match('^%s*(.-)%s*$')
+		                   or nil
+
+		-- Always record this commit as the last-seen one for next session
+		writefile('newvain/profiles/prev_commit.txt', commit)
+
+		-- First run or already up to date — nothing to do
+		if not prevCommit or prevCommit == '' or prevCommit == commit then return end
+
+		-- ── Fetch GitHub compare ─────────────────────────────────────────────
+		local compareUrl = 'https://api.github.com/repos/VainV6/Vain/compare/'
+		                   ..prevCommit..'...'..commit
+		local ok, res = pcall(game.HttpGet, game, compareUrl, true)
+		if not ok or not res or res:sub(1, 1) ~= '{' then return end
+
+		local parsed
+		ok, parsed = pcall(httpService.JSONDecode, httpService, res)
+		if not ok or not parsed then return end
+
+		-- ── Update notification ───────────────────────────────────────────────
+		if vain and parsed.commits and #parsed.commits > 0 then
+			local latest = parsed.commits[#parsed.commits]
+			local msg = latest and latest.commit and latest.commit.message or ''
+			msg = msg:match('^([^\n]+)') or 'New update available'
+			vain:CreateNotification('Vain Updated', msg, 12)
+		end
+
+		-- ── Detect changed modules ────────────────────────────────────────────
+		if not parsed.files then return end
+
+		local changed = {}
+
+		for _, file in ipairs(parsed.files) do
+			-- Only care about game script files that define modules
+			if not file.filename:match('^games/') then continue end
+			if not file.patch then continue end
+
+			-- Fetch current version of the file to build line→module map
+			local rawUrl = 'https://raw.githubusercontent.com/VainV6/Vain/'
+			               ..commit..'/'..file.filename
+			local fileOk, fileContent = pcall(game.HttpGet, game, rawUrl, true)
+			if not fileOk or not fileContent or fileContent == '404: Not Found' then continue end
+
+			local lineModules = buildLineModuleMap(fileContent)
+			local newMods = detectNewModulesFromPatch(file.patch)
+			local ranges = parsePatchRanges(file.patch)
+
+			for _, range in ipairs(ranges) do
+				for lineNum = range[1], range[2] do
+					local modName = lineModules[lineNum]
+					if modName then
+						local tag = newMods[modName] and 'NEW' or 'UPD'
+						-- Don't downgrade a NEW to UPD
+						if not changed[modName] or tag == 'NEW' then
+							changed[modName] = tag
+						end
 					end
 				end
 			end
 		end
+
+		applyBadges(changed)
 	end)
 end
 
 local function finishLoading()
 	vain.Init = nil
-	applyModuleIndicators()
+	detectUpdates()
 	vain:Load()
 	task.spawn(function()
 		repeat
