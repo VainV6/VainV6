@@ -5463,14 +5463,20 @@ function mainapi:CreateNotification(title, text, duration, type)
 			setthreadidentity(8)
 		end
 
-		-- Measure single-line width, cap at 400px
-		local notifWidth = math.min(math.max(getfontsize(removeTags(text), 14, uipallet.Font).X + 80, 266), 400)
+		-- Use a local params object so concurrent notifications don't clobber the shared fontsize.Width
+		local textParams = Instance.new('GetTextBoundsParams')
+		textParams.Text = removeTags(text)
+		textParams.Size = 14
+		if typeof(uipallet.Font) == 'Font' then textParams.Font = uipallet.Font end
 
-		-- Measure text height with wrapping at actual render width (notification width - left padding 47 - right padding 9)
-		local contentWidth = notifWidth - 56
-		fontsize.Width = contentWidth
-		local wrappedSize = getfontsize(removeTags(text), 14, uipallet.Font)
-		fontsize.Width = math.huge
+		-- Measure single-line width, cap at 400px
+		textParams.Width = math.huge
+		local singleLine = textService:GetTextBoundsAsync(textParams)
+		local notifWidth = math.min(math.max(singleLine.X + 80, 266), 400)
+
+		-- Measure text height with wrapping at actual render width
+		textParams.Width = notifWidth - 56
+		local wrappedSize = textService:GetTextBoundsAsync(textParams)
 		local textHeight = wrappedSize.Y
 		local notifHeight = math.max(75, 44 + textHeight + 14)
 
