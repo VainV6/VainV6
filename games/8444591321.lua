@@ -31,14 +31,16 @@ end
 
 vain.Place = 6872274481
 if isfile('newvain/games/' .. vain.Place .. '.lua') then
-	loadstring(readfile('newvain/games/' .. vain.Place .. '.lua'), tostring(vain.Place))()
+	local f = loadstring(readfile('newvain/games/' .. vain.Place .. '.lua'), tostring(vain.Place))
+	if f then f() end
 else
 	if not shared.VainDeveloper then
 		local suc, res = pcall(function()
 			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'.. readfile('newvain/profiles/commit.txt').. '/games/'.. vain.Place.. '.lua', true)
 		end)
 		if suc and res ~= '404: Not Found' then
-			loadstring(downloadFile('newvain/games/' .. vain.Place .. '.lua'), tostring(vain.Place))()
+			local f = loadstring(downloadFile('newvain/games/' .. vain.Place .. '.lua'), tostring(vain.Place))
+			if f then f() end
 		end
 	end
 end
