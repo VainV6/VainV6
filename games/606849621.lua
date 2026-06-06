@@ -405,6 +405,7 @@ run(function()
     local CircleObject
     local Instant
     local Hooked
+    local HookedTaser
     local ProjectileRaycast = RaycastParams.new()
     ProjectileRaycast.RespectCanCollide = true
 
@@ -417,7 +418,7 @@ run(function()
 
     		if callback then
     			Hooked = jb.GunController.TransformLocalMousePosition
-    			jb.GunController.TransformLocalMousePosition = function(self, pos)
+    			local hookFn = function(self, pos)
     				local ent = entitylib['Entity'..Mode.Value]({
     					Range = Range.Value,
     					Wallcheck = Target.Walls.Enabled and (obj or true) or nil,
@@ -443,6 +444,11 @@ run(function()
 
     				return pos
     			end
+    			jb.GunController.TransformLocalMousePosition = hookFn
+    			if jb.TaserController and jb.TaserController.TransformLocalMousePosition then
+    				HookedTaser = jb.TaserController.TransformLocalMousePosition
+    				jb.TaserController.TransformLocalMousePosition = hookFn
+    			end
 
     			repeat
     				if CircleObject then
@@ -459,6 +465,10 @@ run(function()
     			until not SilentAim.Enabled
     		else
     			jb.GunController.TransformLocalMousePosition = Hooked
+    			if HookedTaser then
+    				jb.TaserController.TransformLocalMousePosition = HookedTaser
+    				HookedTaser = nil
+    			end
     		end
     	end,
     	Tooltip = 'Silently adjusts your aim towards the enemy'
