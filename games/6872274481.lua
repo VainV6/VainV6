@@ -4746,7 +4746,7 @@ run(function()
         List = {'Sword', 'Player'},
         ItemTooltips = {
             Sword = 'Expands the range around you — makes it easier to hit enemies with your sword',
-            Player = 'Expands each player's hitbox model — targets are larger and easier to click',
+            Player = "Expands each player's hitbox model — targets are larger and easier to click",
         },
         Function = function(val)
             local isPlayer = val == 'Player'
