@@ -3059,7 +3059,7 @@ function mainapi:CreateNotification(title, text, duration, type)
 		progress.Size = UDim2.new(1, -13, 0, 2)
 		progress.Position = UDim2.new(0, 0, 1, -2)
 		progress.ZIndex = 5
-		progress.BackgroundColor3 = type == 'alert' and Color3.fromRGB(250, 50, 56) or type == 'warning' and Color3.fromRGB(236, 129, 43) or Color3.fromRGB(220, 220, 220)
+		progress.BackgroundColor3 = type == 'alert' and Color3.fromRGB(250, 50, 56) or type == 'warning' and Color3.fromRGB(236, 129, 43) or type == 'success' and Color3.fromRGB(80, 200, 100) or Color3.fromRGB(220, 220, 220)
 		progress.BorderSizePixel = 0
 		progress.Parent = notification
 		if tween.Tween then

@@ -2230,7 +2230,7 @@ function mainapi:CreateNotification(title, text, duration, type, continued)
 	local icon = Instance.new('Frame')
 	icon.Size = UDim2.fromOffset(40, 40)
 	icon.Position = UDim2.fromOffset(10, 10)
-	icon.BackgroundColor3 = uipallet.Text
+	icon.BackgroundColor3 = type == 'alert' and Color3.fromRGB(250, 50, 56) or type == 'warning' and Color3.fromRGB(236, 129, 43) or type == 'success' and Color3.fromRGB(80, 200, 100) or uipallet.Text
 	icon.Parent = notification
 	addCorner(icon, UDim.new(0, 11))
 	local titlelabel = Instance.new('TextLabel')
@@ -2871,9 +2871,9 @@ mainapi.Categories.Main:CreateButton({
 	Function = function()
 		shared.vainreload = true
 		if shared.VainDeveloper then
-			loadstring(readfile('newvain/loader.lua'), 'loader')()
+			loadstring(readfile('newvain/main.lua'), 'main')()
 		else
-			loadstring(game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('newvain/profiles/commit.txt')..'/loader.lua', true))()
+			loadstring(game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/main/init.lua', true), 'init')()
 		end
 	end
 })

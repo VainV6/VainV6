@@ -5400,7 +5400,7 @@ end
 
 function mainapi:CreateNotification(title, text, duration, type)
 	if not self.Notifications.Enabled then return end
-	local color = type == 'alert' and Color3.fromRGB(250, 50, 56) or type == 'warning' and Color3.fromRGB(236, 129, 43) or Color3.fromRGB(220, 220, 220)
+	local color = type == 'alert' and Color3.fromRGB(250, 50, 56) or type == 'warning' and Color3.fromRGB(236, 129, 43) or type == 'success' and Color3.fromRGB(80, 200, 100) or Color3.fromRGB(220, 220, 220)
 	if license.Closet or license.Webhook then
 		if license.Webhook then
 			request({
@@ -5450,7 +5450,8 @@ function mainapi:CreateNotification(title, text, duration, type)
 		iconshadow.Position = UDim2.fromOffset(-5, -8)
 		iconshadow.ZIndex = 5
 		iconshadow.BackgroundTransparency = 1
-		iconshadow.Image = getcustomasset('newvain/assets/new/'..(type or 'info')..'.png')
+		local iconType = (type == 'alert' or type == 'warning') and type or 'info'
+		iconshadow.Image = getcustomasset('newvain/assets/new/'..iconType..'.png')
 		iconshadow.ImageColor3 = Color3.new()
 		iconshadow.ImageTransparency = 0.5
 		iconshadow.Parent = notification
@@ -6074,9 +6075,9 @@ general:CreateButton({
 	Function = function()
 		shared.vainreload = true
 		if shared.VainDeveloper then
-			loadstring(readfile('newvain/loader.lua'), 'loader')()
+			loadstring(readfile('newvain/main.lua'), 'main')()
 		else
-			loadstring(game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('newvain/profiles/commit.txt')..'/loader.lua', true))()
+			loadstring(game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/main/init.lua', true), 'init')()
 		end
 	end,
 	Tooltip = 'Reloads vain for debugging purposes'

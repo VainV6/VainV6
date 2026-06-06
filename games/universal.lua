@@ -435,21 +435,25 @@ run(function()
 	-- Notify when a friend or target joins/leaves
 	local function onPlayerAdded(plr)
 		if isFriend(plr) then
-			vain:CreateNotification('Friends', plr.Name .. ' joined the server', 8)
+			vain:CreateNotification('Friends', plr.Name .. ' joined the server', 8, 'success')
 		elseif isTarget(plr) then
-			vain:CreateNotification('Targets', plr.Name .. ' joined the server', 8)
+			vain:CreateNotification('Targets', plr.Name .. ' joined the server', 8, 'alert')
 		end
 	end
 	local function onPlayerRemoving(plr)
 		if isFriend(plr) then
-			vain:CreateNotification('Friends', plr.Name .. ' left the server', 8)
+			vain:CreateNotification('Friends', plr.Name .. ' left the server', 8, 'success')
 		elseif isTarget(plr) then
-			vain:CreateNotification('Targets', plr.Name .. ' left the server', 8)
+			vain:CreateNotification('Targets', plr.Name .. ' left the server', 8, 'alert')
 		end
 	end
 	for _, plr in playersService:GetPlayers() do
 		if plr ~= lplr then
-			task.spawn(onPlayerAdded, plr)
+			if isFriend(plr) then
+				vain:CreateNotification('Friends', plr.Name .. ' is in the server', 8, 'success')
+			elseif isTarget(plr) then
+				vain:CreateNotification('Targets', plr.Name .. ' is in the server', 8, 'alert')
+			end
 		end
 	end
 	vain:Clean(playersService.PlayerAdded:Connect(onPlayerAdded))
