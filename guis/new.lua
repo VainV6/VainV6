@@ -5422,10 +5422,10 @@ local function restackNotifications()
 		if entry.notification and entry.notification.Parent then
 			if tween.Tween then
 				tween:Tween(entry.notification, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-					Position = UDim2.new(1, 0, 1, -yOffset)
+					Position = UDim2.new(1, 0, 1, -(yOffset + entry.height))
 				})
 			else
-				entry.notification.Position = UDim2.new(1, 0, 1, -yOffset)
+				entry.notification.Position = UDim2.new(1, 0, 1, -(yOffset + entry.height))
 			end
 			yOffset = yOffset + entry.height + 3
 		end
@@ -5491,7 +5491,7 @@ function mainapi:CreateNotification(title, text, duration, type)
 		local notification = Instance.new('ImageButton')
 		notification.Name = 'Notification'
 		notification.Size = UDim2.fromOffset(notifWidth, notifHeight)
-		notification.Position = UDim2.new(1, 0, 1, -initialY)
+		notification.Position = UDim2.new(1, 0, 1, -(initialY + notifHeight))
 		notification.ZIndex = 5
 		notification.BackgroundTransparency = 1
 		notification.AutoButtonColor = false
