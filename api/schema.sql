@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS whitelist (
     roblox_user_id  TEXT,
     tier         INTEGER NOT NULL DEFAULT 0,
     created_at   INTEGER NOT NULL,
-    updated_at   INTEGER NOT NULL
+    updated_at   INTEGER NOT NULL,
+    last_seen    INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS blacklist (

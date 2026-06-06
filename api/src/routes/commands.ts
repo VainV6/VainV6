@@ -1,5 +1,5 @@
 import { Env, COMMANDS } from '../types';
-import { getByRoblox, drainCommands, queueCommand } from '../db/queries';
+import { getByRoblox, drainCommands, queueCommand, touchLastSeen } from '../db/queries';
 
 // GET /commands?username=X — called by Vain client every 5s to drain its command queue
 export async function handlePoll(request: Request, env: Env): Promise<Response> {
@@ -13,6 +13,7 @@ export async function handlePoll(request: Request, env: Env): Promise<Response> 
   const row = await getByRoblox(env.DB, username);
   if (!row) return jsonErr('Not whitelisted', 403);
 
+  await touchLastSeen(env.DB, username);
   const cmds = await drainCommands(env.DB, username);
   return json({ commands: cmds });
 }
