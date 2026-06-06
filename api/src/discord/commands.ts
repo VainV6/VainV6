@@ -1,7 +1,7 @@
 import { Env, TIER, TIER_NAME, TierValue, ROLE_TIER_MAP, COMMANDS } from '../types';
 import {
-  getByDiscordId, getByRoblox, upsertLink, removeLink,
-  isBlacklisted, queueCommand, getAllWhitelisted, getOnlinePlayers,
+  getByDiscordId, getByRoblox, upsertLink,
+  isBlacklisted, queueCommand, getOnlinePlayers,
 } from '../db/queries';
 
 export type Interaction = {
@@ -61,15 +61,6 @@ async function tierFromRoleIds(roleIds: string[], guildId: string, botToken: str
   return highest;
 }
 
-// Fetch a single member's roles from Discord
-async function fetchMemberRoles(guildId: string, userId: string, botToken: string): Promise<string[]> {
-  const res = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${userId}`, {
-    headers: { Authorization: `Bot ${botToken}` },
-  });
-  if (!res.ok) return [];
-  const member = await res.json() as { roles: string[] };
-  return member.roles ?? [];
-}
 
 async function resolveRobloxId(username: string): Promise<string | null> {
   try {
@@ -146,45 +137,6 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
     return json(ok(`**${name}** queued for **${target}**`));
   }
 
-  // /settier @user <tier> — Owner only: set tier and update Discord roles automatically
-  if (name === 'settier') {
-    if (callerTier < TIER.Owner) return json(err('Only **Owner** can use `/settier`'));
-
-    const targetUserId = topOpt(interaction, 'user');
-    const tierName     = topOpt(interaction, 'tier');
-    const newTier      = (TIER as Record<string, number>)[tierName] as TierValue | undefined;
-    if (newTier === undefined) return json(err(`Unknown tier. Use: Premium, Privileged, Owner`));
-
-    // Fetch guild roles to find role IDs for each tier name
-    const guildRoles = await fetchGuildRoles(guildId, env.DISCORD_BOT_TOKEN);
-    const tierRoleIds = new Map<TierValue, string>();
-    for (const [id, rname] of guildRoles) {
-      const t = ROLE_TIER_MAP[rname];
-      if (t !== undefined) tierRoleIds.set(t, id);
-    }
-
-    // Remove all tier roles, then add the correct one
-    for (const [tier, roleId] of tierRoleIds) {
-      if (tier === newTier) {
-        await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${targetUserId}/roles/${roleId}`, {
-          method: 'PUT', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` },
-        });
-      } else {
-        await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${targetUserId}/roles/${roleId}`, {
-          method: 'DELETE', headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` },
-        });
-      }
-    }
-
-    // Update D1 tier if they're whitelisted
-    const targetRow = await getByDiscordId(env.DB, targetUserId);
-    if (targetRow) {
-      await upsertLink(env.DB, targetUserId, targetRow.roblox_username ?? '', targetRow.roblox_user_id ?? '', newTier);
-    }
-
-    return json(ok(`<@${targetUserId}> is now **${TIER_NAME[newTier]}**. Discord role updated.`));
-  }
-
   // /sync — re-sync your own tier from your current Discord roles
   if (name === 'sync') {
     const row = await getByDiscordId(env.DB, discord);
@@ -205,19 +157,3 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
   return json(err('Unknown command'));
 }
 
-// Called by cron: refresh every whitelisted user's tier from their Discord roles
-export async function syncAllTiers(env: Env): Promise<void> {
-  const guildId = env.DISCORD_GUILD_ID;
-  if (!guildId) return;
-
-  const rows = await getAllWhitelisted(env.DB);
-  for (const row of rows) {
-    const memberRoles = await fetchMemberRoles(guildId, row.discord_id, env.DISCORD_BOT_TOKEN);
-    const newTier = await tierFromRoleIds(memberRoles, guildId, env.DISCORD_BOT_TOKEN);
-    if (newTier !== row.tier) {
-      await upsertLink(env.DB, row.discord_id, row.roblox_username ?? '', row.roblox_user_id ?? '', newTier);
-    }
-    // small delay to avoid Discord rate limits
-    await new Promise(r => setTimeout(r, 100));
-  }
-}

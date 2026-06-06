@@ -1,6 +1,6 @@
 import { Env } from './types';
 import { verifyDiscordSignature } from './discord/verify';
-import { handleCommand, syncAllTiers } from './discord/commands';
+import { handleCommand } from './discord/commands';
 import { handleCheck } from './routes/check';
 import { handlePoll, handleQueueCommand } from './routes/commands';
 import {
@@ -56,10 +56,6 @@ export default {
     return new Response('Not found', { status: 404 });
   },
 
-  // Runs every 5 minutes — syncs Discord roles → tiers for all whitelisted users
-  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
-    await syncAllTiers(env);
-  },
 };
 
 function json(data: unknown): Response {
