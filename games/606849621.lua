@@ -441,14 +441,24 @@ run(function()
         local item = jb.ItemSystemController:GetLocalEquipped()
         if item and item.BulletEmitter then
             local gv = item.BulletEmitter.GravityVector
-            local gravity = gv and math.abs(gv.Y) or 0
+            local bulletGravity = gv and math.abs(gv.Y) or 0
             local origin = self and self.Tip and self.Tip.CFrame.Position
                 or (entitylib.isAlive and entitylib.character.RootPart.CFrame.Position)
                 or Vector3.zero
-            ProjectileRaycast.FilterDescendantsInstances = {gameCamera, ent.Character}
-            ProjectileRaycast.CollisionGroup = ent.RootPart.CollisionGroup
-            local calc = prediction.SolveTrajectory(origin, item.Config.BulletSpeed or 1000, gravity, ent.RootPart.Position, Instant.Enabled and Vector3.zero or ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight, nil, Wallbang.Enabled and nil or ProjectileRaycast)
-            return calc or ent.RootPart.CFrame.Position
+            local speed = item.Config.BulletSpeed or 1000
+            local targetPos = ent.RootPart.Position
+            local targetVel = Instant.Enabled and Vector3.zero or ent.RootPart.Velocity
+
+            -- Simple iterative predictor: avoids the broken q-substitution in SolveTrajectory
+            -- which incorrectly modifies Y velocity for grounded moving targets causing large
+            -- misses at distance (q gets set to -hipHeight then compounded by gravity estimate)
+            local t = (targetPos - origin).Magnitude / speed
+            for _ = 1, 3 do
+                local predicted = targetPos + targetVel * t
+                t = (predicted - origin).Magnitude / speed
+            end
+            local aimPos = targetPos + targetVel * t + Vector3.new(0, 0.5 * bulletGravity * t * t, 0)
+            return aimPos
         end
 
         return ent.RootPart.CFrame.Position
