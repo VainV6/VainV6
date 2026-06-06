@@ -56,8 +56,8 @@ local function applyModuleIndicators()
 					mod.ExtraText = function() return t end
 					if mod.Object then
 						mod.Object.RichText = true
-						local tagColor = tag == 'NEW' and '#5AFF5A' or '#FFD95A'
-						mod.Object.Text = mod.Object.Text.." <font color='"..tagColor.."' size='11'>["..tag.."]</font>"
+						local tagColor = tag == 'NEW' and '#00DD55' or '#FF8800'
+						mod.Object.Text = mod.Object.Text.." <font color='"..tagColor.."' size='10'><b>"..tag.."</b></font>"
 					end
 				end
 			end
