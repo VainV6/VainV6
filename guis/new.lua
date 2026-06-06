@@ -4362,6 +4362,7 @@ function mainapi:CreateCategoryList(categorysettings)
 	children.CanvasSize = UDim2.new()
 	children.Parent = window
 	local childrentwo = Instance.new('Frame')
+	childrentwo.Name = 'SettingsPane'
 	childrentwo.BackgroundTransparency = 1
 	childrentwo.BackgroundColor3 = color.Dark(uipallet.Main, 0.02)
 	childrentwo.Visible = false
@@ -6647,16 +6648,17 @@ do
 	-- Toggle button in the Profiles window
 	local profilesWindow = clickgui:FindFirstChild('ProfilesCategoryList')
 	if profilesWindow then
+		local settingsPane = profilesWindow.Children:FindFirstChild('SettingsPane')
 		local browseBtn = Instance.new('TextButton')
 		browseBtn.Size = UDim2.fromOffset(200, 28)
-		browseBtn.LayoutOrder = 999
+		browseBtn.LayoutOrder = 0
 		browseBtn.BackgroundColor3 = color.Light(uipallet.Main, 0.07)
 		browseBtn.AutoButtonColor = false
 		browseBtn.Text = 'Browse Global Profiles'
 		browseBtn.TextColor3 = color.Dark(uipallet.Text, 0.08)
 		browseBtn.TextSize = 12
 		browseBtn.FontFace = uipallet.FontSemiBold
-		browseBtn.Parent = profilesWindow.Children
+		browseBtn.Parent = settingsPane or profilesWindow.Children
 		addCorner(browseBtn)
 
 		local browseBtnStroke = Instance.new('UIStroke')
