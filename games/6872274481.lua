@@ -1734,7 +1734,16 @@ local AimAssist
 	Sort = AimAssist:CreateDropdown({
 		Name = 'Target Mode',
 		List = methods,
-		Tooltip = 'How to prioritize targets'
+		Tooltip = 'How to prioritize targets',
+		ItemTooltips = {
+			Distance = 'Targets the closest enemy by stud distance',
+			Health = 'Targets the enemy with the lowest remaining health',
+			Angle = 'Targets the enemy closest to your look direction',
+			Cursor = 'Targets the enemy nearest to your mouse cursor',
+			Damage = 'Targets the enemy who most recently took damage',
+			Threat = 'Targets the enemy judged to be the greatest combat threat',
+			Kit = 'Prioritizes dangerous kit users (Hannah, Spirit Assassin, etc.)',
+		},
 	})
 
 	AimPart = AimAssist:CreateDropdown({
@@ -1753,7 +1762,12 @@ local AimAssist
 		Name = 'View Mode',
 		List = {'First Person', 'Third Person', 'Both'},
 		Default = 'Both',
-		Tooltip = 'Only aim in first person, third person, or always'
+		Tooltip = 'Only aim in first person, third person, or always',
+		ItemTooltips = {
+			['First Person'] = 'Assist only activates in first-person camera mode',
+			['Third Person'] = 'Assist only activates in third-person camera mode',
+			Both = 'Assist activates in both camera modes',
+		},
 	})
 
 	AimSpeed = AimAssist:CreateSlider({
@@ -2263,6 +2277,15 @@ run(function()
     	Tooltip = 'Selects how targets are prioritized and selected',
     	List = methods,
     	Default = 'Angle',
+    	ItemTooltips = {
+    		Distance = 'Targets the closest enemy by stud distance',
+    		Health = 'Targets the enemy with the lowest remaining health',
+    		Angle = 'Targets the enemy closest to your look direction',
+    		Cursor = 'Targets the enemy nearest to your mouse cursor',
+    		Damage = 'Targets the enemy who most recently took damage',
+    		Threat = 'Targets the enemy judged to be the greatest combat threat',
+    		Kit = 'Prioritizes dangerous kit users (Hannah, Spirit Assassin, etc.)',
+    	},
     })
     Speed = BowAssist:CreateSlider({
     	Name = 'Aim speed',
@@ -2802,12 +2825,25 @@ run(function()
         List = methods,
         Tooltip = 'How Aura should prioritize targets',
         Default = 'Health',
+        ItemTooltips = {
+            Distance = 'Targets the closest enemy by stud distance',
+            Health = 'Targets the enemy with the lowest remaining health',
+            Angle = 'Targets the enemy closest to your look direction',
+            Cursor = 'Targets the enemy nearest to your mouse cursor',
+            Damage = 'Targets the enemy who most recently took damage',
+            Threat = 'Targets the enemy judged to be the greatest combat threat',
+            Kit = 'Prioritizes dangerous kit users (Hannah, Spirit Assassin, etc.)',
+        },
     })
     Area = SilentAura:CreateDropdown({
         Name = 'Target area',
         Tooltip = 'Where the Aura will aim towards',
         List = {'Center', 'Closest'},
         Default = 'Center',
+        ItemTooltips = {
+            Center = 'Aims at the exact center of the target body',
+            Closest = 'Aims at whichever body part is nearest to you',
+        },
         Visible = false,
     })
     Perfect = SilentAura:CreateToggle({
@@ -3215,6 +3251,10 @@ run(function()
 		Name = "Mode",
 		Tooltip = 'Selects the operating mode',
 		List = {'Lag','Default'},
+		ItemTooltips = {
+			Lag = 'Applies velocity using packet-delay timing — works with FakeLag',
+			Default = 'Directly multiplies horizontal and vertical knockback vectors',
+		},
 		Function = function(val)
 			if val == 'Default' then
 				if HorizontalChance then HorizontalChance.Object.Visible = true end
@@ -3371,6 +3411,12 @@ run(function()
     	List = {'Left', 'Right', 'Pull', 'Random'},
     	Default = 'Random',
     	Tooltip = 'Left/Right: deflect sideways 90dg\nPull: go past the attacker\nRandom: pick one each hit',
+    	ItemTooltips = {
+    		Left = 'Deflects your knockback 90° to the left',
+    		Right = 'Deflects your knockback 90° to the right',
+    		Pull = 'Sends you past the attacker instead of away from them',
+    		Random = 'Randomly picks a direction each time you get hit',
+    	},
     })
     Chance = VelocityPlus:CreateSlider({
     	Name = 'Chance',
@@ -3496,6 +3542,11 @@ run(function()
         Name = 'Move Mode',
         Tooltip = 'Selects the move mode option',
         List = {'Normal', 'Collide', 'Velocity'},
+        ItemTooltips = {
+            Normal = 'Moves using standard walkspeed character movement',
+            Collide = 'Moves using physics collision to stay on the platform',
+            Velocity = 'Moves by directly setting character velocity each frame',
+        },
         Function = function(val)
             if AntiFallPart then
                 AntiFallPart.CanCollide = val == 'Collide'
@@ -4693,6 +4744,10 @@ run(function()
         Name = 'Mode',
         Tooltip = 'Selects the operating mode',
         List = {'Sword', 'Player'},
+        ItemTooltips = {
+            Sword = 'Expands the range around you — makes it easier to hit enemies with your sword',
+            Player = 'Expands each player's hitbox model — targets are larger and easier to click',
+        },
         Function = function(val)
             local isPlayer = val == 'Player'
             if AutoToggle then AutoToggle.Object.Visible = isPlayer end
@@ -4777,6 +4832,18 @@ run(function()
         List = {'Red', 'Blue', 'Green', 'Yellow', 'Orange', 'Purple', 'White', 'Cyan', 'Pink', 'Black'},
         Default = 'Red',
         Visible = false,
+        ItemTooltips = {
+            Red = 'Renders hitboxes in red',
+            Blue = 'Renders hitboxes in blue',
+            Green = 'Renders hitboxes in green',
+            Yellow = 'Renders hitboxes in yellow',
+            Orange = 'Renders hitboxes in orange',
+            Purple = 'Renders hitboxes in purple',
+            White = 'Renders hitboxes in white',
+            Cyan = 'Renders hitboxes in cyan',
+            Pink = 'Renders hitboxes in pink',
+            Black = 'Renders hitboxes in black',
+        },
         Tooltip = 'Color of the visible hitbox',
         Function = function(val)
             if HitBoxes.Enabled and Mode.Value == 'Player' and Visible.Enabled then
@@ -5359,6 +5426,11 @@ run(function()
     	List = {'Single', 'Multi', 'Switch'},
     	Tooltip = 'Single - Attacks one person at a time\nMulti - Attack multiple people at once\nSwitch - Switch between targets',
     	Default = 'Switch',
+    	ItemTooltips = {
+    		Single = 'Locks onto one target and hits them exclusively until they die or leave range',
+    		Multi = 'Splits attacks across all targets in range simultaneously',
+    		Switch = 'Cycles between targets in range each tick for balanced pressure',
+    	},
     	Function = function(val)
     		pcall(function()
     			MaxTargets.Object.Visible = val ~= 'Single'
@@ -5368,7 +5440,16 @@ run(function()
     Sort = Killaura:CreateDropdown({
         Name = 'Target Mode',
         Tooltip = 'Selects how targets are prioritized and selected',
-        List = methods
+        List = methods,
+        ItemTooltips = {
+            Distance = 'Targets the closest enemy by stud distance',
+            Health = 'Targets the enemy with the lowest remaining health',
+            Angle = 'Targets the enemy closest to your look direction',
+            Cursor = 'Targets the enemy nearest to your mouse cursor',
+            Damage = 'Targets the enemy who most recently took damage',
+            Threat = 'Targets the enemy judged to be the greatest combat threat',
+            Kit = 'Prioritizes dangerous kit users (Hannah, Spirit Assassin, etc.)',
+        },
     })
     Dynamic = Killaura:CreateToggle({
         Name = 'Dynamic hits',
@@ -5938,11 +6019,20 @@ run(function()
     	Name = 'Mode',
     	List = {'Mouse', 'Player'},
     	Tooltip = 'Where you\'re going to teleport to',
+    	ItemTooltips = {
+    		Mouse = 'Teleports to wherever your mouse cursor is pointing',
+    		Player = 'Teleports directly to a selected player',
+    	},
     })
     Movement = MouseTP:CreateDropdown({
     	Name = 'Movement',
     	List = {'All', 'Kits', 'Items'},
     	Tooltip = 'All - Uses Kits & Items to teleport',
+    	ItemTooltips = {
+    		All = 'Uses both kit abilities and inventory items to perform the teleport',
+    		Kits = 'Only uses the equipped kit ability to teleport',
+    		Items = 'Only uses inventory items (e.g. pearls) to teleport',
+    	},
     })
 end)
 
@@ -6572,14 +6662,29 @@ run(function()
 		Name = 'Sort Method',
 		List = {'Distance', 'Damage', 'Threat', 'Kit', 'Health', 'Angle', 'Cursor', 'Forest'},
 		Default = 'Distance',
-		Tooltip = 'Prioritize targets when multiple are in range'
+		Tooltip = 'Prioritize targets when multiple are in range',
+		ItemTooltips = {
+			Distance = 'Targets the closest enemy by stud distance',
+			Damage = 'Targets the enemy who most recently took damage',
+			Threat = 'Targets the enemy judged to be the greatest combat threat',
+			Kit = 'Prioritizes dangerous kit users (Hannah, Spirit Assassin, etc.)',
+			Health = 'Targets the enemy with the lowest remaining health',
+			Angle = 'Targets the enemy closest to your look direction',
+			Cursor = 'Targets the enemy nearest to your mouse cursor',
+			Forest = 'Targets based on Forest map positioning heuristic',
+		},
 	})
 
 	DesirePAWorkMode = ProjectileAimbot:CreateDropdown({
 		Name = 'PA Work Mode',
 		List = {'First Person', 'Third Person', 'Both'},
 		Default = 'Both',
-		Tooltip = 'Which perspective the aimbot works in'
+		Tooltip = 'Which perspective the aimbot works in',
+		ItemTooltips = {
+			['First Person'] = 'Aimbot only activates in first-person camera mode',
+			['Third Person'] = 'Aimbot only activates in third-person camera mode',
+			Both = 'Aimbot activates in both camera modes',
+		},
 	})
 
 	Range = ProjectileAimbot:CreateSlider({
@@ -6673,6 +6778,11 @@ run(function()
 		Tooltip = 'Selects in which camera mode the cursor is visible',
 		List = {'First Person', 'Third Person', 'Both'},
 		Default = 'First Person',
+		ItemTooltips = {
+			['First Person'] = 'Shows the aimbot cursor only in first-person',
+			['Third Person'] = 'Shows the aimbot cursor only in third-person',
+			Both = 'Shows the aimbot cursor in both camera modes',
+		},
 		Darker = true,
 		Visible = false,
 		Function = function()
@@ -6924,7 +7034,16 @@ run(function()
     	Name = 'Target Mode',
     	Tooltip = 'Selects how targets are prioritized and selected',
     	List = methods,
-    	Default = 'Distance'
+    	Default = 'Distance',
+    	ItemTooltips = {
+    		Distance = 'Targets the closest enemy by stud distance',
+    		Health = 'Targets the enemy with the lowest remaining health',
+    		Angle = 'Targets the enemy closest to your look direction',
+    		Cursor = 'Targets the enemy nearest to your mouse cursor',
+    		Damage = 'Targets the enemy who most recently took damage',
+    		Threat = 'Targets the enemy judged to be the greatest combat threat',
+    		Kit = 'Prioritizes dangerous kit users (Hannah, Spirit Assassin, etc.)',
+    	}
     })
     List = ProjectileAura:CreateTextList({
     	Name = 'Projectiles',
@@ -7016,7 +7135,11 @@ run(function()
         Name = 'Method',
         Tooltip = 'Selects the implementation method',
         List = {'Bedwars', 'CFrame'},
-        Default = 'CFrame'
+        Default = 'CFrame',
+        ItemTooltips = {
+            Bedwars = 'Uses the game's own walk speed API — more compatible but capped',
+            CFrame = 'Moves the character CFrame directly each frame — faster and uncapped',
+        }
     })
     Value = Speed:CreateSlider({
         Name = 'Speed',
@@ -9501,6 +9624,15 @@ run(function()
         Tooltip = 'Selects the skin category',
         List = { 'All', 'Gold', 'Platinum', 'Diamond', 'Emerald', 'Nightmare', 'Void' },
         Default = 'All',
+        ItemTooltips = {
+            All = 'Show all available skins regardless of tier',
+            Gold = 'Show only Gold-tier skins',
+            Platinum = 'Show only Platinum-tier skins',
+            Diamond = 'Show only Diamond-tier skins',
+            Emerald = 'Show only Emerald-tier skins',
+            Nightmare = 'Show only Nightmare-tier skins',
+            Void = 'Show only Void-tier skins',
+        },
     })
 end)
 
@@ -10531,7 +10663,11 @@ run(function()
         Name = 'Prediction',
         List = {'Off', 'On'},
         Default = 'On',
-        Tooltip = 'Predict target movement for better accuracy'
+        Tooltip = 'Predict target movement for better accuracy',
+        ItemTooltips = {
+            Off = 'Aims directly at the target's current position',
+            On = 'Leads the shot based on target velocity for better hit rate',
+        }
     })
 end)
 
@@ -11485,6 +11621,10 @@ run(function()
         Tooltip = 'Selects the operating mode',
         List = { 'Manual', 'Lag Based' },
         Default = 'Manual',
+        ItemTooltips = {
+            Manual = 'Uses a fixed latency value you set to determine back-track depth',
+            ['Lag Based'] = 'Automatically calculates back-track depth from your current ping',
+        },
         Function = function(val)
             if Latency and Tick then
                 Latency.Object.Visible = val == 'Manual'
@@ -11578,6 +11718,11 @@ run(function()
         Tooltip = 'Selects the operating mode',
         List = { 'Dynamic', 'Repel', 'Latency' },
         Default = 'Dynamic',
+        ItemTooltips = {
+            Dynamic = 'Freezes packets briefly then releases in a burst — shows a configurable offset window',
+            Repel = 'Continuously repels movement packets to simulate lag spikes',
+            Latency = 'Holds all outgoing packets for the configured delay duration',
+        },
         Function = function(val)
             TransmissionOffset.Object.Visible = val == 'Dynamic'
             setfflag('PhysicsSenderMaxBandwidthBps', '38760')
@@ -12187,6 +12332,13 @@ run(function()
         Name = 'Mode',
         Tooltip = 'Selects the operating mode',
         List = {'Uninject', 'Profile', 'Requeue', 'AutoConfig', 'Notify'},
+        ItemTooltips = {
+            Uninject = 'Fully uninjects Vain when a staff member is detected',
+            Profile = 'Switches to a clean saved profile to hide settings',
+            Requeue = 'Leaves and rejoins a new server automatically',
+            AutoConfig = 'Disables suspicious modules to look legit',
+            Notify = 'Only sends a notification — takes no automatic action',
+        },
         Function = function(val)
             if Profile.Object then
                 Profile.Object.Visible = val == 'Profile'
@@ -12695,6 +12847,10 @@ run(function()
         Tooltip = 'Selects the operating mode',
         List = {'Toggle', 'On Key'},
         Default = 'Toggle',
+        ItemTooltips = {
+            Toggle = 'Runs continuously whenever the module is enabled',
+            ['On Key'] = 'Only places blocks while the configured keybind is held',
+        },
         Function = function(val)
             if Smart then
                 Smart.Object.Visible = val == 'Toggle'
@@ -12935,6 +13091,10 @@ run(function()
     	Tooltip = 'Selects the block placement strategy',
     	List = { 'Normal', 'Smart' },
     	Default = 'Normal',
+    	ItemTooltips = {
+    		Normal = 'Places blocks at a fixed rate without adapting to server feedback',
+    		Smart = 'Adjusts placement timing based on server response to reduce rejections',
+    	},
     })
     PlaceDelay = BlockIn:CreateTwoSlider({
     	Name = 'Place Delay',
@@ -13300,7 +13460,11 @@ run(function()
     Mode = Schematica:CreateDropdown({
         Name = 'Mode',
         Tooltip = 'Selects the operating mode',
-        List = {'Load', 'Save'}
+        List = {'Load', 'Save'},
+        ItemTooltips = {
+            Load = 'Loads a saved schematic and rebuilds the structure block by block',
+            Save = 'Captures the blocks in the selected region and saves them to a file',
+        },
     })
     Transparency = Schematica:CreateSlider({
         Name = 'Transparency',
@@ -13372,7 +13536,11 @@ run(function()
     Mode = ArmorSwitch:CreateDropdown({
         Name = 'Mode',
         Tooltip = 'Selects the operating mode',
-        List = {'Toggle', 'On Key'}
+        List = {'Toggle', 'On Key'},
+        ItemTooltips = {
+            Toggle = 'Swaps armor automatically whenever the module is enabled',
+            ['On Key'] = 'Swaps armor only while the configured keybind is held',
+        },
     })
     Targets = ArmorSwitch:CreateTargets({
     	Tooltip = 'Configure which types of targets to include',
@@ -14652,6 +14820,10 @@ run(function()
         Name = 'Activation',
         Tooltip = 'Selects what triggers this module to activate',
         List = {'Toggle', 'On Key'},
+        ItemTooltips = {
+            Toggle = 'Rearranges the hotbar automatically whenever the module is enabled',
+            ['On Key'] = 'Rearranges the hotbar only while the configured keybind is held',
+        },
         Function = function()
             if AutoHotbar.Enabled then
                 AutoHotbar:Toggle()
@@ -15719,6 +15891,10 @@ run(function()
     	Name = 'Contract mode',
     	List = {'On Hit', 'On Low'},
     	Tooltip = 'On Hit - Contracts them whenever u start hitting them\nOn Low - When they\'re low',
+    	ItemTooltips = {
+    		['On Hit'] = 'Assigns the contract as soon as you start dealing damage to the enemy',
+    		['On Low'] = 'Waits until the enemy is low health before assigning the contract',
+    	},
     	Function = function(val)
     		if MinHP then
     			MinHP.Object.Visible = val == 'On Low'
@@ -16028,7 +16204,16 @@ run(function()
     	Name = 'Sort',
     	Tooltip = 'Selects how targets are sorted/prioritized',
     	List = methods,
-    	Default = 'Distance'
+    	Default = 'Distance',
+    	ItemTooltips = {
+    		Distance = 'Targets the closest enemy by stud distance',
+    		Health = 'Targets the enemy with the lowest remaining health',
+    		Angle = 'Targets the enemy closest to your look direction',
+    		Cursor = 'Targets the enemy nearest to your mouse cursor',
+    		Damage = 'Targets the enemy who most recently took damage',
+    		Threat = 'Targets the enemy judged to be the greatest combat threat',
+    		Kit = 'Prioritizes dangerous kit users (Hannah, Spirit Assassin, etc.)',
+    	}
     })
     updateAttackControls()
 end)
@@ -16357,10 +16542,19 @@ run(function()
     	end
     end
     AutoHannah:CreateDropdown({
-    	Name = 'Target mode', 
+    	Name = 'Target mode',
     	Tooltip = 'Selects how targets are prioritized and selected',
     	List = methods,
-    	Default = 'Health'
+    	Default = 'Health',
+    	ItemTooltips = {
+    		Distance = 'Targets the closest enemy by stud distance',
+    		Health = 'Targets the enemy with the lowest remaining health',
+    		Angle = 'Targets the enemy closest to your look direction',
+    		Cursor = 'Targets the enemy nearest to your mouse cursor',
+    		Damage = 'Targets the enemy who most recently took damage',
+    		Threat = 'Targets the enemy judged to be the greatest combat threat',
+    		Kit = 'Prioritizes dangerous kit users (Hannah, Spirit Assassin, etc.)',
+    	},
     })
     AutoHannah:CreateToggle({
     	Name = 'Only killaura target',
@@ -17016,7 +17210,16 @@ run(function()
     	Name = 'Target Mode',
     	Tooltip = 'Selects how targets are prioritized and selected',
     	List = methods,
-    	Default = 'Distance'
+    	Default = 'Distance',
+    	ItemTooltips = {
+    		Distance = 'Targets the closest enemy by stud distance',
+    		Health = 'Targets the enemy with the lowest remaining health',
+    		Angle = 'Targets the enemy closest to your look direction',
+    		Cursor = 'Targets the enemy nearest to your mouse cursor',
+    		Damage = 'Targets the enemy who most recently took damage',
+    		Threat = 'Targets the enemy judged to be the greatest combat threat',
+    		Kit = 'Prioritizes dangerous kit users (Hannah, Spirit Assassin, etc.)',
+    	}
     })
     Range = AutoRamil:CreateSlider({
     	Name = 'Range',
@@ -17645,7 +17848,16 @@ run(function()
     	Name = 'Target Mode',
     	Tooltip = 'Selects how targets are prioritized and selected',
     	List = methods,
-    	Default = 'Distance'
+    	Default = 'Distance',
+    	ItemTooltips = {
+    		Distance = 'Targets the closest enemy by stud distance',
+    		Health = 'Targets the enemy with the lowest remaining health',
+    		Angle = 'Targets the enemy closest to your look direction',
+    		Cursor = 'Targets the enemy nearest to your mouse cursor',
+    		Damage = 'Targets the enemy who most recently took damage',
+    		Threat = 'Targets the enemy judged to be the greatest combat threat',
+    		Kit = 'Prioritizes dangerous kit users (Hannah, Spirit Assassin, etc.)',
+    	}
     })
     Limit = AutoZeno:CreateToggle({
     	Name = 'Limit to item',
@@ -17781,13 +17993,21 @@ run(function()
     	Name = 'Aim Mode',
     	Tooltip = 'Selects the aiming technique',
     	List = {'Fast', 'Legit'},
-    	Default = 'Fast'
+    	Default = 'Fast',
+    	ItemTooltips = {
+    		Fast = 'Instantly snaps the cannon aim to the target each frame',
+    		Legit = 'Smoothly lerps the cannon aim toward the target for a human-like appearance',
+    	},
     })
     DaveyAim:CreateDropdown({
     	Name = 'Position Mode',
     	Tooltip = 'Selects the reference position for aiming',
     	List = {'Mouse', 'Camera'},
-    	Default = 'Mouse'
+    	Default = 'Mouse',
+    	ItemTooltips = {
+    		Mouse = 'Aims the cannon based on your mouse cursor position',
+    		Camera = 'Aims the cannon based on where the camera is looking',
+    	}
     })
     Range = DaveyAim:CreateSlider({
     	Name = 'Search Range',
@@ -18280,6 +18500,11 @@ run(function()
         Name = 'Device',
         Tooltip = 'Selects the device type to report to the server',
         List = {'Mobile', 'PC', 'Gamepad'},
+        ItemTooltips = {
+            Mobile = 'Reports your device as a touchscreen mobile — shows tap controls to others',
+            PC = 'Reports your device as a desktop PC with keyboard and mouse',
+            Gamepad = 'Reports your device as a gamepad/controller',
+        },
         Function = function(val)
             if DeviceSpoofer.Enabled then
                 lplr:SetAttribute('UserInputType', val)
@@ -20007,7 +20232,15 @@ run(function()
 	AngleSlider = Killaura:CreateSlider({Name = 'Max angle', Min = 1, Max = 360, Default = 360, Tooltip = 'Maximum angle in degrees from your look direction to engage'})
 	UpdateRate = Killaura:CreateSlider({Name = 'Update rate', Min = 1, Max = 120, Default = 60, Suffix = 'hz', Tooltip = 'How often to scan for targets (seconds)'})
 	MaxTargets = Killaura:CreateSlider({Name = 'Max targets', Min = 1, Max = 5, Default = 5, Tooltip = 'Maximum number of enemies to attack simultaneously'})
-	Sort = Killaura:CreateDropdown({Name = 'Target Mode', List = methods, Tooltip = 'Selects how targets are prioritized and selected'})
+	Sort = Killaura:CreateDropdown({Name = 'Target Mode', List = methods, Tooltip = 'Selects how targets are prioritized and selected', ItemTooltips = {
+		Distance = 'Targets the closest enemy by stud distance',
+		Health = 'Targets the enemy with the lowest remaining health',
+		Angle = 'Targets the enemy closest to your look direction',
+		Cursor = 'Targets the enemy nearest to your mouse cursor',
+		Damage = 'Targets the enemy who most recently took damage',
+		Threat = 'Targets the enemy judged to be the greatest combat threat',
+		Kit = 'Prioritizes dangerous kit users (Hannah, Spirit Assassin, etc.)',
+	}})
 	Mouse = Killaura:CreateToggle({Name = 'Require mouse down', Tooltip = 'Only activates while the left mouse button is held'})
 	Swing = Killaura:CreateToggle({Name = 'No Swing', Tooltip = 'Sends hit packets without playing the swing animation'})
 	GUI = Killaura:CreateToggle({Name = 'GUI check', Tooltip = 'Pauses the module when a GUI menu is open'})
@@ -23359,6 +23592,10 @@ run(function()
 		List = raknet and raknet.add_send_hook and {'TelePearl', 'Raknet'} or {'TelePearl'},
 		Default = 'TelePearl',
 		Tooltip = 'more coming!!',
+		ItemTooltips = {
+			TelePearl = 'Cancels fall damage by teleporting slightly upward at the moment of impact',
+			Raknet = 'Intercepts and drops the fall-damage packet at the network layer (requires Raknet)',
+		},
 		Function = function(v)
 			if LimitToItems then
 				LimitToItems.Object.Visible = v == 'TelePearl'
@@ -24533,6 +24770,11 @@ run(function()
         List = {'Both', 'First Person', 'Third Person'},
         Default = 'Both',
         Visible = false,
+        ItemTooltips = {
+            Both = 'Module works in both first-person and third-person camera modes',
+            ['First Person'] = 'Module only activates in first-person camera mode',
+            ['Third Person'] = 'Module only activates in third-person camera mode',
+        },
         Tooltip = 'Which camera mode to work in'
     })
 end)
@@ -27286,7 +27528,13 @@ run(function()
 		Name = 'Potion',
 		List = {'Sleep Potion', 'Shield', 'Poison Potion', 'Heal Potion'},
 		Default = 'Sleep Potion',
-		Tooltip = 'Select which potion to auto brew'
+		Tooltip = 'Select which potion to auto brew',
+		ItemTooltips = {
+			['Sleep Potion'] = 'Brews a sleep potion that puts nearby enemies to sleep on contact',
+			Shield = 'Brews a shield potion that grants temporary damage reduction',
+			['Poison Potion'] = 'Brews a poison potion that deals damage over time',
+			['Heal Potion'] = 'Brews a heal potion that restores health on use',
+		}
 	})
 end)
 
@@ -28691,7 +28939,15 @@ run(function()
 		Name = 'KBDirection',
 		List = {'Default', 'Backwards', 'Up', 'Left', 'Right', 'Reverse'},
 		Default = 'Default',
-		Tooltip = 'Choose which direction to redirect your knockback'
+		Tooltip = 'Choose which direction to redirect your knockback',
+		ItemTooltips = {
+			Default = 'Keeps knockback in its original server-determined direction',
+			Backwards = 'Sends knockback away from your look direction (into the attacker)',
+			Up = 'Redirects knockback straight upward',
+			Left = 'Redirects knockback to your left',
+			Right = 'Redirects knockback to your right',
+			Reverse = 'Fully reverses the knockback direction back toward the attacker',
+		}
 	})
 end)
 

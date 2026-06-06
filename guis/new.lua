@@ -6019,6 +6019,25 @@ friends.Update = Instance.new('BindableEvent')
 friends.ColorUpdate = Instance.new('BindableEvent')
 mainapi:Clean(friends.Update)
 mainapi:Clean(friends.ColorUpdate)
+friends:CreateToggle({
+	Name = 'Recolor visuals',
+	Darker = true,
+	Default = true,
+	Tooltip = 'Recolors friend highlights using the friends color',
+	Function = function()
+		friends.Update:Fire()
+		friends.ColorUpdate:Fire()
+	end
+})
+friends:CreateToggle({
+	Name = 'Use friends',
+	Darker = true,
+	Default = true,
+	Tooltip = 'When enabled, only targets not on your friends list',
+	Function = function()
+		friends.Update:Fire()
+	end
+})
 
 --[[
 	Profiles
