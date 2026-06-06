@@ -2861,9 +2861,8 @@ run(function()
 	local ProjectileDelayShoot
 
 	local rayparms = RaycastParams.new()
-	rayparms.FilterType = sharedRaycast.FilterType
-	rayparms.FilterDescendantsInstances = sharedRaycast.FilterDescendantsInstances
-	rayparms.RespectCanCollide = sharedRaycast.RespectCanCollide
+	rayparms.FilterType = Enum.RaycastFilterType.Exclude
+	rayparms.RespectCanCollide = false
 	rayparms.FilterDescendantsInstances = {lplr.Character}
 
 	local lastCapture = 0
