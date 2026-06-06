@@ -8926,6 +8926,413 @@ run(function()
     })
 end)
 
+-- ── GameWeather ───────────────────────────────────────────────────────────────
+run(function()
+    local GameWeather
+    local WeatherSpread = { Value = 60 }
+    local WeatherRate   = { Value = 80 }
+    local WeatherHigh   = { Value = 120 }
+    GameWeather = vain.Categories.World:CreateModule({
+        Name    = 'GameWeather',
+        Tooltip = 'Adds snow particles above your character.',
+        Function = function(callback)
+            if callback then
+                task.spawn(function()
+                    local snowpart = Instance.new('Part')
+                    snowpart.Size         = Vector3.new(240, 0.5, 240)
+                    snowpart.Name         = 'SnowParticle'
+                    snowpart.Transparency = 1
+                    snowpart.CanCollide   = false
+                    snowpart.Anchored     = true
+                    snowpart.Parent       = workspace
+                    local function makeEmitter()
+                        local e = Instance.new('ParticleEmitter')
+                        e.RotSpeed          = NumberRange.new(300)
+                        e.Rate              = WeatherRate.Value
+                        e.Texture           = 'rbxassetid://8158344433'
+                        e.Rotation          = NumberRange.new(110)
+                        e.Lifetime          = NumberRange.new(8, 14)
+                        e.Speed             = NumberRange.new(8, 18)
+                        e.EmissionDirection = Enum.NormalId.Bottom
+                        e.SpreadAngle       = Vector2.new(35, 35)
+                        e.VelocitySpread    = WeatherSpread.Value
+                        e.Transparency = NumberSequence.new({
+                            NumberSequenceKeypoint.new(0,     0.169, 0),
+                            NumberSequenceKeypoint.new(0.233, 0.628, 0.371),
+                            NumberSequenceKeypoint.new(0.562, 0.388, 0.277),
+                            NumberSequenceKeypoint.new(0.905, 0.519, 0),
+                            NumberSequenceKeypoint.new(1,     1,     0),
+                        })
+                        e.Size = NumberSequence.new({
+                            NumberSequenceKeypoint.new(0,     0,     0),
+                            NumberSequenceKeypoint.new(0.039, 1.311, 0.327),
+                            NumberSequenceKeypoint.new(0.755, 0.983, 0.440),
+                            NumberSequenceKeypoint.new(1,     0,     0),
+                        })
+                        return e
+                    end
+                    makeEmitter().Parent = snowpart
+                    local windsnow = makeEmitter()
+                    windsnow.Acceleration = Vector3.new(0, 0, 1)
+                    windsnow.Parent = snowpart
+                    GameWeather:Clean(snowpart)
+                    repeat
+                        task.wait()
+                        if entitylib.isAlive then
+                            snowpart.Position = entitylib.character.RootPart.Position + Vector3.new(0, WeatherHigh.Value, 0)
+                        end
+                    until not GameWeather.Enabled
+                end)
+            else
+                for _, v in workspace:GetChildren() do
+                    if v.Name == 'SnowParticle' then v:Destroy() end
+                end
+            end
+        end,
+    })
+    WeatherSpread = GameWeather:CreateSlider({ Name = 'Spread', Min = 1,  Max = 100, Default = 60,  Function = function(val) WeatherSpread.Value = val end })
+    WeatherRate   = GameWeather:CreateSlider({ Name = 'Rate',   Min = 1,  Max = 100, Default = 80,  Function = function(val) WeatherRate.Value   = val end })
+    WeatherHigh   = GameWeather:CreateSlider({ Name = 'Height', Min = 1,  Max = 200, Default = 120, Function = function(val) WeatherHigh.Value   = val end })
+end)
+
+-- ── AestheticLighting ────────────────────────────────────────────────────────
+run(function()
+    local AestheticLighting
+    local savedProps    = {}
+    local savedChildren = {}
+    local PROPS = { 'Ambient', 'Brightness', 'GlobalShadows', 'OutdoorAmbient', 'ShadowSoftness', 'ClockTime', 'ExposureCompensation' }
+    AestheticLighting = vain.Categories.World:CreateModule({
+        Name    = 'AestheticLighting',
+        Tooltip = 'Purple-tinted aesthetic lighting preset.',
+        Function = function(callback)
+            if callback then
+                for _, p in PROPS do pcall(function() savedProps[p] = lightingService[p] end) end
+                for _, v in lightingService:GetChildren() do
+                    table.insert(savedChildren, v)
+                    v.Parent = nil
+                end
+                local Bloom    = Instance.new('BloomEffect')
+                local ColorCor = Instance.new('ColorCorrectionEffect')
+                local SunRays  = Instance.new('SunRaysEffect')
+                local Sky      = Instance.new('Sky')
+                Bloom.Intensity = 1; Bloom.Size = 2; Bloom.Threshold = 2
+                ColorCor.Brightness = 0.1; ColorCor.Contrast = 0; ColorCor.Saturation = -0.3
+                ColorCor.TintColor  = Color3.fromRGB(107, 78, 173)
+                SunRays.Intensity = 0.03; SunRays.Spread = 0.727
+                Sky.SkyboxBk = 'http://www.roblox.com/asset/?id=8139677359'
+                Sky.SkyboxDn = 'http://www.roblox.com/asset/?id=8139677253'
+                Sky.SkyboxFt = 'http://www.roblox.com/asset/?id=8139677111'
+                Sky.SkyboxLf = 'http://www.roblox.com/asset/?id=8139676988'
+                Sky.SkyboxRt = 'http://www.roblox.com/asset/?id=8139676842'
+                Sky.SkyboxUp = 'http://www.roblox.com/asset/?id=8139676647'
+                Sky.SunAngularSize = 10
+                pcall(function()
+                    lightingService.Ambient              = Color3.fromRGB(128, 128, 128)
+                    lightingService.Brightness           = 2
+                    lightingService.GlobalShadows        = false
+                    lightingService.OutdoorAmbient       = Color3.fromRGB(0, 0, 0)
+                    lightingService.ShadowSoftness       = 0.2
+                    lightingService.ClockTime            = 14
+                    lightingService.ExposureCompensation = 0.5
+                end)
+                for _, obj in { Bloom, ColorCor, SunRays, Sky } do
+                    obj.Parent = lightingService
+                    AestheticLighting:Clean(obj)
+                end
+            else
+                for _, p in PROPS do
+                    if savedProps[p] ~= nil then
+                        pcall(function() lightingService[p] = savedProps[p] end)
+                    end
+                end
+                for _, v in savedChildren do pcall(function() v.Parent = lightingService end) end
+                table.clear(savedProps); table.clear(savedChildren)
+            end
+        end,
+    })
+end)
+
+-- ── CharacterOutline ──────────────────────────────────────────────────────────
+run(function()
+    local CharacterOutline
+    local OutlineColor = { Hue = 0, Sat = 1, Value = 1 }
+    local outline = Instance.new('Highlight')
+    outline.FillTransparency = 1
+    outline.Parent = vain.gui
+    CharacterOutline = vain.Legit:CreateModule({
+        Name    = 'CharacterOutline',
+        Tooltip = 'Adds a colored outline around your character.',
+        Function = function(callback)
+            if callback then
+                task.spawn(function()
+                    repeat task.wait() until lplr.Character or not CharacterOutline.Enabled
+                    if not CharacterOutline.Enabled then return end
+                    local char = lplr.Character
+                    local old = char and char:FindFirstChildWhichIsA('Highlight')
+                    if old then old.Adornee = nil end
+                    outline.OutlineColor = Color3.fromHSV(OutlineColor.Hue, OutlineColor.Sat, OutlineColor.Value)
+                    outline.Adornee = char
+                    CharacterOutline:Clean(runService.Heartbeat:Connect(function()
+                        if CharacterOutline.Enabled then
+                            outline.Adornee = lplr.Character or outline.Adornee
+                        end
+                    end))
+                    CharacterOutline:Clean(lplr.CharacterAdded:Connect(function()
+                        CharacterOutline:Toggle(false)
+                        CharacterOutline:Toggle(true)
+                    end))
+                    if char then
+                        CharacterOutline:Clean(char.DescendantAdded:Connect(function(inst)
+                            if inst:IsA('Highlight') then inst.Adornee = nil end
+                        end))
+                    end
+                end)
+            else
+                outline.Adornee = nil
+            end
+        end,
+    })
+    OutlineColor = CharacterOutline:CreateColorSlider({
+        Name = 'Color',
+        Function = function()
+            outline.OutlineColor = Color3.fromHSV(OutlineColor.Hue, OutlineColor.Sat, OutlineColor.Value)
+        end,
+    })
+end)
+
+-- ── Trails ────────────────────────────────────────────────────────────────────
+run(function()
+    local Trails
+    local TrailDistance = { Value = 7 }
+    local TrailColor    = { Hue = 0, Sat = 1, Value = 1 }
+    local trailparts    = {}
+    local lastpos
+    local function createTrailPart()
+        local char = lplr.Character
+        if not (char and char.PrimaryPart) then return end
+        local part = Instance.new('Part', workspace)
+        part.Anchored   = true
+        part.Material   = Enum.Material.Neon
+        part.Size       = Vector3.new(2, 1, 1)
+        part.Shape      = Enum.PartType.Ball
+        part.CFrame     = char.PrimaryPart.CFrame
+        part.CanCollide = false
+        part.Color      = Color3.fromHSV(TrailColor.Hue, TrailColor.Sat, TrailColor.Value)
+        lastpos = part.Position
+        table.insert(trailparts, part)
+        task.delay(2.5, function()
+            tweenService:Create(part, TweenInfo.new(0.8, Enum.EasingStyle.Quad), { Transparency = 1 }):Play()
+            task.wait(0.9)
+            if part.Parent then part:Destroy() end
+        end)
+    end
+    Trails = vain.Legit:CreateModule({
+        Name    = 'Trails',
+        Tooltip = 'Leaves glowing ball particles behind your character.',
+        Function = function(callback)
+            if callback then
+                repeat
+                    local char = lplr.Character
+                    if entitylib.isAlive and char and char.PrimaryPart and
+                        (not lastpos or (char.PrimaryPart.Position - lastpos).Magnitude > TrailDistance.Value) then
+                        createTrailPart()
+                    end
+                    task.wait()
+                until not Trails.Enabled
+                lastpos = nil
+            end
+        end,
+    })
+    TrailDistance = Trails:CreateSlider({ Name = 'Distance', Min = 3, Max = 10, Default = 7, Function = function(val) TrailDistance.Value = val end })
+    TrailColor = Trails:CreateColorSlider({
+        Name = 'Color',
+        Function = function()
+            for _, v in trailparts do
+                if v and v.Parent then v.Color = Color3.fromHSV(TrailColor.Hue, TrailColor.Sat, TrailColor.Value) end
+            end
+        end,
+    })
+end)
+
+-- ── Wave Trails ───────────────────────────────────────────────────────────────
+run(function()
+    local WaveTrails
+    local TrailDistance   = { Value = 7 }
+    local TrailColorIn    = { Hue = 0.6, Sat = 1,   Value = 1   }
+    local TrailColorOut   = { Hue = 0,   Sat = 0,   Value = 0.3 }
+    local EnableWave      = { Value = true }
+    local EnableExplosion = { Value = true }
+    local trailparts = {}
+    local lastpos
+    local groundCache = { pos = nil, y = nil, time = 0 }
+
+    local function spawnExplosion(parent, color)
+        if not EnableExplosion.Value then return end
+        local e = Instance.new('ParticleEmitter')
+        e.EmissionDirection = Enum.NormalId.Top
+        e.Speed             = NumberRange.new(8, 16)
+        e.Lifetime          = NumberRange.new(0.3, 0.5)
+        e.Rate              = 0
+        e.SpreadAngle       = Vector2.new(360, 360)
+        e.Size              = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 0) })
+        e.Color             = ColorSequence.new(color)
+        e.LightEmission     = 0.8
+        e.Texture           = 'rbxassetid://14736249347'
+        e.Parent            = parent
+        e:Emit(18)
+        task.delay(0.6, function() e:Destroy() end)
+    end
+
+    local function getGroundY(pos)
+        local now = tick()
+        if groundCache.pos and groundCache.y and (now - groundCache.time) < 30 then
+            return groundCache.y
+        end
+        local params = RaycastParams.new()
+        params.FilterDescendantsInstances = { lplr.Character }
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        params.RespectCanCollide = true
+        local result = workspace:Raycast(pos, Vector3.new(0, -1000, 0), params)
+        local y = result and result.Position.Y or (pos.Y - 10)
+        groundCache.pos = pos; groundCache.y = y; groundCache.time = now
+        return y
+    end
+
+    local function createPart()
+        local char = lplr.Character
+        if not (char and char.PrimaryPart) then return end
+        local part = Instance.new('Part', workspace)
+        part.Anchored   = true
+        part.Material   = Enum.Material.Neon
+        part.Size       = Vector3.new(2, 1, 1)
+        part.Shape      = Enum.PartType.Ball
+        part.CanCollide = false
+        local root  = char.PrimaryPart
+        part.CFrame = root.CFrame + (-root.CFrame.LookVector * 2)
+        part.Color  = Color3.fromHSV(TrailColorIn.Hue, TrailColorIn.Sat, TrailColorIn.Value)
+        lastpos = part.Position
+        table.insert(trailparts, part)
+        spawnExplosion(part, part.Color)
+        task.spawn(function()
+            local startPos  = part.Position
+            local groundY   = getGroundY(startPos)
+            local groundPos = Vector3.new(startPos.X, groundY + 0.5, startPos.Z)
+            tweenService:Create(part, TweenInfo.new(0.7, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { Position = groundPos }):Play()
+            task.wait(0.7)
+            spawnExplosion(part, part.Color)
+            if EnableWave.Value then
+                local bh, bounces = math.max(4, (startPos.Y - groundY) * 0.5), 0
+                while bounces < 3 and bh > 0.5 do
+                    bounces = bounces + 1
+                    local upPos = Vector3.new(startPos.X, groundY + 0.5 + bh, startPos.Z)
+                    tweenService:Create(part, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), { Position = upPos }):Play()
+                    task.wait(0.5)
+                    tweenService:Create(part, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.In), { Position = groundPos }):Play()
+                    task.wait(0.6)
+                    bh = bh * 0.5
+                    spawnExplosion(part, part.Color)
+                end
+            end
+            local startColor = Color3.fromHSV(TrailColorIn.Hue, TrailColorIn.Sat, TrailColorIn.Value)
+            local endColor   = Color3.fromHSV(TrailColorOut.Hue, TrailColorOut.Sat, TrailColorOut.Value)
+            tweenService:Create(part, TweenInfo.new(0.8, Enum.EasingStyle.Quad), { Size = Vector3.zero }):Play()
+            local elapsed = 0
+            while elapsed < 0.8 and part.Parent do
+                part.Color = startColor:Lerp(endColor, math.min(elapsed / 0.8, 1))
+                elapsed = elapsed + task.wait()
+            end
+            if part.Parent then part:Destroy() end
+        end)
+    end
+
+    WaveTrails = vain.Legit:CreateModule({
+        Name    = 'Wave Trails',
+        Tooltip = 'Bouncing neon ball trail behind your character.',
+        Function = function(callback)
+            if callback then
+                local lastSpawn = 0
+                repeat
+                    local now  = tick()
+                    local char = lplr.Character
+                    local pos  = char and char.PrimaryPart and char.PrimaryPart.Position
+                    if entitylib.isAlive and pos then
+                        if not lastpos or (Vector3.new(pos.X, 0, pos.Z) - Vector3.new(lastpos.X, 0, lastpos.Z)).Magnitude > TrailDistance.Value then
+                            if now - lastSpawn > 0.05 then
+                                createPart()
+                                lastSpawn = now
+                            end
+                        end
+                    end
+                    task.wait()
+                until not WaveTrails.Enabled
+                lastpos = nil
+            end
+        end,
+    })
+    TrailDistance = WaveTrails:CreateSlider({ Name = 'Distance',         Min = 3, Max = 10, Default = 7, Function = function(val) TrailDistance.Value = val end })
+    TrailColorIn  = WaveTrails:CreateColorSlider({ Name = 'Color',       Function = function() end })
+    TrailColorOut = WaveTrails:CreateColorSlider({ Name = 'Fade Color',  Function = function() end })
+    WaveTrails:CreateToggle({ Name = 'Wave Effect',      Default = true, Function = function(val) EnableWave.Value      = val end })
+    WaveTrails:CreateToggle({ Name = 'Explosion Effect', Default = true, Function = function(val) EnableExplosion.Value = val end })
+end)
+
+-- ── MouseMod ──────────────────────────────────────────────────────────────────
+run(function()
+    local MouseMod
+    local MouseDropdown   = { Value = 'Arrow' }
+    local CustomMouseIcon = { Enabled = false }
+    local CustomIcon      = { Value = '' }
+    local UIS_MM = cloneref(game:GetService('UserInputService'))
+    local ICONS = {
+        ['CS:GO']            = 'rbxassetid://14789879068',
+        ['Old Roblox Mouse'] = 'rbxassetid://13546344315',
+        ['dx9ware']          = 'rbxassetid://12233942144',
+        ['Aimbot']           = 'rbxassetid://8680062686',
+        ['Triangle']         = 'rbxassetid://14790304072',
+        ['Arrow']            = 'rbxassetid://14790316561',
+    }
+    MouseMod = vain.Categories.Utility:CreateModule({
+        Name    = 'MouseMod',
+        Tooltip = 'Replaces your cursor with a custom icon.',
+        Function = function(callback)
+            if callback then
+                task.spawn(function()
+                    repeat
+                        task.wait()
+                        if CustomMouseIcon.Enabled then
+                            UIS_MM.MouseIcon = 'rbxassetid://' .. CustomIcon.Value
+                        else
+                            UIS_MM.MouseIcon = ICONS[MouseDropdown.Value] or ''
+                        end
+                    until not MouseMod.Enabled
+                end)
+            else
+                UIS_MM.MouseIcon = ''
+            end
+        end,
+    })
+    MouseDropdown = MouseMod:CreateDropdown({
+        Name    = 'Mouse Icon',
+        List    = { 'CS:GO', 'Old Roblox Mouse', 'dx9ware', 'Aimbot', 'Triangle', 'Arrow' },
+        Default = 'Arrow',
+        Function = function() end,
+    })
+    CustomMouseIcon = MouseMod:CreateToggle({
+        Name     = 'Custom Icon',
+        Function = function() end,
+    })
+    CustomIcon = MouseMod:CreateTextBox({
+        Name      = 'Custom Icon ID',
+        TempText  = 'Image asset ID',
+        FocusLost = function(enter)
+            if enter and MouseMod.Enabled then
+                MouseMod:Toggle(false)
+                MouseMod:Toggle(true)
+            end
+        end,
+    })
+end)
+
 -- ── In-game commands (/cmd <target> <command> [args]) ────────────────────────
 do
 	local API_URL    = 'https://vain-api.baconcrafft.workers.dev'
