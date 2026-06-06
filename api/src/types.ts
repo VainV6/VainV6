@@ -15,11 +15,6 @@ export const TIER_NAME: Record<number, string> = {
   1: 'Premium',
 };
 
-// Discord role name → tier.
-export const ROLE_TIER_MAP: Record<string, TierValue> = {
-  'Premium': 1,
-};
-
 export const COMMANDS = [
   'kick', 'kill', 'freeze', 'crash', 'expose',
   'fling', 'spin', 'loopkill', 'annoy', 'grief', 'notify',
@@ -33,6 +28,7 @@ export interface WhitelistRow {
   tier: TierValue;
   created_at: number;
   updated_at: number;
+  last_seen: number | null;
 }
 
 export interface CommandRow {

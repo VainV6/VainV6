@@ -10,46 +10,26 @@ async function main() {
   const commands = [
     {
       name: 'whitelist',
-      description: 'Link or manage your Vain whitelist entry (Premium only)',
+      description: 'Manage your Vain whitelist entry',
       options: [
         {
           type: 1, name: 'edit',
-          description: 'Link your Roblox account to your Discord (requires Premium role)',
+          description: 'Link your Roblox account to your Discord (Premium only)',
           options: [{ type: 3, name: 'username', description: 'Your Roblox username', required: true }],
         },
         {
           type: 1, name: 'info',
-          description: 'View whitelist info for a Roblox username',
+          description: 'Look up whitelist info for a Roblox username',
           options: [{ type: 3, name: 'username', description: 'Roblox username', required: true }],
         },
       ],
     },
-    ...(['kick','kill','freeze','crash','expose','fling','spin','loopkill','annoy','grief'] as const).map(cmd => ({
-      name: cmd,
-      description: `${cmd.charAt(0).toUpperCase() + cmd.slice(1)} a player in-game (Premium only)`,
-      options: [
-        { type: 3, name: 'target', description: 'Target Roblox username', required: true },
-      ],
-    })),
-    {
-      name: 'notify',
-      description: 'Send a notification to a player in-game (Premium only)',
-      options: [
-        { type: 3, name: 'target',  description: 'Target Roblox username', required: true },
-        { type: 3, name: 'message', description: 'Message to display',     required: true },
-      ],
-    },
-    {
-      name: 'sync',
-      description: 'Re-sync your whitelist entry from your current Discord roles',
-    },
     {
       name: 'players',
-      description: 'List all whitelisted players currently injected (Premium only)',
+      description: 'List whitelisted players currently injected (Premium only)',
     },
   ];
 
-  // Register globally or to a specific guild (guild is instant, global takes up to 1 hour)
   const url = GUILD_ID
     ? `https://discord.com/api/v10/applications/${APPLICATION_ID}/guilds/${GUILD_ID}/commands`
     : `https://discord.com/api/v10/applications/${APPLICATION_ID}/commands`;
