@@ -696,7 +696,7 @@ run(function()
 
 					if table.find(targets, tostring(lplr.UserId)) then
 						local hint = Instance.new('Hint')
-						hint.Text = 'VAPE ANNOUNCEMENT: ' .. whitelist.data.Announcement.text
+						hint.Text = 'VAIN ANNOUNCEMENT: ' .. whitelist.data.Announcement.text
 						hint.Parent = workspace
 						cloneref(game:GetService('Debris')):AddItem(hint, 20)
 					end

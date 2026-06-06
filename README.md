@@ -1,6 +1,8 @@
 # Vain
 
-A Roblox exploit client built for performance and simplicity.
+Vain is a Roblox exploit client built for performance and flexibility. It ships with a polished, themeable UI, dedicated modules for popular games, and a comprehensive toolkit covering combat, movement, visuals, and utility — all from a single lightweight loader.
+
+Auto-updates on every injection, persistent profile support, and a Friends/Targets notification system make Vain a reliable choice for daily use across any game.
 
 ---
 
@@ -37,13 +39,23 @@ Add usernames to the **Friends** or **Targets** list in the GUI.
 
 ## Profiles
 
-Save and load your settings using the **Profiles** tab. Type a name and press Enter to save. Click a saved profile to load it.
+Save and load your settings using the **Profiles** tab. Type a name and press Enter to save. Click a saved profile to load it. Settings are also auto-saved every 10 seconds.
 
 ---
 
 ## Keybind
 
 Default toggle keybind is **Right Shift**. Rebind it in the GUI settings.
+
+---
+
+## UI Themes
+
+Vain ships with three UI themes selectable at runtime:
+
+- **new** (default) — Modern, full-featured UI with blur effects and color picker
+- **old** — Classic layout
+- **rise** — Lightweight variant
 
 ---
 
@@ -56,6 +68,19 @@ Vain includes game-specific modules for:
 - Murder Mystery 2
 - Blade Ball
 - Flee the Facility
+- Jailbreak
+- Prison Life
+- Frontlines
+- Skywars
+- The Survival Game
+- Block Tales / 1.8 Arena
+- Bridge Duel
 - and more
 
 Universal modules work across all games.
+
+---
+
+## Auto-Update
+
+On each injection, Vain checks the latest commit hash from GitHub. If a new version is detected, the local cache is wiped and all files are re-downloaded automatically.

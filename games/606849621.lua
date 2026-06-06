@@ -593,6 +593,7 @@ run(function()
     local AutoPop
     local Range
     local TeamCheck
+    local HandCheck
 
     local function getEntitiesInVehicle(car)
     	local entities = {}
@@ -648,7 +649,7 @@ run(function()
     			task.spawn(function()
     				repeat
     					local item = jb.ItemSystemController:GetLocalEquipped()
-    					if item and item.BulletEmitter and item.Model then
+    					if (not HandCheck.Enabled) or (item and item.BulletEmitter and item.Model) then
     						for _, car in getVehiclesNear() do
     							if not AutoPop.Enabled then break end
     							jb:FireServer('PopTires', car, item.Model.Name)
@@ -669,6 +670,7 @@ run(function()
     	Max = 600,
     	Default = 600
     })
+    HandCheck = AutoPop:CreateToggle({Name = 'Hand Check'})
     TeamCheck = AutoPop:CreateToggle({Name = 'Team Check'})
 end)
 
@@ -794,4 +796,34 @@ run(function()
     	end,
     	Tooltip = 'Enables most doors to be walked through',
     })
+end)
+
+run(function()
+	local Wallbang = {Enabled = false}
+
+	Wallbang = vain.Categories.Combat:CreateModule({
+		Name = 'Wallbang',
+		Function = function(callback)
+			if callback then
+				local hook
+				hook = hookfunction(jb.GunController.BulletEmitterOnLocalHitPlayer, function(...)
+					local shotData = select(15, ...)
+					shotData.isWallbang = nil
+					shotData.isHeadshot = true
+					return hook(...)
+				end)
+
+				repeat
+					local item = jb.ItemSystemController:GetLocalEquipped()
+					if item and item.BulletEmitter then
+						item.BulletEmitter.IgnoreList = {workspace}
+					end
+					task.wait(0.1)
+				until not Wallbang.Enabled
+			else
+				restorefunction(jb.GunController.BulletEmitterOnLocalHitPlayer)
+			end
+		end,
+		Tooltip = 'Modifies bullets to always do headshot damage & shooting through most walls.'
+	})
 end)
