@@ -2,7 +2,7 @@ import { Env } from './types';
 import { verifyDiscordSignature } from './discord/verify';
 import { handleCommand } from './discord/commands';
 import { handleCheck } from './routes/check';
-import { handlePoll, handleQueueCommand } from './routes/commands';
+import { handleLongPoll, handleQueue } from './routes/commands';
 import {
   handleListProfiles, handleCreateProfile, handleUpdateProfile,
   handleDeleteProfile, handleInstallProfile,
@@ -16,31 +16,20 @@ export default {
 
     if (method === 'OPTIONS') return new Response(null, { headers: corsHeaders() });
 
-    // Discord interaction webhook
     if (method === 'POST' && path === '/discord') {
       const body = await request.text();
       const valid = await verifyDiscordSignature(request, env.DISCORD_PUBLIC_KEY, body);
       if (!valid) return new Response('Invalid signature', { status: 401 });
-
       const interaction = JSON.parse(body);
       if (interaction.type === 1) return json({ type: 1 });
       if (interaction.type === 2) return handleCommand(interaction, env);
       return new Response('Unknown interaction type', { status: 400 });
     }
 
-    if (method === 'GET' && path === '/check') {
-      return withCors(await handleCheck(request, env));
-    }
+    if (method === 'GET'  && path === '/check')           return withCors(await handleCheck(request, env));
+    if (method === 'GET'  && path === '/commands/poll')   return withCors(await handleLongPoll(request, env));
+    if (method === 'POST' && path === '/commands/queue')  return withCors(await handleQueue(request, env));
 
-    if (method === 'GET' && path === '/commands') {
-      return withCors(await handlePoll(request, env));
-    }
-
-    if (method === 'POST' && path === '/queue-command') {
-      return withCors(await handleQueueCommand(request, env));
-    }
-
-    // Global profiles
     if (path === '/profiles') {
       if (method === 'GET')  return withCors(await handleListProfiles(request, env));
       if (method === 'POST') return withCors(await handleCreateProfile(request, env));
@@ -55,7 +44,6 @@ export default {
 
     return new Response('Not found', { status: 404 });
   },
-
 };
 
 function json(data: unknown): Response {
