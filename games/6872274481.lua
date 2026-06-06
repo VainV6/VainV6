@@ -6484,8 +6484,7 @@ run(function()
 
 					if not plr then
 						wasHovering = false
-						local s, r = pcall(old, ...)
-						return s and r or nil
+						return old(...)
 					end
 
 					if not getgenv().AeroLocalPaid and plr.Player and getgenv().isAeroPaid and getgenv().isAeroPaid(plr.Player) then
