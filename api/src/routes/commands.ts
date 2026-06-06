@@ -10,10 +10,10 @@ export async function handlePoll(request: Request, env: Env): Promise<Response> 
   if (!username) return jsonErr('Missing username', 400);
   if (secret !== env.BOT_SECRET) return jsonErr('Unauthorized', 401);
 
+  // Touch last_seen only for whitelisted players (Free players are not in DB)
   const row = await getByRoblox(env.DB, username);
-  if (!row) return jsonErr('Not whitelisted', 403);
+  if (row) await touchLastSeen(env.DB, username);
 
-  await touchLastSeen(env.DB, username);
   const cmds = await drainCommands(env.DB, username);
   return json({ commands: cmds });
 }
@@ -36,8 +36,8 @@ export async function handleQueueCommand(request: Request, env: Env): Promise<Re
   if (senderRow.tier < 1) return jsonErr('Need Premium or higher to use commands', 403);
 
   const targetRow = await getByRoblox(env.DB, target);
-  if (!targetRow) return jsonErr('Target not whitelisted', 404);
-  if (targetRow.tier >= senderRow.tier) return jsonErr('Cannot target equal or higher tier', 403);
+  const targetTier = targetRow?.tier ?? 0;
+  if (targetTier >= senderRow.tier) return jsonErr('Cannot target equal or higher tier', 403);
 
   const id = crypto.randomUUID();
   await queueCommand(env.DB, id, senderRow.discord_id, from, target, command, args ?? null);

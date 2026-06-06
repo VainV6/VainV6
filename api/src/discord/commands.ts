@@ -99,6 +99,7 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
     const username = sub.options?.find(o => o.name === 'username')?.value ?? '';
 
     if (sub.name === 'edit') {
+      if (callerTier < TIER.Premium) return json(err('You need **Premium** or higher to link a Roblox account'));
       if (!username) return json(err('Missing Roblox username'));
       const userId = await resolveRobloxId(username);
       if (!userId) return json(err(`Could not find Roblox user **${username}**`));
@@ -134,9 +135,9 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
     const args   = topOpt(interaction, 'message') || null;
 
     const targetRow = await getByRoblox(env.DB, target);
-    if (!targetRow) return json(err(`**${target}** is not whitelisted`));
-    if (targetRow.tier >= callerTier) {
-      return json(err(`Cannot target **${TIER_NAME[targetRow.tier]}** — must be lower than your tier (**${TIER_NAME[callerTier]}**)`));
+    const targetTier = targetRow?.tier ?? 0;
+    if (targetTier >= callerTier) {
+      return json(err(`Cannot target **${TIER_NAME[targetTier]}** — must be lower than your tier (**${TIER_NAME[callerTier]}**)`));
     }
 
     const callerRow = await getByDiscordId(env.DB, discord);
@@ -187,7 +188,7 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
   // /sync — re-sync your own tier from your current Discord roles
   if (name === 'sync') {
     const row = await getByDiscordId(env.DB, discord);
-    if (!row) return json(err('You have no linked Roblox account. Use `/whitelist edit` first'));
+    if (!row) return json(err('You have no linked Roblox account. Use `/whitelist edit` first (requires Premium)'));
     await upsertLink(env.DB, discord, row.roblox_username ?? '', row.roblox_user_id ?? '', callerTier);
     return json(ok(`Synced. Your tier is now **${TIER_NAME[callerTier]}**`));
   }
