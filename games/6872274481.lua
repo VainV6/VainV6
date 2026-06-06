@@ -6036,7 +6036,7 @@ run(function()
 	local DesirePACursorShowGUI
 	local cursorRenderConnection
 	local lastGUIState = false
-	local rayCheck = cloneRaycast()
+	local rayCheck = RaycastParams.new()
 	local old
 	local math_sqrt = math.sqrt
 	local math_rad = math.rad
@@ -10160,7 +10160,7 @@ run(function()
     local PredictionMode
     local projectileRemote = {InvokeServer = function() end}
     local nextAllowedShot = 0
-    local rayCheck = cloneRaycast()
+    local rayCheck = RaycastParams.new()
     local COOLDOWN_SECONDS = 10.5
 
     task.spawn(function()
@@ -10340,10 +10340,10 @@ run(function()
 	local LimitItems
 	local HandCheck
 
-	local rayCheck = cloneRaycast()
+	local rayCheck = RaycastParams.new()
 	rayCheck.RespectCanCollide = true
 
-	local scanParams = cloneRaycast()
+	local scanParams = RaycastParams.new()
 	scanParams.RespectCanCollide = true
 	scanParams.FilterType = Enum.RaycastFilterType.Exclude
 	
