@@ -61,69 +61,69 @@ local uipallet = {
 }
 
 local getcustomassets = {
-	['newvain/assets/new/add.png'] = 'rbxassetid://14368300605',
-	['newvain/assets/new/alert.png'] = 'rbxassetid://14368301329',
-	['newvain/assets/new/allowedicon.png'] = 'rbxassetid://14368302000',
-	['newvain/assets/new/allowedtab.png'] = 'rbxassetid://14368302875',
-	['newvain/assets/new/arrowmodule.png'] = 'rbxassetid://14473354880',
-	['newvain/assets/new/back.png'] = 'rbxassetid://14368303894',
-	['newvain/assets/new/bind.png'] = 'rbxassetid://14368304734',
-	['newvain/assets/new/bindbkg.png'] = 'rbxassetid://14368305655',
-	['newvain/assets/new/blatanticon.png'] = 'rbxassetid://14368306745',
-	['newvain/assets/new/blockedicon.png'] = 'rbxassetid://14385669108',
-	['newvain/assets/new/blockedtab.png'] = 'rbxassetid://14385672881',
-	['newvain/assets/new/blur.png'] = 'rbxassetid://14898786664',
-	['newvain/assets/new/blurnotif.png'] = 'rbxassetid://16738720137',
-	['newvain/assets/new/close.png'] = 'rbxassetid://14368309446',
-	['newvain/assets/new/closemini.png'] = 'rbxassetid://14368310467',
-	['newvain/assets/new/colorpreview.png'] = 'rbxassetid://14368311578',
-	['newvain/assets/new/combaticon.png'] = 'rbxassetid://14368312652',
-	['newvain/assets/new/customsettings.png'] = 'rbxassetid://14403726449',
-	['newvain/assets/new/discord.png'] = '',
-	['newvain/assets/new/dots.png'] = 'rbxassetid://14368314459',
-	['newvain/assets/new/edit.png'] = 'rbxassetid://14368315443',
-	['newvain/assets/new/expandicon.png'] = 'rbxassetid://14368353032',
-	['newvain/assets/new/expandright.png'] = 'rbxassetid://14368316544',
-	['newvain/assets/new/expandup.png'] = 'rbxassetid://14368317595',
-	['newvain/assets/new/friendstab.png'] = 'rbxassetid://14397462778',
-	['newvain/assets/new/guisettings.png'] = 'rbxassetid://14368318994',
-	['newvain/assets/new/guislider.png'] = 'rbxassetid://14368320020',
-	['newvain/assets/new/guisliderrain.png'] = 'rbxassetid://14368321228',
-	['newvain/assets/new/guiv4.png'] = 'rbxassetid://14368322199',
-	['newvain/assets/new/guivape.png'] = 'rbxassetid://14657521312',
-	['newvain/assets/new/info.png'] = 'rbxassetid://14368324807',
-	['newvain/assets/new/inventoryicon.png'] = 'rbxassetid://14928011633',
-	['newvain/assets/new/legit.png'] = 'rbxassetid://14425650534',
-	['newvain/assets/new/legittab.png'] = 'rbxassetid://14426740825',
-	['newvain/assets/new/miniicon.png'] = 'rbxassetid://14368326029',
-	['newvain/assets/new/notification.png'] = 'rbxassetid://16738721069',
-	['newvain/assets/new/overlaysicon.png'] = 'rbxassetid://14368339581',
-	['newvain/assets/new/overlaystab.png'] = 'rbxassetid://14397380433',
-	['newvain/assets/new/pin.png'] = 'rbxassetid://14368342301',
-	['newvain/assets/new/profilesicon.png'] = 'rbxassetid://14397465323',
-	['newvain/assets/new/radaricon.png'] = 'rbxassetid://14368343291',
-	['newvain/assets/new/rainbow_1.png'] = 'rbxassetid://14368344374',
-	['newvain/assets/new/rainbow_2.png'] = 'rbxassetid://14368345149',
-	['newvain/assets/new/rainbow_3.png'] = 'rbxassetid://14368345840',
-	['newvain/assets/new/rainbow_4.png'] = 'rbxassetid://14368346696',
-	['newvain/assets/new/range.png'] = 'rbxassetid://14368347435',
-	['newvain/assets/new/rangearrow.png'] = 'rbxassetid://14368348640',
-	['newvain/assets/new/rendericon.png'] = 'rbxassetid://14368350193',
-	['newvain/assets/new/rendertab.png'] = 'rbxassetid://14397373458',
-	['newvain/assets/new/search.png'] = 'rbxassetid://14425646684',
-	['newvain/assets/new/targetinfoicon.png'] = 'rbxassetid://14368354234',
-	['newvain/assets/new/targetnpc1.png'] = 'rbxassetid://14497400332',
-	['newvain/assets/new/targetnpc2.png'] = 'rbxassetid://14497402744',
-	['newvain/assets/new/targetplayers1.png'] = 'rbxassetid://14497396015',
-	['newvain/assets/new/targetplayers2.png'] = 'rbxassetid://14497397862',
-	['newvain/assets/new/targetstab.png'] = 'rbxassetid://14497393895',
-	['newvain/assets/new/textguiicon.png'] = 'rbxassetid://14368355456',
-	['newvain/assets/new/textv4.png'] = 'rbxassetid://14368357095',
-	['newvain/assets/new/textvape.png'] = 'rbxassetid://14368358200',
-	['newvain/assets/new/utilityicon.png'] = 'rbxassetid://14368359107',
-	['newvain/assets/new/vain.png'] = 'rbxassetid://14373395239',
-	['newvain/assets/new/warning.png'] = 'rbxassetid://14368361552',
-	['newvain/assets/new/worldicon.png'] = 'rbxassetid://14368362492'
+	['vain/assets/new/add.png'] = 'rbxassetid://14368300605',
+	['vain/assets/new/alert.png'] = 'rbxassetid://14368301329',
+	['vain/assets/new/allowedicon.png'] = 'rbxassetid://14368302000',
+	['vain/assets/new/allowedtab.png'] = 'rbxassetid://14368302875',
+	['vain/assets/new/arrowmodule.png'] = 'rbxassetid://14473354880',
+	['vain/assets/new/back.png'] = 'rbxassetid://14368303894',
+	['vain/assets/new/bind.png'] = 'rbxassetid://14368304734',
+	['vain/assets/new/bindbkg.png'] = 'rbxassetid://14368305655',
+	['vain/assets/new/blatanticon.png'] = 'rbxassetid://14368306745',
+	['vain/assets/new/blockedicon.png'] = 'rbxassetid://14385669108',
+	['vain/assets/new/blockedtab.png'] = 'rbxassetid://14385672881',
+	['vain/assets/new/blur.png'] = 'rbxassetid://14898786664',
+	['vain/assets/new/blurnotif.png'] = 'rbxassetid://16738720137',
+	['vain/assets/new/close.png'] = 'rbxassetid://14368309446',
+	['vain/assets/new/closemini.png'] = 'rbxassetid://14368310467',
+	['vain/assets/new/colorpreview.png'] = 'rbxassetid://14368311578',
+	['vain/assets/new/combaticon.png'] = 'rbxassetid://14368312652',
+	['vain/assets/new/customsettings.png'] = 'rbxassetid://14403726449',
+	['vain/assets/new/discord.png'] = '',
+	['vain/assets/new/dots.png'] = 'rbxassetid://14368314459',
+	['vain/assets/new/edit.png'] = 'rbxassetid://14368315443',
+	['vain/assets/new/expandicon.png'] = 'rbxassetid://14368353032',
+	['vain/assets/new/expandright.png'] = 'rbxassetid://14368316544',
+	['vain/assets/new/expandup.png'] = 'rbxassetid://14368317595',
+	['vain/assets/new/friendstab.png'] = 'rbxassetid://14397462778',
+	['vain/assets/new/guisettings.png'] = 'rbxassetid://14368318994',
+	['vain/assets/new/guislider.png'] = 'rbxassetid://14368320020',
+	['vain/assets/new/guisliderrain.png'] = 'rbxassetid://14368321228',
+	['vain/assets/new/guiv4.png'] = 'rbxassetid://14368322199',
+	['vain/assets/new/guivape.png'] = 'rbxassetid://14657521312',
+	['vain/assets/new/info.png'] = 'rbxassetid://14368324807',
+	['vain/assets/new/inventoryicon.png'] = 'rbxassetid://14928011633',
+	['vain/assets/new/legit.png'] = 'rbxassetid://14425650534',
+	['vain/assets/new/legittab.png'] = 'rbxassetid://14426740825',
+	['vain/assets/new/miniicon.png'] = 'rbxassetid://14368326029',
+	['vain/assets/new/notification.png'] = 'rbxassetid://16738721069',
+	['vain/assets/new/overlaysicon.png'] = 'rbxassetid://14368339581',
+	['vain/assets/new/overlaystab.png'] = 'rbxassetid://14397380433',
+	['vain/assets/new/pin.png'] = 'rbxassetid://14368342301',
+	['vain/assets/new/profilesicon.png'] = 'rbxassetid://14397465323',
+	['vain/assets/new/radaricon.png'] = 'rbxassetid://14368343291',
+	['vain/assets/new/rainbow_1.png'] = 'rbxassetid://14368344374',
+	['vain/assets/new/rainbow_2.png'] = 'rbxassetid://14368345149',
+	['vain/assets/new/rainbow_3.png'] = 'rbxassetid://14368345840',
+	['vain/assets/new/rainbow_4.png'] = 'rbxassetid://14368346696',
+	['vain/assets/new/range.png'] = 'rbxassetid://14368347435',
+	['vain/assets/new/rangearrow.png'] = 'rbxassetid://14368348640',
+	['vain/assets/new/rendericon.png'] = 'rbxassetid://14368350193',
+	['vain/assets/new/rendertab.png'] = 'rbxassetid://14397373458',
+	['vain/assets/new/search.png'] = 'rbxassetid://14425646684',
+	['vain/assets/new/targetinfoicon.png'] = 'rbxassetid://14368354234',
+	['vain/assets/new/targetnpc1.png'] = 'rbxassetid://14497400332',
+	['vain/assets/new/targetnpc2.png'] = 'rbxassetid://14497402744',
+	['vain/assets/new/targetplayers1.png'] = 'rbxassetid://14497396015',
+	['vain/assets/new/targetplayers2.png'] = 'rbxassetid://14497397862',
+	['vain/assets/new/targetstab.png'] = 'rbxassetid://14497393895',
+	['vain/assets/new/textguiicon.png'] = 'rbxassetid://14368355456',
+	['vain/assets/new/textv4.png'] = 'rbxassetid://14368357095',
+	['vain/assets/new/textvape.png'] = 'rbxassetid://14368358200',
+	['vain/assets/new/utilityicon.png'] = 'rbxassetid://14368359107',
+	['vain/assets/new/vain.png'] = 'rbxassetid://14373395239',
+	['vain/assets/new/warning.png'] = 'rbxassetid://14368361552',
+	['vain/assets/new/worldicon.png'] = 'rbxassetid://14368362492'
 }
 
 local isfile = isfile or function(file)
@@ -148,7 +148,7 @@ local function addBlur(parent, notif)
 	blur.Size = UDim2.new(1, 89, 1, 52)
 	blur.Position = UDim2.fromOffset(-48, -31)
 	blur.BackgroundTransparency = 1
-	blur.Image = getcustomasset('newvain/assets/new/'..(notif and 'blurnotif' or 'blur')..'.png')
+	blur.Image = getcustomasset('vain/assets/new/'..(notif and 'blurnotif' or 'blur')..'.png')
 	blur.ScaleType = Enum.ScaleType.Slice
 	blur.SliceCenter = Rect.new(52, 31, 261, 502)
 	blur.Parent = parent
@@ -172,7 +172,7 @@ local function addCloseButton(parent, offset)
 	close.BackgroundColor3 = Color3.new(1, 1, 1)
 	close.BackgroundTransparency = 1
 	close.AutoButtonColor = false
-	close.Image = getcustomasset('newvain/assets/new/close.png')
+	close.Image = getcustomasset('vain/assets/new/close.png')
 	close.ImageColor3 = color.Light(uipallet.Text, 0.2)
 	close.ImageTransparency = 0.5
 	close.Parent = parent
@@ -332,7 +332,7 @@ local function downloadFile(path, func)
 	if not isfile(path) then
 		createDownloader(path)
 		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('newvain/profiles/commit.txt')..'/'..select(1, path:gsub('newvain/', '')), true)
+			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('vain/profiles/commit.txt')..'/'..select(1, path:gsub('vain/', '')), true)
 		end)
 		if not suc or res == '404: Not Found' then
 			error(res)
@@ -425,7 +425,7 @@ local function removeTags(str)
 end
 
 do
-	local res = isfile('newvain/profiles/color.txt') and loadJson('newvain/profiles/color.txt')
+	local res = isfile('vain/profiles/color.txt') and loadJson('vain/profiles/color.txt')
 	if res then
 		uipallet.Main = res.Main and Color3.fromRGB(unpack(res.Main)) or uipallet.Main
 		uipallet.Text = res.Text and Color3.fromRGB(unpack(res.Text)) or uipallet.Text
@@ -712,7 +712,7 @@ components = {
 		preview.Size = UDim2.fromOffset(12, 12)
 		preview.Position = UDim2.new(1, -22, 0, 10)
 		preview.BackgroundTransparency = 1
-		preview.Image = getcustomasset('newvain/assets/new/colorpreview.png')
+		preview.Image = getcustomasset('vain/assets/new/colorpreview.png')
 		preview.ImageColor3 = Color3.fromHSV(optionapi.Hue, optionapi.Sat, optionapi.Value)
 		preview.ImageTransparency = 1 - optionapi.Opacity
 		preview.Parent = slider
@@ -728,7 +728,7 @@ components = {
 		expand.Size = UDim2.fromOffset(9, 5)
 		expand.Position = UDim2.fromOffset(4, 4)
 		expand.BackgroundTransparency = 1
-		expand.Image = getcustomasset('newvain/assets/new/expandicon.png')
+		expand.Image = getcustomasset('vain/assets/new/expandicon.png')
 		expand.ImageColor3 = color.Dark(uipallet.Text, 0.43)
 		expand.Parent = expandbutton
 		local rainbow = Instance.new('TextButton')
@@ -741,17 +741,17 @@ components = {
 		local rainbow1 = Instance.new('ImageLabel')
 		rainbow1.Size = UDim2.fromOffset(12, 12)
 		rainbow1.BackgroundTransparency = 1
-		rainbow1.Image = getcustomasset('newvain/assets/new/rainbow_1.png')
+		rainbow1.Image = getcustomasset('vain/assets/new/rainbow_1.png')
 		rainbow1.ImageColor3 = color.Light(uipallet.Main, 0.37)
 		rainbow1.Parent = rainbow
 		local rainbow2 = rainbow1:Clone()
-		rainbow2.Image = getcustomasset('newvain/assets/new/rainbow_2.png')
+		rainbow2.Image = getcustomasset('vain/assets/new/rainbow_2.png')
 		rainbow2.Parent = rainbow
 		local rainbow3 = rainbow1:Clone()
-		rainbow3.Image = getcustomasset('newvain/assets/new/rainbow_3.png')
+		rainbow3.Image = getcustomasset('vain/assets/new/rainbow_3.png')
 		rainbow3.Parent = rainbow
 		local rainbow4 = rainbow1:Clone()
-		rainbow4.Image = getcustomasset('newvain/assets/new/rainbow_4.png')
+		rainbow4.Image = getcustomasset('vain/assets/new/rainbow_4.png')
 		rainbow4.Parent = rainbow
 		local knobholder = Instance.new('Frame')
 		knobholder.Name = 'Knob'
@@ -1016,7 +1016,7 @@ components = {
 		arrow.Size = UDim2.fromOffset(4, 8)
 		arrow.Position = UDim2.new(1, -17, 0, 11)
 		arrow.BackgroundTransparency = 1
-		arrow.Image = getcustomasset('newvain/assets/new/expandright.png')
+		arrow.Image = getcustomasset('vain/assets/new/expandright.png')
 		arrow.ImageColor3 = Color3.fromRGB(140, 140, 140)
 		arrow.Rotation = 90
 		arrow.Parent = button
@@ -1434,7 +1434,7 @@ components = {
 		icon.Size = UDim2.fromOffset(18, 12)
 		icon.Position = UDim2.fromOffset(10, 15)
 		icon.BackgroundTransparency = 1
-		icon.Image = getcustomasset('newvain/assets/new/targetstab.png')
+		icon.Image = getcustomasset('vain/assets/new/targetstab.png')
 		icon.Parent = window
 		local title = Instance.new('TextLabel')
 		title.Name = 'Title'
@@ -1496,20 +1496,20 @@ components = {
 		
 		optionapi.Players = components.TargetsButton({
 			Position = UDim2.fromOffset(11, 45),
-			Icon = getcustomasset('newvain/assets/new/targetplayers1.png'),
+			Icon = getcustomasset('vain/assets/new/targetplayers1.png'),
 			IconSize = UDim2.fromOffset(15, 16),
 			IconParent = tool,
-			ToolIcon = getcustomasset('newvain/assets/new/targetplayers2.png'),
+			ToolIcon = getcustomasset('vain/assets/new/targetplayers2.png'),
 			ToolSize = UDim2.fromOffset(11, 12),
 			Tooltip = 'Players',
 			Function = optionsettings.Function
 		}, window, tool)
 		optionapi.NPCs = components.TargetsButton({
 			Position = UDim2.fromOffset(112, 45),
-			Icon = getcustomasset('newvain/assets/new/targetnpc1.png'),
+			Icon = getcustomasset('vain/assets/new/targetnpc1.png'),
 			IconSize = UDim2.fromOffset(12, 16),
 			IconParent = tool,
-			ToolIcon = getcustomasset('newvain/assets/new/targetnpc2.png'),
+			ToolIcon = getcustomasset('vain/assets/new/targetnpc2.png'),
 			ToolSize = UDim2.fromOffset(9, 12),
 			Tooltip = 'NPCs',
 			Function = optionsettings.Function
@@ -1793,7 +1793,7 @@ components = {
 		buttonicon.Size = UDim2.fromOffset(14, 12)
 		buttonicon.Position = UDim2.fromOffset(10, 14)
 		buttonicon.BackgroundTransparency = 1
-		buttonicon.Image = optionsettings.Icon or getcustomasset('newvain/assets/new/allowedicon.png')
+		buttonicon.Image = optionsettings.Icon or getcustomasset('vain/assets/new/allowedicon.png')
 		buttonicon.Parent = button
 		local buttontitle = Instance.new('TextLabel')
 		buttontitle.Name = 'Title'
@@ -1839,7 +1839,7 @@ components = {
 		icon.Size = optionsettings.TabSize or UDim2.fromOffset(19, 16)
 		icon.Position = UDim2.fromOffset(10, 13)
 		icon.BackgroundTransparency = 1
-		icon.Image = optionsettings.Tab or getcustomasset('newvain/assets/new/allowedtab.png')
+		icon.Image = optionsettings.Tab or getcustomasset('vain/assets/new/allowedtab.png')
 		icon.Parent = window
 		local title = Instance.new('TextLabel')
 		title.Name = 'Title'
@@ -1882,7 +1882,7 @@ components = {
 		addbutton.Size = UDim2.fromOffset(16, 16)
 		addbutton.Position = UDim2.new(1, -26, 0, 8)
 		addbutton.BackgroundTransparency = 1
-		addbutton.Image = getcustomasset('newvain/assets/new/add.png')
+		addbutton.Image = getcustomasset('vain/assets/new/add.png')
 		addbutton.ImageColor3 = optionsettings.Color
 		addbutton.ImageTransparency = 0.3
 		addbutton.Parent = addbkg
@@ -1986,7 +1986,7 @@ components = {
 				close.BackgroundColor3 = Color3.new(1, 1, 1)
 				close.BackgroundTransparency = 1
 				close.AutoButtonColor = false
-				close.Image = getcustomasset('newvain/assets/new/closemini.png')
+				close.Image = getcustomasset('vain/assets/new/closemini.png')
 				close.ImageColor3 = color.Light(uipallet.Text, 0.2)
 				close.ImageTransparency = 0.5
 				close.Parent = object
@@ -2293,7 +2293,7 @@ components = {
 		knob.Position = UDim2.fromScale(0.5, 0.5)
 		knob.AnchorPoint = Vector2.new(0.5, 0.5)
 		knob.BackgroundTransparency = 1
-		knob.Image = getcustomasset('newvain/assets/new/range.png')
+		knob.Image = getcustomasset('vain/assets/new/range.png')
 		knob.ImageColor3 = Color3.fromHSV(mainapi.GUIColor.Hue, mainapi.GUIColor.Sat, mainapi.GUIColor.Value)
 		knob.Parent = knobholder
 		local knobholdermax = knobholder:Clone()
@@ -2306,7 +2306,7 @@ components = {
 		arrow.Size = UDim2.fromOffset(12, 6)
 		arrow.Position = UDim2.new(1, -56, 0, 10)
 		arrow.BackgroundTransparency = 1
-		arrow.Image = getcustomasset('newvain/assets/new/rangearrow.png')
+		arrow.Image = getcustomasset('vain/assets/new/rangearrow.png')
 		arrow.ImageColor3 = color.Light(uipallet.Main, 0.14)
 		arrow.Parent = slider
 		optionsettings.Function = optionsettings.Function or function() end
@@ -2548,14 +2548,14 @@ function mainapi:CreateGUI()
 	settingsicon.Size = UDim2.fromOffset(14, 14)
 	settingsicon.Position = UDim2.fromOffset(15, 12)
 	settingsicon.BackgroundTransparency = 1
-	settingsicon.Image = getcustomasset('newvain/assets/new/guisettings.png')
+	settingsicon.Image = getcustomasset('vain/assets/new/guisettings.png')
 	settingsicon.ImageColor3 = color.Light(uipallet.Main, 0.37)
 	settingsicon.Parent = settingsbutton
 	local discordbutton = Instance.new('ImageButton')
 	discordbutton.Size = UDim2.fromOffset(16, 16)
 	discordbutton.Position = UDim2.new(1, -56, 0, 11)
 	discordbutton.BackgroundTransparency = 1
-	discordbutton.Image = getcustomasset('newvain/assets/new/discord.png')
+	discordbutton.Image = getcustomasset('vain/assets/new/discord.png')
 	discordbutton.Parent = window
 	addTooltip(discordbutton, 'Join discord')
 	local settingspane = Instance.new('TextButton')
@@ -2582,7 +2582,7 @@ function mainapi:CreateGUI()
 	back.Size = UDim2.fromOffset(16, 16)
 	back.Position = UDim2.fromOffset(11, 13)
 	back.BackgroundTransparency = 1
-	back.Image = getcustomasset('newvain/assets/new/back.png')
+	back.Image = getcustomasset('vain/assets/new/back.png')
 	back.ImageColor3 = color.Light(uipallet.Main, 0.37)
 	back.Parent = settingspane
 	local settingsversion = Instance.new('TextLabel')
@@ -2591,7 +2591,7 @@ function mainapi:CreateGUI()
 	settingsversion.Position = UDim2.new(0, 0, 1, -16)
 	settingsversion.BackgroundTransparency = 1
 	settingsversion.Text = 'Vape '..mainapi.Version..' '..(
-		isfile('newvain/profiles/commit.txt') and readfile('newvain/profiles/commit.txt'):sub(1, 6) or ''
+		isfile('vain/profiles/commit.txt') and readfile('vain/profiles/commit.txt'):sub(1, 6) or ''
 	)..' '
 	settingsversion.TextColor3 = color.Dark(uipallet.Text, 0.43)
 	settingsversion.TextXAlignment = Enum.TextXAlignment.Right
@@ -2645,7 +2645,7 @@ function mainapi:CreateGUI()
 		icon.Size = UDim2.fromOffset(12, 12)
 		icon.Position = UDim2.new(0.5, -6, 0, 5)
 		icon.BackgroundTransparency = 1
-		icon.Image = getcustomasset('newvain/assets/new/bind.png')
+		icon.Image = getcustomasset('vain/assets/new/bind.png')
 		icon.ImageColor3 = color.Dark(uipallet.Text, 0.43)
 		icon.Parent = bind
 		local label = Instance.new('TextLabel')
@@ -2678,13 +2678,13 @@ function mainapi:CreateGUI()
 		bind.MouseEnter:Connect(function()
 			label.Visible = false
 			icon.Visible = not label.Visible
-			icon.Image = getcustomasset('newvain/assets/new/edit.png')
+			icon.Image = getcustomasset('vain/assets/new/edit.png')
 			icon.ImageColor3 = color.Dark(uipallet.Text, 0.16)
 		end)
 		bind.MouseLeave:Connect(function()
 			label.Visible = true
 			icon.Visible = not label.Visible
-			icon.Image = getcustomasset('newvain/assets/new/bind.png')
+			icon.Image = getcustomasset('vain/assets/new/bind.png')
 			icon.ImageColor3 = color.Dark(uipallet.Text, 0.43)
 		end)
 		bind.MouseButton1Click:Connect(function()
@@ -2749,7 +2749,7 @@ function mainapi:CreateGUI()
 		arrow.Size = UDim2.fromOffset(4, 8)
 		arrow.Position = UDim2.new(1, -20, 0, 16)
 		arrow.BackgroundTransparency = 1
-		arrow.Image = getcustomasset('newvain/assets/new/expandright.png')
+		arrow.Image = getcustomasset('vain/assets/new/expandright.png')
 		arrow.ImageColor3 = color.Light(uipallet.Main, 0.37)
 		arrow.Parent = button
 		optionapi.Name = categorysettings.Name
@@ -2811,7 +2811,7 @@ function mainapi:CreateGUI()
 		button.Position = UDim2.new(1, -29, 0, 7)
 		button.BackgroundTransparency = 1
 		button.AutoButtonColor = false
-		button.Image = getcustomasset('newvain/assets/new/overlaysicon.png')
+		button.Image = getcustomasset('vain/assets/new/overlaysicon.png')
 		button.ImageColor3 = color.Light(uipallet.Main, 0.37)
 		button.Parent = bar
 		addCorner(button, UDim.new(1, 0))
@@ -2838,7 +2838,7 @@ function mainapi:CreateGUI()
 		icon.Size = UDim2.fromOffset(14, 12)
 		icon.Position = UDim2.fromOffset(10, 13)
 		icon.BackgroundTransparency = 1
-		icon.Image = getcustomasset('newvain/assets/new/overlaystab.png')
+		icon.Image = getcustomasset('vain/assets/new/overlaystab.png')
 		icon.ImageColor3 = uipallet.Text
 		icon.Parent = window
 		local title = Instance.new('TextLabel')
@@ -3030,7 +3030,7 @@ function mainapi:CreateGUI()
 		arrow.Size = UDim2.fromOffset(4, 8)
 		arrow.Position = UDim2.new(1, -20, 0, 16)
 		arrow.BackgroundTransparency = 1
-		arrow.Image = getcustomasset('newvain/assets/new/expandright.png')
+		arrow.Image = getcustomasset('vain/assets/new/expandright.png')
 		arrow.ImageColor3 = color.Light(uipallet.Main, 0.37)
 		arrow.Parent = button
 		local settingspane = Instance.new('TextButton')
@@ -3057,7 +3057,7 @@ function mainapi:CreateGUI()
 		back.Size = UDim2.fromOffset(16, 16)
 		back.Position = UDim2.fromOffset(11, 13)
 		back.BackgroundTransparency = 1
-		back.Image = getcustomasset('newvain/assets/new/back.png')
+		back.Image = getcustomasset('vain/assets/new/back.png')
 		back.ImageColor3 = color.Light(uipallet.Main, 0.37)
 		back.Parent = settingspane
 		addCorner(settingspane)
@@ -3305,7 +3305,7 @@ function mainapi:CreateGUI()
 		preview.Size = UDim2.fromOffset(12, 12)
 		preview.Position = UDim2.new(1, -22, 0, 10)
 		preview.BackgroundTransparency = 1
-		preview.Image = getcustomasset('newvain/assets/new/colorpreview.png')
+		preview.Image = getcustomasset('vain/assets/new/colorpreview.png')
 		preview.ImageColor3 = Color3.fromHSV(optionapi.Hue, 1, 1)
 		preview.Parent = slider
 		local valuebox = Instance.new('TextBox')
@@ -3333,7 +3333,7 @@ function mainapi:CreateGUI()
 		expandicon.Size = UDim2.fromOffset(9, 5)
 		expandicon.Position = UDim2.fromOffset(4, 4)
 		expandicon.BackgroundTransparency = 1
-		expandicon.Image = getcustomasset('newvain/assets/new/expandicon.png')
+		expandicon.Image = getcustomasset('vain/assets/new/expandicon.png')
 		expandicon.ImageColor3 = color.Dark(uipallet.Text, 0.43)
 		expandicon.Parent = expandbutton
 		local rainbow = Instance.new('TextButton')
@@ -3346,24 +3346,24 @@ function mainapi:CreateGUI()
 		local rainbow1 = Instance.new('ImageLabel')
 		rainbow1.Size = UDim2.fromOffset(12, 12)
 		rainbow1.BackgroundTransparency = 1
-		rainbow1.Image = getcustomasset('newvain/assets/new/rainbow_1.png')
+		rainbow1.Image = getcustomasset('vain/assets/new/rainbow_1.png')
 		rainbow1.ImageColor3 = color.Light(uipallet.Main, 0.37)
 		rainbow1.Parent = rainbow
 		local rainbow2 = rainbow1:Clone()
-		rainbow2.Image = getcustomasset('newvain/assets/new/rainbow_2.png')
+		rainbow2.Image = getcustomasset('vain/assets/new/rainbow_2.png')
 		rainbow2.Parent = rainbow
 		local rainbow3 = rainbow1:Clone()
-		rainbow3.Image = getcustomasset('newvain/assets/new/rainbow_3.png')
+		rainbow3.Image = getcustomasset('vain/assets/new/rainbow_3.png')
 		rainbow3.Parent = rainbow
 		local rainbow4 = rainbow1:Clone()
-		rainbow4.Image = getcustomasset('newvain/assets/new/rainbow_4.png')
+		rainbow4.Image = getcustomasset('vain/assets/new/rainbow_4.png')
 		rainbow4.Parent = rainbow
 		local knob = Instance.new('ImageLabel')
 		knob.Name = 'Knob'
 		knob.Size = UDim2.fromOffset(26, 12)
 		knob.Position = UDim2.fromOffset(slidercolorpos[4] - 3, -5)
 		knob.BackgroundTransparency = 1
-		knob.Image = getcustomasset('newvain/assets/new/guislider.png')
+		knob.Image = getcustomasset('vain/assets/new/guislider.png')
 		knob.ImageColor3 = slidercolors[4]
 		knob.Parent = holder
 		optionsettings.Function = optionsettings.Function or function() end
@@ -3380,8 +3380,8 @@ function mainapi:CreateGUI()
 			ColorSequenceKeypoint.new(0, Color3.fromHSV(0, 0, 0)),
 			ColorSequenceKeypoint.new(1, Color3.fromHSV(optionapi.Hue, optionapi.Sat, 1))
 		}))
-		local normalknob = getcustomasset('newvain/assets/new/guislider.png')
-		local rainbowknob = getcustomasset('newvain/assets/new/guisliderrain.png')
+		local normalknob = getcustomasset('vain/assets/new/guislider.png')
+		local rainbowknob = getcustomasset('vain/assets/new/guisliderrain.png')
 		local rainbowthread
 
 		function optionapi:Save(tab)
@@ -3704,7 +3704,7 @@ function mainapi:CreateCategory(categorysettings)
 	arrow.Size = UDim2.fromOffset(9, 4)
 	arrow.Position = UDim2.fromOffset(20, 18)
 	arrow.BackgroundTransparency = 1
-	arrow.Image = getcustomasset('newvain/assets/new/expandup.png')
+	arrow.Image = getcustomasset('vain/assets/new/expandup.png')
 	arrow.ImageColor3 = Color3.fromRGB(140, 140, 140)
 	arrow.Rotation = 180
 	arrow.Parent = arrowbutton
@@ -3782,7 +3782,7 @@ function mainapi:CreateCategory(categorysettings)
 		bindicon.Size = UDim2.fromOffset(12, 12)
 		bindicon.Position = UDim2.new(0.5, -6, 0, 5)
 		bindicon.BackgroundTransparency = 1
-		bindicon.Image = getcustomasset('newvain/assets/new/bind.png')
+		bindicon.Image = getcustomasset('vain/assets/new/bind.png')
 		bindicon.ImageColor3 = color.Dark(uipallet.Text, 0.43)
 		bindicon.Parent = bind
 		local bindtext = Instance.new('TextLabel')
@@ -3800,7 +3800,7 @@ function mainapi:CreateCategory(categorysettings)
 		bindcover.Size = UDim2.fromOffset(154, 40)
 		bindcover.BackgroundTransparency = 1
 		bindcover.Visible = false
-		bindcover.Image = getcustomasset('newvain/assets/new/bindbkg.png')
+		bindcover.Image = getcustomasset('vain/assets/new/bindbkg.png')
 		bindcover.ScaleType = Enum.ScaleType.Slice
 		bindcover.SliceCenter = Rect.new(0, 0, 141, 40)
 		bindcover.Parent = modulebutton
@@ -3826,7 +3826,7 @@ function mainapi:CreateCategory(categorysettings)
 		dots.Size = UDim2.fromOffset(3, 16)
 		dots.Position = UDim2.fromOffset(4, 12)
 		dots.BackgroundTransparency = 1
-		dots.Image = getcustomasset('newvain/assets/new/dots.png')
+		dots.Image = getcustomasset('vain/assets/new/dots.png')
 		dots.ImageColor3 = color.Light(uipallet.Main, 0.37)
 		dots.Parent = dotsbutton
 		modulechildren.Name = modulesettings.Name..'Children'
@@ -3913,13 +3913,13 @@ function mainapi:CreateCategory(categorysettings)
 		bind.MouseEnter:Connect(function()
 			bindtext.Visible = false
 			bindicon.Visible = not bindtext.Visible
-			bindicon.Image = getcustomasset('newvain/assets/new/edit.png')
+			bindicon.Image = getcustomasset('vain/assets/new/edit.png')
 			if not moduleapi.Enabled then bindicon.ImageColor3 = color.Dark(uipallet.Text, 0.16) end
 		end)
 		bind.MouseLeave:Connect(function()
 			bindtext.Visible = #moduleapi.Bind > 0
 			bindicon.Visible = not bindtext.Visible
-			bindicon.Image = getcustomasset('newvain/assets/new/bind.png')
+			bindicon.Image = getcustomasset('vain/assets/new/bind.png')
 			if not moduleapi.Enabled then
 				bindicon.ImageColor3 = color.Dark(uipallet.Text, 0.43)
 			end
@@ -4161,7 +4161,7 @@ function mainapi:CreateOverlay(categorysettings)
 	pin.Position = UDim2.new(1, -47, 0, 12)
 	pin.BackgroundTransparency = 1
 	pin.AutoButtonColor = false
-	pin.Image = getcustomasset('newvain/assets/new/pin.png')
+	pin.Image = getcustomasset('vain/assets/new/pin.png')
 	pin.ImageColor3 = color.Dark(uipallet.Text, 0.43)
 	pin.Parent = window
 	local dotsbutton = Instance.new('TextButton')
@@ -4176,7 +4176,7 @@ function mainapi:CreateOverlay(categorysettings)
 	dots.Size = UDim2.fromOffset(3, 16)
 	dots.Position = UDim2.fromOffset(4, 12)
 	dots.BackgroundTransparency = 1
-	dots.Image = getcustomasset('newvain/assets/new/dots.png')
+	dots.Image = getcustomasset('vain/assets/new/dots.png')
 	dots.ImageColor3 = color.Light(uipallet.Main, 0.37)
 	dots.Parent = dotsbutton
 	local customchildren = Instance.new('Frame')
@@ -4346,7 +4346,7 @@ function mainapi:CreateCategoryList(categorysettings)
 	arrow.Size = UDim2.fromOffset(9, 4)
 	arrow.Position = UDim2.fromOffset(20, 19)
 	arrow.BackgroundTransparency = 1
-	arrow.Image = getcustomasset('newvain/assets/new/expandup.png')
+	arrow.Image = getcustomasset('vain/assets/new/expandup.png')
 	arrow.ImageColor3 = Color3.fromRGB(140, 140, 140)
 	arrow.Rotation = 180
 	arrow.Parent = arrowbutton
@@ -4372,7 +4372,7 @@ function mainapi:CreateCategoryList(categorysettings)
 	settings.Position = UDim2.new(1, -52, 0, 13)
 	settings.BackgroundTransparency = 1
 	settings.AutoButtonColor = false
-	settings.Image = getcustomasset('newvain/assets/new/customsettings.png')
+	settings.Image = getcustomasset('vain/assets/new/customsettings.png')
 	settings.ImageColor3 = color.Dark(uipallet.Text, 0.43)
 	settings.Parent = window
 	local divider = Instance.new('Frame')
@@ -4422,7 +4422,7 @@ function mainapi:CreateCategoryList(categorysettings)
 	addbutton.Size = UDim2.fromOffset(16, 16)
 	addbutton.Position = UDim2.new(1, -26, 0, 8)
 	addbutton.BackgroundTransparency = 1
-	addbutton.Image = getcustomasset('newvain/assets/new/add.png')
+	addbutton.Image = getcustomasset('vain/assets/new/add.png')
 	addbutton.ImageColor3 = categorysettings.Color
 	addbutton.ImageTransparency = 0.3
 	addbutton.Parent = addbkg
@@ -4439,8 +4439,8 @@ function mainapi:CreateCategoryList(categorysettings)
 				if ind then
 					if val ~= 'default' then
 						table.remove(mainapi.Profiles, ind)
-						if isfile('newvain/profiles/'..val..mainapi.Place..'.txt') and delfile then
-							delfile('newvain/profiles/'..val..mainapi.Place..'.txt')
+						if isfile('vain/profiles/'..val..mainapi.Place..'.txt') and delfile then
+							delfile('vain/profiles/'..val..mainapi.Place..'.txt')
 						end
 					end
 				else
@@ -4506,7 +4506,7 @@ function mainapi:CreateCategoryList(categorysettings)
 				dots.Size = UDim2.fromOffset(3, 16)
 				dots.Position = UDim2.fromOffset(10, 9)
 				dots.BackgroundTransparency = 1
-				dots.Image = getcustomasset('newvain/assets/new/dots.png')
+				dots.Image = getcustomasset('vain/assets/new/dots.png')
 				dots.ImageColor3 = color.Light(uipallet.Main, 0.37)
 				dots.Parent = dotsbutton
 				local bind = Instance.new('TextButton')
@@ -4527,7 +4527,7 @@ function mainapi:CreateCategoryList(categorysettings)
 				bindicon.Size = UDim2.fromOffset(12, 12)
 				bindicon.Position = UDim2.new(0.5, -6, 0, 5)
 				bindicon.BackgroundTransparency = 1
-				bindicon.Image = getcustomasset('newvain/assets/new/bind.png')
+				bindicon.Image = getcustomasset('vain/assets/new/bind.png')
 				bindicon.ImageColor3 = color.Dark(uipallet.Text, 0.43)
 				bindicon.Parent = bind
 				local bindtext = Instance.new('TextLabel')
@@ -4543,7 +4543,7 @@ function mainapi:CreateCategoryList(categorysettings)
 				bind.MouseEnter:Connect(function()
 					bindtext.Visible = false
 					bindicon.Visible = not bindtext.Visible
-					bindicon.Image = getcustomasset('newvain/assets/new/edit.png')
+					bindicon.Image = getcustomasset('vain/assets/new/edit.png')
 					if v.Name ~= mainapi.Profile then
 						bindicon.ImageColor3 = color.Dark(uipallet.Text, 0.16)
 					end
@@ -4551,7 +4551,7 @@ function mainapi:CreateCategoryList(categorysettings)
 				bind.MouseLeave:Connect(function()
 					bindtext.Visible = #v.Bind > 0
 					bindicon.Visible = not bindtext.Visible
-					bindicon.Image = getcustomasset('newvain/assets/new/bind.png')
+					bindicon.Image = getcustomasset('vain/assets/new/bind.png')
 					if v.Name ~= mainapi.Profile then
 						bindicon.ImageColor3 = color.Dark(uipallet.Text, 0.43)
 					end
@@ -4561,7 +4561,7 @@ function mainapi:CreateCategoryList(categorysettings)
 				bindcover.Size = UDim2.fromOffset(154, 33)
 				bindcover.BackgroundTransparency = 1
 				bindcover.Visible = false
-				bindcover.Image = getcustomasset('newvain/assets/new/bindbkg.png')
+				bindcover.Image = getcustomasset('vain/assets/new/bindbkg.png')
 				bindcover.ScaleType = Enum.ScaleType.Slice
 				bindcover.SliceCenter = Rect.new(0, 0, 141, 40)
 				bindcover.Parent = object
@@ -4694,7 +4694,7 @@ function mainapi:CreateCategoryList(categorysettings)
 				close.BackgroundColor3 = Color3.new(1, 1, 1)
 				close.BackgroundTransparency = 1
 				close.AutoButtonColor = false
-				close.Image = getcustomasset('newvain/assets/new/closemini.png')
+				close.Image = getcustomasset('vain/assets/new/closemini.png')
 				close.ImageColor3 = color.Light(uipallet.Text, 0.2)
 				close.ImageTransparency = 0.5
 				close.Parent = object
@@ -4861,7 +4861,7 @@ function mainapi:CreateSearch()
 	searchicon.Size = UDim2.fromOffset(14, 14)
 	searchicon.Position = UDim2.new(1, -23, 0, 11)
 	searchicon.BackgroundTransparency = 1
-	searchicon.Image = getcustomasset('newvain/assets/new/search.png')
+	searchicon.Image = getcustomasset('vain/assets/new/search.png')
 	searchicon.ImageColor3 = color.Light(uipallet.Main, 0.37)
 	searchicon.Parent = searchbkg
 	local legiticon = Instance.new('ImageButton')
@@ -4869,7 +4869,7 @@ function mainapi:CreateSearch()
 	legiticon.Size = UDim2.fromOffset(29, 16)
 	legiticon.Position = UDim2.fromOffset(8, 11)
 	legiticon.BackgroundTransparency = 1
-	legiticon.Image = getcustomasset('newvain/assets/new/legit.png')
+	legiticon.Image = getcustomasset('vain/assets/new/legit.png')
 	legiticon.Parent = searchbkg
 	local legitdivider = Instance.new('Frame')
 	legitdivider.Name = 'LegitDivider'
@@ -5006,7 +5006,7 @@ function mainapi:CreateLegit()
 	icon.Size = UDim2.fromOffset(16, 16)
 	icon.Position = UDim2.fromOffset(18, 13)
 	icon.BackgroundTransparency = 1
-	icon.Image = getcustomasset('newvain/assets/new/legittab.png')
+	icon.Image = getcustomasset('vain/assets/new/legittab.png')
 	icon.ImageColor3 = uipallet.Text
 	icon.Parent = window
 	local close = addCloseButton(window)
@@ -5055,7 +5055,7 @@ function mainapi:CreateLegit()
 	searchicon.BackgroundTransparency = 1
 	searchicon.Position = UDim2.new(1, -28, 0, 8)
 	searchicon.Size = UDim2.fromOffset(12, 12)
-	searchicon.Image = getcustomasset('newvain/assets/new/search.png')
+	searchicon.Image = getcustomasset('vain/assets/new/search.png')
 	searchicon.ImageColor3 = color.Light(uipallet.Main, 0.37)
 	searchicon.Parent = searchbox
 	local categorylist = Instance.new('Frame')
@@ -5192,7 +5192,7 @@ function mainapi:CreateLegit()
 		dots.Size = UDim2.fromOffset(2, 12)
 		dots.Position = UDim2.fromOffset(6, 6)
 		dots.BackgroundTransparency = 1
-		dots.Image = getcustomasset('newvain/assets/new/dots.png')
+		dots.Image = getcustomasset('vain/assets/new/dots.png')
 		dots.ImageColor3 = color.Light(uipallet.Main, 0.37)
 		dots.Parent = dotsbutton
 		local shadow = Instance.new('TextButton')
@@ -5229,7 +5229,7 @@ function mainapi:CreateLegit()
 		back.Size = UDim2.fromOffset(16, 16)
 		back.Position = UDim2.fromOffset(11, 13)
 		back.BackgroundTransparency = 1
-		back.Image = getcustomasset('newvain/assets/new/back.png')
+		back.Image = getcustomasset('vain/assets/new/back.png')
 		back.ImageColor3 = color.Light(uipallet.Main, 0.37)
 		back.Parent = settingspane
 		addCorner(settingspane)
@@ -5496,7 +5496,7 @@ function mainapi:CreateNotification(title, text, duration, type)
 		notification.ZIndex = 5
 		notification.BackgroundTransparency = 1
 		notification.AutoButtonColor = false
-		notification.Image = getcustomasset('newvain/assets/new/notification.png')
+		notification.Image = getcustomasset('vain/assets/new/notification.png')
 		notification.ScaleType = Enum.ScaleType.Slice
 		notification.SliceCenter = Rect.new(7, 7, 9, 9)
 		notification.Parent = notifications
@@ -5533,7 +5533,7 @@ function mainapi:CreateNotification(title, text, duration, type)
 		iconshadow.ZIndex = 5
 		iconshadow.BackgroundTransparency = 1
 		local iconType = (type == 'alert' or type == 'warning') and type or 'info'
-		iconshadow.Image = getcustomasset('newvain/assets/new/'..iconType..'.png')
+		iconshadow.Image = getcustomasset('vain/assets/new/'..iconType..'.png')
 		iconshadow.ImageColor3 = Color3.new()
 		iconshadow.ImageTransparency = 0.5
 		iconshadow.Parent = notification
@@ -5603,12 +5603,12 @@ function mainapi:Load(skipgui, profile)
 	local guidata = {}
 	local savecheck = true
 
-	if isfile('newvain/profiles/'..game.GameId..'.gui.txt') then
-		guidata = loadJson('newvain/profiles/'..game.GameId..'.gui.txt')
+	if isfile('vain/profiles/'..game.GameId..'.gui.txt') then
+		guidata = loadJson('vain/profiles/'..game.GameId..'.gui.txt')
 		if not guidata then
 			guidata = {Categories = {}}
 			self:CreateNotification('Vain', 'Failed to load GUI settings, Try rejoining ur game', 10, 'alert')
-			delfile('newvain/profiles/'..game.GameId..'.gui.txt')
+			delfile('vain/profiles/'..game.GameId..'.gui.txt')
 			savecheck = false
 		end
 
@@ -5651,8 +5651,8 @@ function mainapi:Load(skipgui, profile)
 		self.ProfileLabel.Size = UDim2.fromOffset(getfontsize(self.ProfileLabel.Text, self.ProfileLabel.TextSize, self.ProfileLabel.Font).X + 16, 24)
 	end
 
-	if isfile('newvain/profiles/'..self.Profile..self.Place..'.txt') then
-		local savedata = loadJson('newvain/profiles/'..self.Profile..self.Place..'.txt')
+	if isfile('vain/profiles/'..self.Profile..self.Place..'.txt') then
+		local savedata = loadJson('vain/profiles/'..self.Profile..self.Place..'.txt')
 		if not savedata then
 			savedata = {Categories = {}, Modules = {}, Legit = {}}
 			self:CreateNotification('Vain', 'Failed to load '..self.Profile..' profile.', 10, 'alert')
@@ -5725,7 +5725,7 @@ function mainapi:Load(skipgui, profile)
 	self.Categories.Main.Options.Bind:SetBind(self.Keybind)
 
 	if not inputService.KeyboardEnabled or shared.VainDeveloper then
-		local hide = isfile('newvain/profiles/hide.txt') and readfile('newvain/profiles/hide.txt') or nil
+		local hide = isfile('vain/profiles/hide.txt') and readfile('vain/profiles/hide.txt') or nil
 		if hide ~= nil then
 			hide = hide == 'true' and true or false
 		end
@@ -5742,7 +5742,7 @@ function mainapi:Load(skipgui, profile)
 		image.Size = UDim2.fromOffset(22, 22)
 		image.Position = UDim2.fromScale(0.5, 0.5)
 		image.BackgroundTransparency = 1
-		image.Image = getcustomasset('newvain/assets/new/vain.png')
+		image.Image = getcustomasset('vain/assets/new/vain.png')
 		image.ImageTransparency = hide and 1 or 0
 		image.Parent = button
 		local buttoncorner = Instance.new('UICorner')
@@ -5773,7 +5773,7 @@ function mainapi:Load(skipgui, profile)
 				Function = function(call)
 					button.BackgroundTransparency = call and 1 or 0.35
 					image.ImageTransparency = call and 1 or 0
-					writefile('newvain/profiles/hide.txt', tostring(call))
+					writefile('vain/profiles/hide.txt', tostring(call))
 				end
 			})
 		end
@@ -5851,8 +5851,8 @@ function mainapi:Save(newprofile)
 		}
 	end
 
-	writefile('newvain/profiles/'..game.GameId..'.gui.txt', httpService:JSONEncode(guidata))
-	writefile('newvain/profiles/'..self.Profile..self.Place..'.txt', httpService:JSONEncode(savedata))
+	writefile('vain/profiles/'..game.GameId..'.gui.txt', httpService:JSONEncode(guidata))
+	writefile('vain/profiles/'..self.Profile..self.Place..'.txt', httpService:JSONEncode(savedata))
 end
 
 function mainapi:SaveOptions(object, savedoptions)
@@ -6021,43 +6021,43 @@ mainapi:CreateGUI()
 mainapi.Categories.Main:CreateDivider()
 mainapi:CreateCategory({
 	Name = 'Combat',
-	Icon = getcustomasset('newvain/assets/new/combaticon.png'),
+	Icon = getcustomasset('vain/assets/new/combaticon.png'),
 	Size = UDim2.fromOffset(13, 14)
 })
 mainapi:CreateCategory({
 	Name = 'Blatant',
-	Icon = getcustomasset('newvain/assets/new/blatanticon.png'),
+	Icon = getcustomasset('vain/assets/new/blatanticon.png'),
 	Size = UDim2.fromOffset(14, 14)
 })
 mainapi:CreateCategory({
 	Name = 'Render',
-	Icon = getcustomasset('newvain/assets/new/rendericon.png'),
+	Icon = getcustomasset('vain/assets/new/rendericon.png'),
 	Size = UDim2.fromOffset(15, 14)
 })
 mainapi:CreateCategory({
 	Name = 'Utility',
-	Icon = getcustomasset('newvain/assets/new/utilityicon.png'),
+	Icon = getcustomasset('vain/assets/new/utilityicon.png'),
 	Size = UDim2.fromOffset(15, 14)
 })
 mainapi:CreateCategory({
 	Name = 'World',
-	Icon = getcustomasset('newvain/assets/new/worldicon.png'),
+	Icon = getcustomasset('vain/assets/new/worldicon.png'),
 	Size = UDim2.fromOffset(14, 14)
 })
 mainapi:CreateCategory({
 	Name = 'Inventory',
-	Icon = getcustomasset('newvain/assets/new/inventoryicon.png'),
+	Icon = getcustomasset('vain/assets/new/inventoryicon.png'),
 	Size = UDim2.fromOffset(15, 14)
 })
 mainapi:CreateCategory({
 	Name = 'Minigames',
-	Icon = getcustomasset('newvain/assets/new/miniicon.png'),
+	Icon = getcustomasset('vain/assets/new/miniicon.png'),
 	Size = UDim2.fromOffset(19, 12)
 })
 if game.GameId == 2619619496 then
 	mainapi:CreateCategory({
 		Name = 'Kits',
-		Icon = getcustomasset('newvain/assets/new/friendstab.png'),
+		Icon = getcustomasset('vain/assets/new/friendstab.png'),
 		Size = UDim2.fromOffset(15, 15)
 	})
 end
@@ -6070,7 +6070,7 @@ mainapi.Categories.Main:CreateDivider('misc')
 local friends
 friends = mainapi:CreateCategoryList({
 	Name = 'Friends',
-	Icon = getcustomasset('newvain/assets/new/friendstab.png'),
+	Icon = getcustomasset('vain/assets/new/friendstab.png'),
 	Size = UDim2.fromOffset(17, 16),
 	Placeholder = 'Roblox username',
 	Color = Color3.fromRGB(5, 134, 105),
@@ -6104,7 +6104,7 @@ friends:CreateToggle({
 ]]
 mainapi:CreateCategoryList({
 	Name = 'Profiles',
-	Icon = getcustomasset('newvain/assets/new/profilesicon.png'),
+	Icon = getcustomasset('vain/assets/new/profilesicon.png'),
 	Size = UDim2.fromOffset(17, 10),
 	Position = UDim2.fromOffset(12, 16),
 	Placeholder = 'Type name',
@@ -6686,7 +6686,7 @@ end
 local targets
 targets = mainapi:CreateCategoryList({
 	Name = 'Targets',
-	Icon = getcustomasset('newvain/assets/new/friendstab.png'),
+	Icon = getcustomasset('vain/assets/new/friendstab.png'),
 	Size = UDim2.fromOffset(17, 16),
 	Placeholder = 'Roblox username',
 	Function = function()
@@ -6714,14 +6714,14 @@ general:CreateButton({
 	Name = 'Reset current profile',
 	Function = function()
 	mainapi.Save = function() end
-		if isfile('newvain/profiles/'..mainapi.Profile..mainapi.Place..'.txt') and delfile then
-			delfile('newvain/profiles/'..mainapi.Profile..mainapi.Place..'.txt')
+		if isfile('vain/profiles/'..mainapi.Profile..mainapi.Place..'.txt') and delfile then
+			delfile('vain/profiles/'..mainapi.Profile..mainapi.Place..'.txt')
 		end
 		shared.vainreload = true
 		if shared.VainDeveloper then
-			loadstring(readfile('newvain/loader.lua'), 'loader')()
+			loadstring(readfile('vain/loader.lua'), 'loader')()
 		else
-			loadstring(game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('newvain/profiles/commit.txt')..'/loader.lua', true))()
+			loadstring(game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('vain/profiles/commit.txt')..'/loader.lua', true))()
 		end
 	end,
 	Tooltip = 'This will set your profile to the default settings of Vape'
@@ -6738,7 +6738,7 @@ general:CreateButton({
 	Function = function()
 		shared.vainreload = true
 		if shared.VainDeveloper then
-			loadstring(readfile('newvain/main.lua'), 'main')()
+			loadstring(readfile('vain/main.lua'), 'main')()
 		else
 			loadstring(game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/main/init.lua', true), 'init')()
 		end
@@ -6852,12 +6852,12 @@ guipane:CreateDropdown({
 	List = inputService.TouchEnabled and {'new', 'old'} or {'new', 'old', 'rise'},
 	Function = function(val, mouse)
 		if mouse then
-			writefile('newvain/profiles/gui.txt', val)
+			writefile('vain/profiles/gui.txt', val)
 			shared.vainreload = true
 			if shared.VainDeveloper then
-				loadstring(readfile('newvain/loader.lua'), 'loader')()
+				loadstring(readfile('vain/loader.lua'), 'loader')()
 			else
-				loadstring(game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('newvain/profiles/commit.txt')..'/loader.lua', true))()
+				loadstring(game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('vain/profiles/commit.txt')..'/loader.lua', true))()
 			end
 		end
 	end,
@@ -6965,7 +6965,7 @@ mainapi.Categories.Main:CreateBind()
 
 local textgui = mainapi:CreateOverlay({
 	Name = 'Text GUI',
-	Icon = getcustomasset('newvain/assets/new/textguiicon.png'),
+	Icon = getcustomasset('vain/assets/new/textguiicon.png'),
 	Size = UDim2.fromOffset(16, 12),
 	Position = UDim2.fromOffset(12, 14),
 	Function = function()
@@ -7099,8 +7099,8 @@ local textguimodules = textgui:CreateToggle({
 textguimoduleslist = textgui:CreateTextList({
 	Name = 'Blacklist',
 	Tooltip = 'Name of module to hide.',
-	Icon = getcustomasset('newvain/assets/new/blockedicon.png'),
-	Tab = getcustomasset('newvain/assets/new/blockedtab.png'),
+	Icon = getcustomasset('vain/assets/new/blockedicon.png'),
+	Tab = getcustomasset('vain/assets/new/blockedtab.png'),
 	TabSize = UDim2.fromOffset(21, 16),
 	Color = Color3.fromRGB(250, 50, 56),
 	Function = function()
@@ -7177,7 +7177,7 @@ VapeLogo.BackgroundTransparency = 1
 VapeLogo.BorderSizePixel = 0
 VapeLogo.Visible = false
 VapeLogo.BackgroundColor3 = Color3.new()
-VapeLogo.Image = getcustomasset('newvain/assets/new/textvape.png')
+VapeLogo.Image = getcustomasset('vain/assets/new/textvape.png')
 VapeLogo.Parent = textgui.Children
 
 local lastside = textgui.Children.AbsolutePosition.X > (gui.AbsoluteSize.X / 2)
@@ -7199,7 +7199,7 @@ VapeLogoV4.Position = UDim2.new(1, 1, 0, 1)
 VapeLogoV4.BackgroundColor3 = Color3.new()
 VapeLogoV4.BackgroundTransparency = 1
 VapeLogoV4.BorderSizePixel = 0
-VapeLogoV4.Image = getcustomasset('newvain/assets/new/textv4.png')
+VapeLogoV4.Image = getcustomasset('vain/assets/new/textv4.png')
 VapeLogoV4.Parent = VapeLogo
 local VapeLogoShadow = VapeLogo:Clone()
 VapeLogoShadow.Position = UDim2.fromOffset(1, 1)
@@ -7269,7 +7269,7 @@ local targetinfoobj
 local targetinfobcolor
 targetinfoobj = mainapi:CreateOverlay({
 	Name = 'Target Info',
-	Icon = getcustomasset('newvain/assets/new/targetinfoicon.png'),
+	Icon = getcustomasset('vain/assets/new/targetinfoicon.png'),
 	Size = UDim2.fromOffset(14, 14),
 	Position = UDim2.fromOffset(12, 14),
 	CategorySize = 240,

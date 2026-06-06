@@ -17,9 +17,9 @@ local function downloadFile(path, func)
 		local suc, res = pcall(function()
 			return game:HttpGet(
 				'https://raw.githubusercontent.com/VainV6/Vain/'
-					.. readfile('newvain/profiles/commit.txt')
+					.. readfile('vain/profiles/commit.txt')
 					.. '/'
-					.. select(1, path:gsub('newvain/', '')),
+					.. select(1, path:gsub('vain/', '')),
 				true
 			)
 		end)
@@ -57,7 +57,7 @@ local prediction = vain.Libraries.prediction
 local targetinfo = vain.Libraries.targetinfo
 local sessioninfo = vain.Libraries.sessioninfo
 local getcustomasset = vain.Libraries.getcustomasset
-local drawingactor = loadstring(downloadFile('newvain/libraries/drawing.lua'), 'drawing')(...)
+local drawingactor = loadstring(downloadFile('vain/libraries/drawing.lua'), 'drawing')(...)
 local function notif(...)
 	return vain:CreateNotification(...)
 end
@@ -75,7 +75,7 @@ if not select(1, ...) and game.PlaceId == 5938036553 then
 			repeat
 				task.wait()
 			until not shared.vain
-			local executionString = "loadfile('newvain/main.lua')(" .. drawingactor .. ')'
+			local executionString = "loadfile('vain/main.lua')(" .. drawingactor .. ')'
 			for i, v in shared do
 				if type(v) == 'string' then
 					executionString = string.format("shared.%s = '%s'", i, v) .. '\n' .. executionString
@@ -112,7 +112,7 @@ local function addBlur(parent)
 	blur.Size = UDim2.new(1, 89, 1, 52)
 	blur.Position = UDim2.fromOffset(-48, -31)
 	blur.BackgroundTransparency = 1
-	blur.Image = getcustomasset('newvain/assets/new/blur.png')
+	blur.Image = getcustomasset('vain/assets/new/blur.png')
 	blur.ScaleType = Enum.ScaleType.Slice
 	blur.SliceCenter = Rect.new(52, 31, 261, 502)
 	blur.Parent = parent
