@@ -2812,10 +2812,8 @@ run(function()
         end,
         Default = true,
     })
-    Mouse = SilentAura:CreateToggle({Name = 'Require mouse down'})
-    Tooltip = 'Only activates while the left mouse button is held',
-    LegitAura = SilentAura:CreateToggle({Name = 'Swing only'})
-    Tooltip = 'Enables or disables swing only',
+    Mouse = SilentAura:CreateToggle({Name = 'Require mouse down', Tooltip = 'Only activates while the left mouse button is held'})
+    LegitAura = SilentAura:CreateToggle({Name = 'Swing only', Tooltip = 'Enables or disables swing only'})
     SilentAim = SilentAura:CreateToggle({
         Name = 'Silent Aim',
         Tooltip = "Uses Vain's aiming technology to silently aim while looking legit",
@@ -2846,8 +2844,7 @@ run(function()
         Darker = true,
         DefaultOpacity = 0.5,
     })
-    Limit = SilentAura:CreateToggle({Name = 'Limit to items'})
-    Tooltip = 'Only activates when a required item is in your hand',
+    Limit = SilentAura:CreateToggle({Name = 'Limit to items', Tooltip = 'Only activates when a required item is in your hand'})
 end)
 
 run(function()
@@ -5370,12 +5367,9 @@ run(function()
         Name = 'Dynamic hits',
         Tooltip = 'Calculates ur hitreg depending on ur distance'
     })
-    Mouse = Killaura:CreateToggle({Name = 'Require mouse down'})
-    Tooltip = 'Only activates while the left mouse button is held',
-    Swing = Killaura:CreateToggle({Name = 'No Swing'})
-    Tooltip = 'Sends hit packets without playing the swing animation',
-    GUI = Killaura:CreateToggle({Name = 'GUI check'})
-    Tooltip = 'Pauses the module when a GUI menu is open',
+    Mouse = Killaura:CreateToggle({Name = 'Require mouse down', Tooltip = 'Only activates while the left mouse button is held'})
+    Swing = Killaura:CreateToggle({Name = 'No Swing', Tooltip = 'Sends hit packets without playing the swing animation'})
+    GUI = Killaura:CreateToggle({Name = 'GUI check', Tooltip = 'Pauses the module when a GUI menu is open'})
     Killaura:CreateToggle({
         Name = 'Show target',
         Tooltip = 'Renders a visual indicator on the current target',
@@ -5509,8 +5503,7 @@ run(function()
         Darker = true,
         Visible = false
     })
-    Face = Killaura:CreateToggle({Name = 'Face target'})
-    Tooltip = 'Rotates your character to face the target during animation',
+    Face = Killaura:CreateToggle({Name = 'Face target', Tooltip = 'Rotates your character to face the target during animation'})
     Animation = Killaura:CreateToggle({
         Name = 'Custom Animation',
         Tooltip = 'Plays a custom ability animation instead of the default',
@@ -10310,8 +10303,7 @@ run(function()
         end,
         Tooltip = 'Automatically uses kit abilities.'
     })
-    Legit = AutoKit:CreateToggle({Name = 'Legit Range'})
-    Tooltip = 'Restricts range to a value indistinguishable from vanilla',
+    Legit = AutoKit:CreateToggle({Name = 'Legit Range', Tooltip = 'Restricts range to a value indistinguishable from vanilla'})
     local sortTable = {}
     for i in AutoKitFunctions do
         table.insert(sortTable, i)
@@ -11637,8 +11629,7 @@ run(function()
     	DefaultMin = 50,
     	DefaultMax = 200,
     })
-    TargetCheck = KnockbackDelay:CreateToggle({ Name = 'Target check' })
-    Tooltip = 'Only applies to the current killaura target',
+    TargetCheck = KnockbackDelay:CreateToggle({ Name = 'Target check' , Tooltip = 'Only applies to the current killaura target'})
 end)
 
 run(function()
@@ -11746,8 +11737,7 @@ run(function()
         Tooltip = 'Uses a network-level teleport packet',
         Default = true
     })
-    Lower = PickupRange:CreateToggle({Name = 'Feet Check'})
-    Tooltip = 'Verifies your feet are clear before teleporting',
+    Lower = PickupRange:CreateToggle({Name = 'Feet Check', Tooltip = 'Verifies your feet are clear before teleporting'})
 end)
 
 run(function()
@@ -11946,10 +11936,8 @@ run(function()
         Tooltip = 'Allows diagonal block placement while scaffolding',
         Default = true
     })
-    LimitItem = Scaffold:CreateToggle({Name = 'Limit to items'})
-    Tooltip = 'Only activates when a required item is in your hand',
-    Mouse = Scaffold:CreateToggle({Name = 'Require mouse down'})
-    Tooltip = 'Only activates while the left mouse button is held',
+    LimitItem = Scaffold:CreateToggle({Name = 'Limit to items', Tooltip = 'Only activates when a required item is in your hand'})
+    Mouse = Scaffold:CreateToggle({Name = 'Require mouse down', Tooltip = 'Only activates while the left mouse button is held'})
     Count = Scaffold:CreateToggle({
         Name = 'Block Count',
         Tooltip = 'Shows the remaining block count while scaffolding',
@@ -12546,8 +12534,7 @@ run(function()
         Max = 360,
         Default = 200,
     })
-    Limit = BedAssist:CreateToggle({Name = 'Limit to item', Default = true})
-    Tooltip = 'Only activates when a required item is in your hand',
+    Limit = BedAssist:CreateToggle({Name = 'Limit to item', Default = true, Tooltip = 'Only activates when a required item is in your hand'})
 end)
 
 run(function()
@@ -12677,10 +12664,8 @@ run(function()
         Max = 30,
         Default = 15,
     })
-    Switch = BedProtector:CreateToggle({Name = 'Auto Switch'})
-    Tooltip = 'Automatically switches to the required tool or item',
-    Smart = BedProtector:CreateToggle({Name = 'Smart', Default = true})
-    Tooltip = 'Uses smart detection to avoid triggering unnecessarily',
+    Switch = BedProtector:CreateToggle({Name = 'Auto Switch', Tooltip = 'Automatically switches to the required tool or item'})
+    Smart = BedProtector:CreateToggle({Name = 'Smart', Default = true, Tooltip = 'Uses smart detection to avoid triggering unnecessarily'})
 end)
 
 run(function()
@@ -12910,8 +12895,7 @@ run(function()
     	DefaultMax = 0.1,
     	Decimal = 5,
     })
-    Bedfinder = BlockIn:CreateToggle({ Name = 'Bed finder' })
-    Tooltip = 'Enables or disables bed finder',
+    Bedfinder = BlockIn:CreateToggle({ Name = 'Bed finder' , Tooltip = 'Enables or disables bed finder'})
     LimitItem = BlockIn:CreateToggle({
     	Name = 'Limit to items',
     	Tooltip = 'Only block-in with the block you are holding',
@@ -13005,8 +12989,7 @@ run(function()
             return val == 1 and 'stud' or 'studs'
         end
     })
-    Open = ChestSteal:CreateToggle({Name = 'GUI Check'})
-    Tooltip = 'Pauses the module when a GUI menu is open',
+    Open = ChestSteal:CreateToggle({Name = 'GUI Check', Tooltip = 'Pauses the module when a GUI menu is open'})
     Skywars = ChestSteal:CreateToggle({
         Name = 'Only Skywars',
         Tooltip = 'Only activates in SkyWars game mode',
@@ -13781,8 +13764,7 @@ run(function()
         }))
         count += 1
     end
-    TierCheck = AutoBuy:CreateToggle({Name = 'Tier Check'})
-    Tooltip = 'Skips purchase if the item is already at max tier',
+    TierCheck = AutoBuy:CreateToggle({Name = 'Tier Check', Tooltip = 'Skips purchase if the item is already at max tier'})
     BedwarsCheck = AutoBuy:CreateToggle({
         Name = 'Only Bedwars',
         Tooltip = 'Only activates in the BedWars game mode',
@@ -13794,8 +13776,7 @@ run(function()
         end,
         Default = true
     })
-    GUI = AutoBuy:CreateToggle({Name = 'GUI check'})
-    Tooltip = 'Pauses the module when a GUI menu is open',
+    GUI = AutoBuy:CreateToggle({Name = 'GUI check', Tooltip = 'Pauses the module when a GUI menu is open'})
     SmartCheck = AutoBuy:CreateToggle({
         Name = 'Smart check',
         Default = true,
@@ -14626,8 +14607,7 @@ run(function()
             end
         end
     })
-    Clear = AutoHotbar:CreateToggle({Name = 'Clear Hotbar'})
-    Tooltip = 'Clears relevant hotbar slots before item switch',
+    Clear = AutoHotbar:CreateToggle({Name = 'Clear Hotbar', Tooltip = 'Clears relevant hotbar slots before item switch'})
     List = AutoHotbar:CreateHotbarList({})
 end)
 
@@ -15374,14 +15354,10 @@ run(function()
         Default = true,
         Darker = true
     })
-    Animation = Breaker:CreateToggle({Name = 'Animation'})
-    Tooltip = 'Shows the kit ability animation when activated',
-    SelfBreak = Breaker:CreateToggle({Name = 'Self Break'})
-    Tooltip = 'Enables or disables self break',
-    InstantBreak = Breaker:CreateToggle({Name = 'Instant Break'})
-    Tooltip = 'Enables or disables instant break',
-    AutoTool = Breaker:CreateToggle({Name = 'Auto Tool'})
-    Tooltip = 'Enables or disables auto tool',
+    Animation = Breaker:CreateToggle({Name = 'Animation', Tooltip = 'Shows the kit ability animation when activated'})
+    SelfBreak = Breaker:CreateToggle({Name = 'Self Break', Tooltip = 'Enables or disables self break'})
+    InstantBreak = Breaker:CreateToggle({Name = 'Instant Break', Tooltip = 'Enables or disables instant break'})
+    AutoTool = Breaker:CreateToggle({Name = 'Auto Tool', Tooltip = 'Enables or disables auto tool'})
     LimitItem = Breaker:CreateToggle({
         Name = 'Limit to items',
         Tooltip = 'Only breaks when tools are held'
@@ -15757,12 +15733,9 @@ run(function()
     	Tooltip = 'Automatically breaks cannon/jump on launch'
     })
 
-    Jump = AutoDavey:CreateToggle({Name = 'Jump on impact'})
-    Tooltip = 'Jumps when the ability makes contact',
-    Break = AutoDavey:CreateToggle({Name = 'Break on impact'})
-    Tooltip = 'Breaks the item on impact with a surface',
-    Switch = AutoDavey:CreateToggle({Name = 'Legit switch'})
-    Tooltip = 'Switches to a more legit-looking mode automatically',
+    Jump = AutoDavey:CreateToggle({Name = 'Jump on impact', Tooltip = 'Jumps when the ability makes contact'})
+    Break = AutoDavey:CreateToggle({Name = 'Break on impact', Tooltip = 'Breaks the item on impact with a surface'})
+    Switch = AutoDavey:CreateToggle({Name = 'Legit switch', Tooltip = 'Switches to a more legit-looking mode automatically'})
 end)
 
 run(function()
@@ -16153,8 +16126,7 @@ run(function()
     		return val <= 1 and 'stud' or 'studs'
     	end
     })
-    Limit = AutoEmber:CreateToggle({Name = 'Limit to item'})
-    Tooltip = 'Only activates when a required item is in your hand',
+    Limit = AutoEmber:CreateToggle({Name = 'Limit to item', Tooltip = 'Only activates when a required item is in your hand'})
 end)
 
 run(function()
@@ -16233,8 +16205,7 @@ run(function()
     		end)
     	end
     })
-    Jump = AutoGingerbread:CreateToggle({Name = 'Jump after launch'})
-    Tooltip = 'Jumps immediately after being launched by a pad',
+    Jump = AutoGingerbread:CreateToggle({Name = 'Jump after launch', Tooltip = 'Jumps immediately after being launched by a pad'})
     Switch = AutoGingerbread:CreateToggle({
     	Name = 'Legit switch',
     	Tooltip = 'Switches to a more legit-looking mode automatically',
@@ -16690,8 +16661,7 @@ run(function()
     	Tooltip = 'Automatically uses the metal kit'
     })
 
-    Limit = AutoMetal:CreateToggle({Name = 'Limit to item'})
-    Tooltip = 'Only activates when a required item is in your hand',
+    Limit = AutoMetal:CreateToggle({Name = 'Limit to item', Tooltip = 'Only activates when a required item is in your hand'})
     StreamerMode = AutoMetal:CreateToggle({
     	Name = 'Streamer mode',
     	Tooltip = 'Enables or disables streamer mode',
@@ -16826,10 +16796,8 @@ run(function()
     	end))
     end
 
-    Notify = AutoNoelle:CreateToggle({ Name = 'Notify on direct' })
-    Tooltip = 'Enables or disables notify on direct',
-    Limit = AutoNoelle:CreateToggle({ Name = 'Limit to item' })
-    Tooltip = 'Only activates when a required item is in your hand',
+    Notify = AutoNoelle:CreateToggle({ Name = 'Notify on direct' , Tooltip = 'Enables or disables notify on direct'})
+    Limit = AutoNoelle:CreateToggle({ Name = 'Limit to item' , Tooltip = 'Only activates when a required item is in your hand'})
     FrostySlime = AutoNoelle:CreateDropdown({
     	Name = 'Frosty Slime Target',
     	List = {},
@@ -17636,8 +17604,7 @@ run(function()
     	Tooltip = 'Uses the lightning strike ability automatically',
     	Default = true
     })
-    UseStorm = AutoZeno:CreateToggle({Name = 'Use Lightning Storm'})
-    Tooltip = 'Enables or disables use lightning storm',
+    UseStorm = AutoZeno:CreateToggle({Name = 'Use Lightning Storm', Tooltip = 'Enables or disables use lightning storm'})
     AutoShockWave = AutoZeno:CreateToggle({
     	Name = 'Auto Shockwave',
     	Tooltip = 'Enables or disables auto shockwave',
@@ -19982,20 +19949,13 @@ run(function()
 		Name = 'Swing time', Min = 0, Max = 0.5, Default = 0.42, Decimal = 100
 		Tooltip = 'Minimum seconds between swings',
 	})
-	AngleSlider = Killaura:CreateSlider({Name = 'Max angle', Min = 1, Max = 360, Default = 360})
-	Tooltip = 'Maximum angle in degrees from your look direction to engage',
-	UpdateRate = Killaura:CreateSlider({Name = 'Update rate', Min = 1, Max = 120, Default = 60, Suffix = 'hz'})
-	Tooltip = 'How often to scan for targets (seconds)',
-	MaxTargets = Killaura:CreateSlider({Name = 'Max targets', Min = 1, Max = 5, Default = 5})
-	Tooltip = 'Maximum number of enemies to attack simultaneously',
-	Sort = Killaura:CreateDropdown({Name = 'Target Mode', List = methods})
-	Tooltip = 'Selects how targets are prioritized and selected',
-	Mouse = Killaura:CreateToggle({Name = 'Require mouse down'})
-	Tooltip = 'Only activates while the left mouse button is held',
-	Swing = Killaura:CreateToggle({Name = 'No Swing'})
-	Tooltip = 'Sends hit packets without playing the swing animation',
-	GUI = Killaura:CreateToggle({Name = 'GUI check'})
-	Tooltip = 'Pauses the module when a GUI menu is open',
+	AngleSlider = Killaura:CreateSlider({Name = 'Max angle', Min = 1, Max = 360, Default = 360, Tooltip = 'Maximum angle in degrees from your look direction to engage'})
+	UpdateRate = Killaura:CreateSlider({Name = 'Update rate', Min = 1, Max = 120, Default = 60, Suffix = 'hz', Tooltip = 'How often to scan for targets (seconds)'})
+	MaxTargets = Killaura:CreateSlider({Name = 'Max targets', Min = 1, Max = 5, Default = 5, Tooltip = 'Maximum number of enemies to attack simultaneously'})
+	Sort = Killaura:CreateDropdown({Name = 'Target Mode', List = methods, Tooltip = 'Selects how targets are prioritized and selected'})
+	Mouse = Killaura:CreateToggle({Name = 'Require mouse down', Tooltip = 'Only activates while the left mouse button is held'})
+	Swing = Killaura:CreateToggle({Name = 'No Swing', Tooltip = 'Sends hit packets without playing the swing animation'})
+	GUI = Killaura:CreateToggle({Name = 'GUI check', Tooltip = 'Pauses the module when a GUI menu is open'})
 	Killaura:CreateToggle({
 		Name = 'Show target',
 		Tooltip = 'Renders a visual indicator on the current target',
@@ -20101,8 +20061,7 @@ run(function()
 		end,
 		Darker = true, Visible = false
 	})
-	Face = Killaura:CreateToggle({Name = 'Face target'})
-	Tooltip = 'Rotates your character to face the target during animation',
+	Face = Killaura:CreateToggle({Name = 'Face target', Tooltip = 'Rotates your character to face the target during animation'})
 	Animation = Killaura:CreateToggle({
 		Name = 'Custom Animation',
 		Tooltip = 'Plays a custom ability animation instead of the default',
@@ -20115,12 +20074,9 @@ run(function()
 	})
 	local animnames = {}
 	for i in anims do table.insert(animnames, i) end
-	AnimationMode = Killaura:CreateDropdown({Name = 'Animation Mode', List = animnames, Darker = true, Visible = false})
-	Tooltip = 'Selects the animation style to use',
-	AnimationSpeed = Killaura:CreateSlider({Name = 'Animation Speed', Min = 0, Max = 2, Default = 1, Decimal = 10, Darker = true, Visible = false})
-	Tooltip = 'Adjusts the animation speed value',
-	AnimationTween = Killaura:CreateToggle({Name = 'No Tween', Darker = true, Visible = false})
-	Tooltip = 'Skips smooth interpolation for instant hitbox updates',
+	AnimationMode = Killaura:CreateDropdown({Name = 'Animation Mode', List = animnames, Darker = true, Visible = false, Tooltip = 'Selects the animation style to use'})
+	AnimationSpeed = Killaura:CreateSlider({Name = 'Animation Speed', Min = 0, Max = 2, Default = 1, Decimal = 10, Darker = true, Visible = false, Tooltip = 'Adjusts the animation speed value'})
+	AnimationTween = Killaura:CreateToggle({Name = 'No Tween', Darker = true, Visible = false, Tooltip = 'Skips smooth interpolation for instant hitbox updates'})
 	Limit = Killaura:CreateToggle({
 		Name = 'Limit to items',
 		Tooltip = 'Only activates when a required item is in your hand',
@@ -27199,10 +27155,8 @@ run(function()
 		Default = 0.1,
 		Decimal = 10
 	})
-	Streamer = AutoMushroom:CreateToggle({Name='Streamer Mode'})
-	Tooltip = 'Enables an additional streamer-friendly display mode',
-	Animations = AutoMushroom:CreateToggle({Name='Animations',Default=true})
-	Tooltip = 'Shows ability animations when activated',
+	Streamer = AutoMushroom:CreateToggle({Name='Streamer Mode', Tooltip = 'Enables an additional streamer-friendly display mode'})
+	Animations = AutoMushroom:CreateToggle({Name='Animations',Default=true, Tooltip = 'Shows ability animations when activated'})
 end)
 
 run(function()

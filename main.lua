@@ -80,20 +80,24 @@ local gui = 'new'
 if not isfolder('newvain/assets/'..gui) then
 	makefolder('newvain/assets/'..gui)
 end
-vain = loadstring(downloadFile('newvain/guis/'..gui..'.lua'), 'gui')()
+local guiLoader = loadstring(downloadFile('newvain/guis/'..gui..'.lua'), 'gui')
+vain = guiLoader and guiLoader()
 shared.vain = vain
 
 if not shared.VainIndependent then
-	loadstring(downloadFile('newvain/games/universal.lua'), 'universal')()
+	local universalLoader = loadstring(downloadFile('newvain/games/universal.lua'), 'universal')
+	if universalLoader then universalLoader() end
 	if isfile('newvain/games/'..game.PlaceId..'.lua') then
-		loadstring(readfile('newvain/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))()
+		local gameLoader = loadstring(readfile('newvain/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))
+		if gameLoader then gameLoader() end
 	else
 		if not shared.VainDeveloper then
 			local suc, res = pcall(function()
 				return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('newvain/profiles/commit.txt')..'/games/'..game.PlaceId..'.lua', true)
 			end)
 			if suc and res ~= '404: Not Found' then
-				loadstring(downloadFile('newvain/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))()
+				local gameLoader = loadstring(downloadFile('newvain/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))
+				if gameLoader then gameLoader() end
 			end
 		end
 	end
