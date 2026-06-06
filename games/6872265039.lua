@@ -124,28 +124,6 @@ run(function()
 	})
 end)
 
-VoidwareFunctions.GlobaliseObject("bedwars", bedwars)
-VoidwareFunctions.GlobaliseObject("GlobalBedwars", bedwars)
-
-VoidwareFunctions.GlobaliseObject("VapeBWLoaded", true)
-local function createMonitoredTable(originalTable, onChange)
-    local proxy = {}
-    local mt = {
-        __index = originalTable,
-        __newindex = function(t, key, value)
-            local oldValue = originalTable[key]
-            originalTable[key] = value
-            if onChange then
-                onChange(key, oldValue, value)
-            end
-        end
-    }
-    setmetatable(proxy, mt)
-    return proxy
-end
-local function onChange2(key, oldValue, newValue)
-	VoidwareFunctions.GlobaliseObject("bedwars", bedwars)
-	VoidwareFunctions.GlobaliseObject("GlobalBedwars", bedwars)
-end
-
-bedwars = createMonitoredTable(bedwars, onChange2)
+shared.bedwars = bedwars
+shared.GlobalBedwars = bedwars
+shared.VapeBWLoaded = true
