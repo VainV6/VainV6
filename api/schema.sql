@@ -50,5 +50,12 @@ CREATE INDEX IF NOT EXISTS idx_gprofiles_game_installs ON global_profiles(game_i
 CREATE INDEX IF NOT EXISTS idx_gprofiles_game_created  ON global_profiles(game_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gprofiles_author        ON global_profiles(author_roblox_username);
 
+-- Tracks every injected player regardless of whitelist status, for /players
+CREATE TABLE IF NOT EXISTS player_seen (
+    username   TEXT    PRIMARY KEY,
+    last_seen  INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_whitelist_roblox ON whitelist(roblox_username);
 CREATE INDEX IF NOT EXISTS idx_cmd_queue_target  ON command_queue(target_roblox_username, expires_at);
+CREATE INDEX IF NOT EXISTS idx_player_seen_ts    ON player_seen(last_seen DESC);

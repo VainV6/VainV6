@@ -52,16 +52,24 @@ export async function removeLink(db: D1Database, discordId: string): Promise<boo
 }
 
 export async function touchLastSeen(db: D1Database, username: string): Promise<void> {
+  const now = Date.now();
+  // Update whitelist last_seen if they're whitelisted
   await db.prepare(
     'UPDATE whitelist SET last_seen = ? WHERE LOWER(roblox_username) = LOWER(?)'
-  ).bind(Date.now(), username).run();
+  ).bind(now, username).run();
+  // Always upsert into player_seen for /players visibility
+  await db.prepare(
+    'INSERT INTO player_seen (username, last_seen) VALUES (?, ?) ON CONFLICT(username) DO UPDATE SET last_seen = excluded.last_seen'
+  ).bind(username, now).run();
 }
 
-export async function getOnlinePlayers(db: D1Database, windowMs = 30_000): Promise<WhitelistRow[]> {
+export interface PlayerSeenRow { username: string; last_seen: number; }
+
+export async function getOnlinePlayers(db: D1Database, windowMs = 30_000): Promise<PlayerSeenRow[]> {
   const cutoff = Date.now() - windowMs;
   const res = await db.prepare(
-    'SELECT * FROM whitelist WHERE last_seen >= ? ORDER BY last_seen DESC'
-  ).bind(cutoff).all<WhitelistRow>();
+    'SELECT username, last_seen FROM player_seen WHERE last_seen >= ? ORDER BY last_seen DESC'
+  ).bind(cutoff).all<PlayerSeenRow>();
   return res.results;
 }
 

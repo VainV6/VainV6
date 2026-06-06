@@ -1,4 +1,4 @@
-import { Env, TIER, TIER_NAME } from '../types';
+import { Env, TIER, TIER_NAME, ROLE_TIER_MAP, TierValue } from '../types';
 import { getByDiscordId, getByRoblox, upsertLink, isBlacklisted, getOnlinePlayers } from '../db/queries';
 
 export type Interaction = {
@@ -16,11 +16,6 @@ function callerId(i: Interaction): string {
   return i.member?.user?.id ?? i.user?.id ?? '';
 }
 
-function subOpt(i: Interaction, name: string): string {
-  const sub = i.data?.options?.[0] as { options?: Array<{ name: string; value: string }> } | undefined;
-  return sub?.options?.find(o => o.name === name)?.value ?? '';
-}
-
 function embed(description: string, color = 0x5865f2) {
   return { type: 4, data: { embeds: [{ description, color }], flags: 64 } };
 }
@@ -28,6 +23,26 @@ function ok(msg: string)  { return embed(`✅ ${msg}`, 0x57f287); }
 function err(msg: string) { return embed(`❌ ${msg}`, 0xed4245); }
 function json(body: unknown): Response {
   return new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
+}
+
+// Resolve the caller's tier from their Discord role IDs (included in the interaction payload)
+async function callerTierFromRoles(roleIds: string[], guildId: string, botToken: string): Promise<TierValue> {
+  try {
+    const res = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
+      headers: { Authorization: `Bot ${botToken}` },
+    });
+    if (!res.ok) return TIER.Free;
+    const roles = await res.json() as Array<{ id: string; name: string }>;
+    const roleMap = new Map(roles.map(r => [r.id, r.name]));
+    let highest: TierValue = TIER.Free;
+    for (const id of roleIds) {
+      const name = roleMap.get(id);
+      if (name && ROLE_TIER_MAP[name] !== undefined && ROLE_TIER_MAP[name] > highest) {
+        highest = ROLE_TIER_MAP[name];
+      }
+    }
+    return highest;
+  } catch { return TIER.Free; }
 }
 
 async function resolveRobloxId(username: string): Promise<string | null> {
@@ -43,28 +58,24 @@ async function resolveRobloxId(username: string): Promise<string | null> {
   } catch { return null; }
 }
 
-function isPremium(i: Interaction, env: Env): boolean {
-  // Premium is validated via DB (they must have run /whitelist edit)
-  // For Discord commands, we check their DB row exists and has tier >= Premium
-  // Actual check is done async below — this is just a stub
-  return true;
-}
-
 export async function handleCommand(interaction: Interaction, env: Env): Promise<Response> {
-  const name    = interaction.data?.name ?? '';
-  const discord = callerId(interaction);
+  const name     = interaction.data?.name ?? '';
+  const discord  = callerId(interaction);
+  const roleIds  = interaction.member?.roles ?? [];
+  const guildId  = interaction.guild_id ?? env.DISCORD_GUILD_ID;
+
+  const callerTier = await callerTierFromRoles(roleIds, guildId, env.DISCORD_BOT_TOKEN);
+  const isOwner    = callerTier >= TIER.Owner;
+  const isPremium  = callerTier >= TIER.Premium;
 
   // /whitelist
   if (name === 'whitelist') {
     const sub = interaction.data?.options?.[0] as { name: string; options?: Array<{ name: string; value: string }> } | undefined;
     if (!sub) return json(err('Missing subcommand'));
 
-    // /whitelist edit <username> — link Roblox account to Discord
+    // /whitelist edit <username> — link Roblox account to Discord (Premium+ or Owner)
     if (sub.name === 'edit') {
-      const callerRow = await getByDiscordId(env.DB, discord);
-      if (!callerRow || callerRow.tier < TIER.Premium) {
-        return json(err('You need the **Premium** role to link a Roblox account'));
-      }
+      if (!isPremium) return json(err('You need the **Premium** role to link a Roblox account'));
 
       const username = sub.options?.find(o => o.name === 'username')?.value ?? '';
       if (!username) return json(err('Missing Roblox username'));
@@ -78,11 +89,12 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
         return json(err(`**${username}** is already linked to another Discord account`));
       }
 
-      await upsertLink(env.DB, discord, username, userId, TIER.Premium);
-      return json(ok(`Linked **${username}** to your Discord account`));
+      // Store with actual tier so Owner gets Owner tier in DB
+      await upsertLink(env.DB, discord, username, userId, callerTier);
+      return json(ok(`Linked **${username}** to your Discord account (${TIER_NAME[callerTier]})`));
     }
 
-    // /whitelist info <username>
+    // /whitelist info <username> — anyone can check
     if (sub.name === 'info') {
       const username = sub.options?.find(o => o.name === 'username')?.value ?? '';
       if (!username) return json(err('Missing Roblox username'));
@@ -94,15 +106,17 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
     return json(err('Unknown subcommand'));
   }
 
-  // /players — list whitelisted players seen in last 30s
+  // /players — list all injected players seen in last 30s (Premium+ or Owner)
   if (name === 'players') {
-    const callerRow = await getByDiscordId(env.DB, discord);
-    if (!callerRow || callerRow.tier < TIER.Premium) {
-      return json(err('You need **Premium** to use `/players`'));
-    }
+    if (!isPremium) return json(err('You need **Premium** to use `/players`'));
     const online = await getOnlinePlayers(env.DB);
-    if (online.length === 0) return json(embed('No whitelisted players currently injected.'));
-    const lines = online.map(r => `• **${r.roblox_username ?? '?'}** — ${TIER_NAME[r.tier]}`);
+    if (online.length === 0) return json(embed('No players currently injected.'));
+    // Enrich each entry with their whitelist tier if they have one
+    const lines = await Promise.all(online.map(async r => {
+      const wl = await getByRoblox(env.DB, r.username);
+      const tierLabel = wl ? TIER_NAME[wl.tier] : 'Free';
+      return `• **${r.username}** — ${tierLabel}`;
+    }));
     return json(embed(`**Injected (${online.length})**\n${lines.join('\n')}`));
   }
 

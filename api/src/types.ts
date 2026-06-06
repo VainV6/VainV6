@@ -7,12 +7,19 @@ export interface Env {
   DISCORD_GUILD_ID: string;
 }
 
-export const TIER = { Free: 0, Premium: 1 } as const;
-export type TierValue = 0 | 1;
+export const TIER = { Free: 0, Premium: 1, Owner: 2 } as const;
+export type TierValue = 0 | 1 | 2;
 
 export const TIER_NAME: Record<number, string> = {
   0: 'Free',
   1: 'Premium',
+  2: 'Owner',
+};
+
+// Discord role name → tier.
+export const ROLE_TIER_MAP: Record<string, TierValue> = {
+  'Premium': 1,
+  'Owner':   2,
 };
 
 export const COMMANDS = [

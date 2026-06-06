@@ -12,8 +12,8 @@ export async function handleLongPoll(request: Request, env: Env): Promise<Respon
   if (!username) return jsonErr('Missing username', 400);
   if (secret !== env.BOT_SECRET) return jsonErr('Unauthorized', 401);
 
-  const row = await getByRoblox(env.DB, username);
-  if (row) await touchLastSeen(env.DB, username);
+  // Stamp seen for every player — drives /players for all injected users
+  await touchLastSeen(env.DB, username);
 
   const POLL_MS    = 500;   // check DB every 500ms
   const TIMEOUT_MS = 25000; // give up after 25s, client reconnects
