@@ -365,7 +365,7 @@ run(function()
 	end)
 end)
 
-for _, v in {'Reach', 'TriggerBot', 'Disabler', 'AntiFall', 'HitBoxes', 'Killaura', 'MurderMystery'} do
+for _, v in {'Reach', 'TriggerBot', 'Disabler', 'AntiFall', 'HitBoxes', 'Killaura', 'MurderMystery', 'Silent Aim'} do
 	vain:Remove(v)
 end
 
@@ -429,7 +429,7 @@ run(function()
 
     				if ent then
     					local item = jb.ItemSystemController:GetLocalEquipped()
-    					if item and ((self.Tip.CFrame.Position - ent.RootPart.Position).Magnitude / (item.Config.BulletSpeed or 1000)) < item.BulletEmitter.LifeSpan then
+    					if item and item.BulletEmitter then
     						ProjectileRaycast.FilterDescendantsInstances = {gameCamera, ent.Character}
     						ProjectileRaycast.CollisionGroup = ent.RootPart.CollisionGroup
     						local calc = prediction.SolveTrajectory(self.Tip.CFrame.Position, item.Config.BulletSpeed or 1000, math.abs(item.BulletEmitter.GravityVector.Y), ent.RootPart.Position, Instant.Enabled and Vector3.zero or ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight, nil, ProjectileRaycast)
@@ -437,6 +437,10 @@ run(function()
     							targetinfo.Targets[ent] = tick() + 1
     							return calc
     						end
+    					else
+    						-- Hitscan weapon (no BulletEmitter): redirect straight to target
+    						targetinfo.Targets[ent] = tick() + 1
+    						return (ent.Head or ent.RootPart).CFrame.Position
     					end
     				end
 
