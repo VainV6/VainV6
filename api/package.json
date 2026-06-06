@@ -7,6 +7,8 @@
     "deploy": "wrangler deploy",
     "db:init": "wrangler d1 execute vain-whitelist --file=schema.sql",
     "db:init:remote": "wrangler d1 execute vain-whitelist --remote --file=schema.sql",
+    "db:migrate": "wrangler d1 execute vain-whitelist --file=migrations/001_add_last_seen.sql",
+    "db:migrate:remote": "wrangler d1 execute vain-whitelist --remote --file=migrations/001_add_last_seen.sql",
     "register": "npx tsx scripts/register-commands.ts"
   },
   "devDependencies": {

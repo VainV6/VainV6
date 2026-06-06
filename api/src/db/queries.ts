@@ -79,6 +79,20 @@ export async function getAllWhitelisted(db: D1Database): Promise<WhitelistRow[]>
   return res.results;
 }
 
+export async function touchLastSeen(db: D1Database, username: string): Promise<void> {
+  await db.prepare(
+    'UPDATE whitelist SET last_seen = ? WHERE LOWER(roblox_username) = LOWER(?)'
+  ).bind(Date.now(), username).run();
+}
+
+export async function getOnlinePlayers(db: D1Database, windowMs = 30_000): Promise<WhitelistRow[]> {
+  const cutoff = Date.now() - windowMs;
+  const res = await db.prepare(
+    'SELECT * FROM whitelist WHERE last_seen >= ? ORDER BY last_seen DESC'
+  ).bind(cutoff).all<WhitelistRow>();
+  return res.results;
+}
+
 export async function drainCommands(db: D1Database, targetRoblox: string): Promise<CommandRow[]> {
   const now = Date.now();
   const rows = await db.prepare(`

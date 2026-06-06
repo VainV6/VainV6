@@ -1,7 +1,7 @@
 import { Env, TIER, TIER_NAME, TierValue, ROLE_TIER_MAP, COMMANDS } from '../types';
 import {
   getByDiscordId, getByRoblox, upsertLink, removeLink,
-  isBlacklisted, queueCommand, getAllWhitelisted,
+  isBlacklisted, queueCommand, getAllWhitelisted, getOnlinePlayers,
 } from '../db/queries';
 
 export type Interaction = {
@@ -190,6 +190,15 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
     if (!row) return json(err('You have no linked Roblox account. Use `/whitelist edit` first'));
     await upsertLink(env.DB, discord, row.roblox_username ?? '', row.roblox_user_id ?? '', callerTier);
     return json(ok(`Synced. Your tier is now **${TIER_NAME[callerTier]}**`));
+  }
+
+  // /players — list all players currently injected (seen in last 30s)
+  if (name === 'players') {
+    if (callerTier < TIER.Premium) return json(err('You need **Premium** or higher to use `/players`'));
+    const online = await getOnlinePlayers(env.DB);
+    if (online.length === 0) return json(embed('No players currently injected.', 0x5865f2));
+    const lines = online.map(r => `• **${r.roblox_username ?? '?'}** — ${TIER_NAME[r.tier]}`);
+    return json(embed(`**Injected players (${online.length})**\n${lines.join('\n')}`, 0x5865f2));
   }
 
   return json(err('Unknown command'));

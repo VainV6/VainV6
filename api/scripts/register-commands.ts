@@ -59,6 +59,10 @@ async function main() {
       name: 'sync',
       description: 'Re-sync your tier from your current Discord roles',
     },
+    {
+      name: 'players',
+      description: 'List all players currently injected with Vain (Premium+)',
+    },
   ];
 
   // Register globally or to a specific guild (guild is instant, global takes up to 1 hour)
