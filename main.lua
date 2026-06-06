@@ -340,7 +340,7 @@ local function checkWhitelist()
 	if not lp then return end
 	local username = lp.Name
 	local userId   = tostring(lp.UserId)
-	local body = apiGet('/check?username='..username..'&userid='..userId)
+	local body = apiRequest('GET', '/check?username='..username..'&userid='..userId)
 	if body then
 		local ok, data = pcall(httpService.JSONDecode, httpService, body)
 		if ok and data then
