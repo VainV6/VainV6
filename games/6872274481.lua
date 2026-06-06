@@ -16285,8 +16285,7 @@ run(function()
     	Tooltip = 'Automatically executes low health players with Hannah.'
     })
 
-    AutoHannah:CreateTargets({Players = true}) -- cosmetic settings lmao
-    	Tooltip = 'Configure which types of targets to include',
+    AutoHannah:CreateTargets({Players = true, Tooltip = 'Configure which types of targets to include'}) -- cosmetic settings lmao
     Range = AutoHannah:CreateSlider({
     	Name = 'Range',
     	Tooltip = 'Maximum distance in studs',
@@ -19927,8 +19926,7 @@ run(function()
 		Tooltip = 'Attack players around you\nwithout aiming at them.'
 	})
 
-	Targets = Killaura:CreateTargets({Players = true, NPCs = true})
-		Tooltip = 'Configure which types of targets to include',
+	Targets = Killaura:CreateTargets({Players = true, NPCs = true, Tooltip = 'Configure which types of targets to include'})
 
 	local methods = {'Damage', 'Distance'}
 	for i in sortmethods do
