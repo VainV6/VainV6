@@ -1,0 +1,18 @@
+{
+  "name": "vain-api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute vain-whitelist --file=schema.sql",
+    "db:init:remote": "wrangler d1 execute vain-whitelist --remote --file=schema.sql",
+    "register": "npx tsx scripts/register-commands.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241011.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.4",
+    "wrangler": "^3.80.0"
+  }
+}

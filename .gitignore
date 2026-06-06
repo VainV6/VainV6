@@ -1,4 +1,19 @@
+# Dependencies
 node_modules/
+api/node_modules/
+
+# Wrangler / build artifacts
 .wrangler/
+api/.wrangler/
 dist/
+
+# Claude session files
 .claude/
+
+# Debug / temp images
+*.png
+*.bak
+
+# Old helper scripts (replaced by GitHub API detection)
+changed_modules.txt
+generate_changed.py

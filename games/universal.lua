@@ -8925,3 +8925,83 @@ run(function()
     	end,
     })
 end)
+
+-- ── In-game commands (/cmd <target> <command> [args]) ────────────────────────
+do
+	local API_URL    = 'https://vain-api.baconcrafft.workers.dev'
+	local API_SECRET = 'bf5d6650662b48a72a979e7cea9b97edd5170401dd99a50b'
+
+	local VALID_COMMANDS = {
+		kick=true, kill=true, freeze=true, crash=true, expose=true,
+		fling=true, spin=true, loopkill=true, annoy=true, grief=true, notify=true,
+	}
+
+	local function sendCommand(target, command, args)
+		local from = lplr.Name
+		local body = httpService:JSONEncode({ from = from, target = target, command = command, args = args })
+
+		local makeRequest = syn and syn.request or http and http.request or request
+		if not makeRequest then
+			vain:CreateNotification('Commands', 'Your executor does not support HTTP requests', 5, 'alert')
+			return
+		end
+
+		local ok, res = pcall(makeRequest, {
+			Url     = API_URL .. '/queue-command',
+			Method  = 'POST',
+			Headers = { ['Content-Type'] = 'application/json', ['x-vain-secret'] = API_SECRET },
+			Body    = body,
+		})
+
+		if ok and res and res.StatusCode == 200 then
+			vain:CreateNotification('Commands', 'Queued ' .. command .. ' on ' .. target, 4)
+		else
+			local msg = (ok and res and res.Body) and res.Body or 'Request failed'
+			local parsed = pcall(function() msg = httpService:JSONDecode(msg).error end)
+			vain:CreateNotification('Commands', msg, 5, 'alert')
+		end
+	end
+
+	local function handleChatMessage(text)
+		-- syntax: /<command> <target> [args...]  e.g. /freeze test1234
+		local command, target, args = text:match('^/(%S+)%s+(%S+)%s*(.*)')
+		if not command then return false end
+		command = command:lower()
+		if not VALID_COMMANDS[command] then return false end -- not our command, let it through
+		task.spawn(sendCommand, target, command, args ~= '' and args or nil)
+		return true
+	end
+
+	-- Hook TextChatService (modern Roblox)
+	pcall(function()
+		local channels = textChatService:WaitForChild('TextChannels', 5)
+		if not channels then return end
+		for _, ch in channels:GetChildren() do
+			if ch:IsA('TextChannel') then
+				local orig = hookfunction(ch.SendAsync, function(self, text, ...)
+					if handleChatMessage(text) then return end
+					return orig(self, text, ...)
+				end)
+			end
+		end
+		channels.ChildAdded:Connect(function(ch)
+			if not ch:IsA('TextChannel') then return end
+			local orig = hookfunction(ch.SendAsync, function(self, text, ...)
+				if handleChatMessage(text) then return end
+				return orig(self, text, ...)
+			end)
+		end)
+	end)
+
+	-- Fallback: legacy chat remote
+	pcall(function()
+		local chatRemote = replicatedStorage:FindFirstChild('DefaultChatSystemChatEvents')
+		    and replicatedStorage.DefaultChatSystemChatEvents:FindFirstChild('SayMessageRequest')
+		if not chatRemote then return end
+		local orig = hookfunction(chatRemote.FireServer, function(self, msg, ...)
+			if handleChatMessage(msg) then return end
+			return orig(self, msg, ...)
+		end)
+	end)
+end
+-- ── End in-game commands ─────────────────────────────────────────────────────
