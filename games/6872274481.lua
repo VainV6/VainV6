@@ -4077,7 +4077,7 @@ run(function()
 	})
 
 	GUICheck = KaidaKillaura:CreateToggle({
-		Name = 'GUI Check'
+		Name = 'GUI Check',
 		Tooltip = 'Pauses the module when a GUI menu is open',
 	})
 
@@ -5785,7 +5785,7 @@ run(function()
         end
     })
     CameraDir = LongJump:CreateToggle({
-        Name = 'Camera Direction'
+        Name = 'Camera Direction',
         Tooltip = 'Launches in the direction the camera is facing',
     })
 end)
@@ -12165,7 +12165,7 @@ run(function()
         Default = true
     })
     Party = StaffDetector:CreateToggle({
-        Name = 'Leave party'
+        Name = 'Leave party',
         Tooltip = 'Automatically leaves the party when triggered',
     })
     Profile = StaffDetector:CreateTextBox({
