@@ -1,9 +1,8 @@
-
 local vain = shared.vain
 local loadstring = function(...)
 	local res, err = loadstring(...)
 	if err and vain then
-		vain:CreateNotification('Vain', 'Failed to load : ' .. err, 30, 'alert')
+		vain:CreateNotification('Vain', 'Failed to load : '..err, 30, 'alert')
 	end
 	return res
 end
@@ -11,18 +10,18 @@ local isfile = isfile or function(file)
 	local suc, res = pcall(function()
 		return readfile(file)
 	end)
-	return suc and res ~= nil and res ~= '' 
+	return suc and res ~= nil and res ~= ''
 end
 local function downloadFile(path, func)
 	if not isfile(path) then
 		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'.. readfile('vain/profiles/commit.txt').. '/'.. select(1, path:gsub('vain/', '')), true)
+			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('newvain/profiles/commit.txt')..'/'..select(1, path:gsub('newvape/', '')), true)
 		end)
 		if not suc or res == '404: Not Found' then
 			error(res)
 		end
 		if path:find('.lua') then
-			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vain updates.\n'.. res
+			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vain updates.\n'..res
 		end
 		writefile(path, res)
 	end
@@ -30,15 +29,15 @@ local function downloadFile(path, func)
 end
 
 vain.Place = 5938036553
-if isfile('vain/games/' .. vain.Place .. '.lua') then
-	loadstring(readfile('vain/games/' .. vain.Place .. '.lua'), tostring(vain.Place))()
+if isfile('newvain/games/'..vain.Place..'.lua') then
+	loadstring(readfile('newvain/games/'..vain.Place..'.lua'), 'bedwars')()
 else
-	if not shared.VainDeveloper then
+	if not shared.VapeDeveloper then
 		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'.. readfile('vain/profiles/commit.txt').. '/games/'.. vain.Place.. '.lua', true)
+			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('newvain/profiles/commit.txt')..'/games/'..vain.Place..'.lua', true)
 		end)
 		if suc and res ~= '404: Not Found' then
-			loadstring(downloadFile('vain/games/' .. vain.Place .. '.lua'), tostring(vain.Place))()
+			loadstring(downloadFile('newvain/games/'..vain.Place..'.lua'), 'bedwars')()
 		end
 	end
 end
