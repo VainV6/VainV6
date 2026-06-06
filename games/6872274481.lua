@@ -109,6 +109,8 @@ local HitBoxes = {}
 local InfiniteFly = {}
 local TrapDisabler
 local AntiFallPart
+local AntiVoidPart
+local AntiVoidDirection
 local bedwars, remotes, sides, oldinvrender, oldSwing = {}, {}, {}
 
 local function addBlur(parent)
@@ -6459,6 +6461,7 @@ run(function()
 
 					old = bedwars.ProjectileController.calculateImportantLaunchValues
 					bedwars.ProjectileController.calculateImportantLaunchValues = function(...)
+					pcall(setthreadidentity, 8)
 					local self, projmeta, worldmeta, origin, shootpos = ...
 					local originPos = entitylib.isAlive and (shootpos or (entitylib.character and entitylib.character.RootPart and entitylib.character.RootPart.Position)) or Vector3.zero
 					if not wasHovering then lockedRandomPart = nil end
@@ -6566,12 +6569,11 @@ run(function()
 							targetVelocity.Z * hMult
 						)
 					end
-					local bowRelX = bedwars.BowConstantsTable.RelX or 0
-					local bowRelY = bedwars.BowConstantsTable.RelY or 0
-					local bowRelZ = bedwars.BowConstantsTable.RelZ or 0
-					local newlook = CFrame.new(offsetpos, targetBodyPart.Position) *
-						CFrame.new(projmeta.projectile == 'owl_projectile' and Vector3.zero or
-							Vector3.new(bowRelX, bowRelY, bowRelZ))
+					local _, bowTable = pcall(debug.getupvalue, bedwars.ProjectileController.enableBeam, 8)
+					local relOffset = (type(bowTable) == 'table' and projmeta.projectile ~= 'owl_projectile')
+						and Vector3.new(bowTable.RelX or 0, bowTable.RelY or 0, bowTable.RelZ or 0)
+						or Vector3.zero
+					local newlook = CFrame.new(offsetpos, targetBodyPart.Position) * CFrame.new(relOffset)
 
 					local calc = prediction.SolveTrajectory(
 						newlook.p, projSpeed, gravity,
@@ -28982,4 +28984,508 @@ run(function()
             blockSelectorColor = Color3.fromHSV(h, s, v)
         end
     })
+end)
+
+-- ── AntiVoid ──────────────────────────────────────────────────────────────────
+run(function()
+    local AntiVoid
+    local Mode
+    local Material
+    local Color
+    local rayCheck = RaycastParams.new()
+    rayCheck.RespectCanCollide = true
+
+    local function getLowGround()
+        local mag = math.huge
+        for _, pos in bedwars.BlockController:getStore():getAllBlockPositions() do
+            pos = pos * 3
+            if pos.Y < mag and not getPlacedBlock(pos + Vector3.new(0, 3, 0)) then
+                mag = pos.Y
+            end
+        end
+        return mag
+    end
+
+    AntiVoid = vain.Categories.Blatant:CreateModule({
+        Name = 'AntiVoid',
+        Tooltip = 'Places an invisible floor below the map to prevent falling into the void.',
+        Function = function(callback)
+            if callback then
+                task.spawn(function()
+                    repeat task.wait() until store.matchState ~= 0 or not AntiVoid.Enabled
+                    if not AntiVoid.Enabled then return end
+
+                    local pos, debounce = getLowGround(), tick()
+                    if pos ~= math.huge then
+                        AntiVoidPart = Instance.new('Part')
+                        AntiVoidPart.Size = Vector3.new(10000, 1, 10000)
+                        AntiVoidPart.Transparency = 1 - Color.Opacity
+                        AntiVoidPart.Material = Enum.Material[Material.Value]
+                        AntiVoidPart.Color = Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+                        AntiVoidPart.Position = Vector3.new(0, pos - 2, 0)
+                        AntiVoidPart.CanCollide = Mode.Value == 'Collide'
+                        AntiVoidPart.Anchored = true
+                        AntiVoidPart.CanQuery = false
+                        AntiVoidPart.Parent = workspace
+                        AntiVoid:Clean(AntiVoidPart)
+                        AntiVoid:Clean(AntiVoidPart.Touched:Connect(function(touched)
+                            if touched.Parent == lplr.Character and entitylib.isAlive and debounce < tick() then
+                                debounce = tick() + 0.1
+                                if Mode.Value == 'Normal' then
+                                    local top = getNearGround()
+                                    if top then
+                                        local lastTeleport = lplr:GetAttribute('LastTeleported')
+                                        local connection
+                                        connection = runService.PreSimulation:Connect(function()
+                                            local flyOn = (vain.Modules.Fly and vain.Modules.Fly.Enabled)
+                                                or InfiniteFly.Enabled
+                                                or (vain.Modules['Long Jump'] and vain.Modules['Long Jump'].Enabled)
+                                            if flyOn then
+                                                connection:Disconnect()
+                                                AntiVoidDirection = nil
+                                                return
+                                            end
+                                            if entitylib.isAlive and lplr:GetAttribute('LastTeleported') == lastTeleport then
+                                                local delta = ((top - entitylib.character.RootPart.Position) * Vector3.new(1, 0, 1))
+                                                local root = entitylib.character.RootPart
+                                                AntiVoidDirection = delta.Unit == delta.Unit and delta.Unit or Vector3.zero
+                                                root.Velocity = root.Velocity * Vector3.new(1, 0, 1)
+                                                rayCheck.FilterDescendantsInstances = {gameCamera, lplr.Character}
+                                                rayCheck.CollisionGroup = root.CollisionGroup
+                                                local ray = workspace:Raycast(root.Position, AntiVoidDirection, rayCheck)
+                                                if ray then
+                                                    for _ = 1, 10 do
+                                                        local dpos = roundPos(ray.Position + ray.Normal * 1.5) + Vector3.new(0, 3, 0)
+                                                        if not getPlacedBlock(dpos) then
+                                                            top = Vector3.new(top.X, pos, top.Z)
+                                                            break
+                                                        end
+                                                    end
+                                                end
+                                                root.CFrame += Vector3.new(0, top.Y - root.Position.Y, 0)
+                                                root.AssemblyLinearVelocity = (AntiVoidDirection * getSpeed()) + Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
+                                                if delta.Magnitude < 1 then
+                                                    connection:Disconnect()
+                                                    AntiVoidDirection = nil
+                                                end
+                                            else
+                                                connection:Disconnect()
+                                                AntiVoidDirection = nil
+                                            end
+                                        end)
+                                        AntiVoid:Clean(connection)
+                                    end
+                                elseif Mode.Value == 'Velocity' then
+                                    entitylib.character.RootPart.Velocity = Vector3.new(
+                                        entitylib.character.RootPart.Velocity.X, 100,
+                                        entitylib.character.RootPart.Velocity.Z
+                                    )
+                                end
+                            end
+                        end))
+                    end
+                end)
+            else
+                AntiVoidDirection = nil
+            end
+        end,
+    })
+    Mode = AntiVoid:CreateDropdown({
+        Name = 'Move Mode',
+        List = {'Normal', 'Collide', 'Velocity'},
+        Default = 'Normal',
+        Tooltip = 'Normal: pushes you to nearest safe block\nVelocity: launches you upward\nCollide: acts as a walkable platform',
+        Function = function(val)
+            if AntiVoidPart then AntiVoidPart.CanCollide = val == 'Collide' end
+        end,
+    })
+    local materials = {'ForceField'}
+    for _, v in Enum.Material:GetEnumItems() do
+        if v.Name ~= 'ForceField' then table.insert(materials, v.Name) end
+    end
+    Material = AntiVoid:CreateDropdown({
+        Name = 'Material', List = materials, Default = 'ForceField',
+        Function = function(val)
+            if AntiVoidPart then AntiVoidPart.Material = Enum.Material[val] end
+        end,
+    })
+    Color = AntiVoid:CreateColorSlider({
+        Name = 'Color', DefaultOpacity = 0.5,
+        Function = function(h, s, v, o)
+            if AntiVoidPart then
+                AntiVoidPart.Color = Color3.fromHSV(h, s, v)
+                AntiVoidPart.Transparency = 1 - o
+            end
+        end,
+    })
+end)
+
+-- ── InfiniteFly ───────────────────────────────────────────────────────────────
+run(function()
+    local Value
+    local VerticalValue
+    local WallCheck
+    local rayCheck = RaycastParams.new()
+    rayCheck.RespectCanCollide = true
+    local overlapCheck = OverlapParams.new()
+    overlapCheck.RespectCanCollide = true
+    local up, down = 0, 0
+    local success, proper = false, true
+    local clone, oldroot, hip, valid
+
+    local function doClone()
+        if entitylib.isAlive and entitylib.character.Humanoid.Health > 0 then
+            hip = entitylib.character.Humanoid.HipHeight
+            oldroot = entitylib.character.HumanoidRootPart
+            if not lplr.Character.Parent then return false end
+            lplr.Character.Parent = game
+            clone = oldroot:Clone()
+            clone.Parent = lplr.Character
+            oldroot.Parent = gameCamera
+            pcall(function() bedwars.QueryUtil:setQueryIgnored(oldroot, true) end)
+            clone.CFrame = oldroot.CFrame
+            lplr.Character.PrimaryPart = clone
+            lplr.Character.Parent = workspace
+            for _, v in lplr.Character:GetDescendants() do
+                if v:IsA('Weld') or v:IsA('Motor6D') then
+                    if v.Part0 == oldroot then v.Part0 = clone end
+                    if v.Part1 == oldroot then v.Part1 = clone end
+                end
+            end
+            return true
+        end
+        return false
+    end
+
+    local function revertClone()
+        if not oldroot or not oldroot.Parent or not entitylib.isAlive then return false end
+        lplr.Character.Parent = game
+        oldroot.Parent = lplr.Character
+        lplr.Character.PrimaryPart = oldroot
+        lplr.Character.Parent = workspace
+        oldroot.CanCollide = true
+        for _, v in lplr.Character:GetDescendants() do
+            if v:IsA('Weld') or v:IsA('Motor6D') then
+                if v.Part0 == clone then v.Part0 = oldroot end
+                if v.Part1 == clone then v.Part1 = oldroot end
+            end
+        end
+        local oldclonepos = clone.Position.Y
+        if clone then clone:Destroy(); clone = nil end
+        local origcf = {oldroot.CFrame:GetComponents()}
+        if valid then origcf[2] = oldclonepos end
+        oldroot.CFrame = CFrame.new(unpack(origcf))
+        oldroot.Transparency = 1
+        oldroot = nil
+        entitylib.character.Humanoid.HipHeight = hip or 2
+    end
+
+    InfiniteFly = vain.Categories.Blatant:CreateModule({
+        Name = 'InfiniteFly',
+        Tooltip = 'Fly without a balloon using network ownership tricks.',
+        ExtraText = function() return 'Heatseeker' end,
+        Function = function(callback)
+            frictionTable.InfiniteFly = callback or nil
+            updateVelocity()
+            if callback then
+                if vain.Modules.Invisibility and vain.Modules.Invisibility.Enabled then
+                    vain.Modules.Invisibility:Toggle()
+                    vain:CreateNotification('InfiniteFly', 'Invisibility cannot be used with InfiniteFly', 3, 'warning')
+                end
+                if not proper then
+                    vain:CreateNotification('InfiniteFly', 'Broken state detected — rejoin required', 3, 'alert')
+                    InfiniteFly:Toggle()
+                    return
+                end
+                success = doClone()
+                if not success then InfiniteFly:Toggle(); return end
+
+                InfiniteFly:Clean(runService.PreSimulation:Connect(function(dt)
+                    if entitylib.isAlive then
+                        local mass = 1.5 + ((up + down) * VerticalValue.Value)
+                        local root = entitylib.character.RootPart
+                        local moveDirection = entitylib.character.Humanoid.MoveDirection
+                        local velo = getSpeed()
+                        local destination = (moveDirection * math.max(Value.Value - velo, 0) * dt)
+                        rayCheck.FilterDescendantsInstances = {lplr.Character, gameCamera}
+                        if WallCheck.Enabled then
+                            local ray = workspace:Raycast(root.Position, destination, rayCheck)
+                            if ray then destination = (ray.Position + ray.Normal) - root.Position end
+                        end
+                        root.CFrame += destination
+                        root.AssemblyLinearVelocity = (moveDirection * velo) + Vector3.new(0, mass, 0)
+                        local speedCFrame = {oldroot.CFrame:GetComponents()}
+                        if isnetworkowner(oldroot) then
+                            speedCFrame[1] = clone.CFrame.X
+                            speedCFrame[3] = clone.CFrame.Z
+                            if speedCFrame[2] < 2000 then speedCFrame[2] = 100000 end
+                            oldroot.CFrame = CFrame.new(unpack(speedCFrame))
+                            oldroot.Velocity = Vector3.new(clone.Velocity.X, oldroot.Velocity.Y, clone.Velocity.Z)
+                        else
+                            speedCFrame[2] = clone.CFrame.Y
+                            clone.CFrame = CFrame.new(unpack(speedCFrame))
+                        end
+                    end
+                end))
+                up, down = 0, 0
+                InfiniteFly:Clean(inputService.InputBegan:Connect(function(input)
+                    if not inputService:GetFocusedTextBox() then
+                        if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.ButtonA then up = 1
+                        elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.ButtonL2 then down = -1 end
+                    end
+                end))
+                InfiniteFly:Clean(inputService.InputEnded:Connect(function(input)
+                    if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.ButtonA then up = 0
+                    elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.ButtonL2 then down = 0 end
+                end))
+                if inputService.TouchEnabled then
+                    pcall(function()
+                        local jumpButton = lplr.PlayerGui.TouchGui.TouchControlFrame.JumpButton
+                        InfiniteFly:Clean(jumpButton:GetPropertyChangedSignal('ImageRectOffset'):Connect(function()
+                            up = jumpButton.ImageRectOffset.X == 146 and 1 or 0
+                        end))
+                    end)
+                end
+            else
+                if success and clone and oldroot and proper then
+                    proper = false
+                    overlapCheck.FilterDescendantsInstances = {lplr.Character, gameCamera}
+                    overlapCheck.CollisionGroup = oldroot.CollisionGroup
+                    local ray = workspace:Blockcast(
+                        CFrame.new(oldroot.Position.X, clone.CFrame.p.Y, oldroot.Position.Z),
+                        Vector3.new(3, entitylib.character.HipHeight, 3),
+                        Vector3.new(0, -1000, 0), rayCheck
+                    )
+                    local origcf = {clone.CFrame:GetComponents()}
+                    origcf[1] = oldroot.Position.X
+                    origcf[2] = ray and ray.Position.Y + entitylib.character.HipHeight or clone.CFrame.p.Y
+                    origcf[3] = oldroot.Position.Z
+                    oldroot.CanCollide = true
+                    oldroot.Transparency = 0
+                    oldroot.Velocity = clone.Velocity * Vector3.new(1, 0, 1)
+                    oldroot.CFrame = CFrame.new(unpack(origcf))
+                    local touched = false
+                    local connection = runService.PreSimulation:Connect(function()
+                        if oldroot then
+                            oldroot.Velocity = Vector3.zero
+                            valid = false
+                            if touched then return end
+                            local cf = {clone.CFrame:GetComponents()}
+                            cf[2] = oldroot.CFrame.Y
+                            local newcf = CFrame.new(unpack(cf))
+                            for _, v in workspace:GetPartBoundsInBox(newcf, oldroot.Size, overlapCheck) do
+                                if (v.Position.Y + v.Size.Y / 2) > (newcf.p.Y + 0.5) then
+                                    touched = true; return
+                                end
+                            end
+                            if not workspace:Raycast(newcf.Position, Vector3.new(0, -entitylib.character.HipHeight, 0), rayCheck) then return end
+                            oldroot.CFrame = newcf
+                            oldroot.Velocity = clone.Velocity * Vector3.new(1, 0, 1)
+                            valid = true
+                        end
+                    end)
+                    vain:CreateNotification('InfiniteFly', 'Waiting 1.1s to land...', 1.1)
+                    task.delay(1.1, function()
+                        vain:CreateNotification('InfiniteFly', 'Landed!', 1)
+                        connection:Disconnect()
+                        proper = true
+                        if oldroot and clone then revertClone() end
+                    end)
+                end
+            end
+        end,
+    })
+    Value = InfiniteFly:CreateSlider({
+        Name = 'Speed', Min = 1, Max = 23, Default = 23,
+        Suffix = function(val) return val == 1 and 'stud' or 'studs' end,
+        Function = function() end,
+    })
+    VerticalValue = InfiniteFly:CreateSlider({
+        Name = 'Vertical Speed', Min = 1, Max = 150, Default = 50,
+        Suffix = function(val) return val == 1 and 'stud' or 'studs' end,
+        Function = function() end,
+    })
+    WallCheck = InfiniteFly:CreateToggle({ Name = 'Wall Check', Default = true, Function = function() end })
+end)
+
+-- ── Kit Speed Fix ─────────────────────────────────────────────────────────────
+run(function()
+    vain.Categories.World:CreateModule({
+        Name = 'Kit Speed Fix',
+        Tooltip = 'Fixes movement kits not activating properly when Speed is enabled.',
+        Default = false,
+        Function = function(callback)
+            getgenv().kit_fix = callback
+        end,
+    })
+end)
+
+-- ── BetterDavey ───────────────────────────────────────────────────────────────
+run(function()
+    local BetterDavey
+    local BetterDaveyAutojump
+    local BetterDaveyAutoLaunch
+
+    local CannonHandController = bedwars.CannonHandController
+    local CannonController     = bedwars.CannonController
+    if not CannonHandController or not CannonController then return end
+
+    local oldLaunchSelf  = CannonHandController.launchSelf
+    local oldStopAiming  = CannonController.stopAiming
+    local oldStartAiming = CannonController.startAiming
+
+    BetterDavey = vain.Categories.Utility:CreateModule({
+        Name = 'BetterDavey',
+        Tooltip = 'Improves cannon launching: auto-jump and auto-launch on aim release.',
+        Function = function(callback)
+            if callback then
+                CannonHandController.launchSelf = function(self, ...)
+                    if BetterDaveyAutojump.Enabled then
+                        pcall(function() lplr.Character.Humanoid:ChangeState(3) end)
+                    end
+                    return oldLaunchSelf(self, ...)
+                end
+                local stopIndex = 0
+                CannonController.stopAiming = function(self, ...)
+                    stopIndex += 1
+                    if BetterDaveyAutoLaunch.Enabled and stopIndex == 2 then
+                        pcall(function() CannonHandController:launchSelf() end)
+                    end
+                    return oldStopAiming(self, ...)
+                end
+                CannonController.startAiming = function(self, ...)
+                    stopIndex = 0
+                    return oldStartAiming(self, ...)
+                end
+            else
+                CannonHandController.launchSelf = oldLaunchSelf
+                CannonController.stopAiming     = oldStopAiming
+                CannonController.startAiming    = oldStartAiming
+            end
+        end,
+    })
+    BetterDaveyAutojump = BetterDavey:CreateToggle({
+        Name = 'Auto Jump', Default = true,
+        Tooltip = 'Jumps when launching from a cannon',
+        Function = function() end,
+    })
+    BetterDaveyAutoLaunch = BetterDavey:CreateToggle({
+        Name = 'Auto Launch', Default = true,
+        Tooltip = 'Fires automatically when you finish aiming',
+        Function = function() end,
+    })
+end)
+
+-- ── Nuker ─────────────────────────────────────────────────────────────────────
+run(function()
+    local Nuker
+    local nukerrange     = { Value = 30 }
+    local nukerslowmode  = { Value = 2 }
+    local nukereffects   = { Enabled = false }
+    local nukeranimation = { Enabled = false }
+    local nukerlegit     = { Enabled = false }
+    local nukerown       = { Enabled = false }
+    local nukerbeds      = { Enabled = false }
+    local nukercustom    = { ObjectList = {} }
+    local nukerluckyblock = { Enabled = false }
+    local nukerironore   = { Enabled = false }
+    local luckyblocktable = {}
+
+    local function getBestBreakSide(pos)
+        if not entitylib.isAlive then return Enum.NormalId.Front end
+        local root = entitylib.character.RootPart
+        local normals = {
+            {n = Enum.NormalId.Front,  v = Vector3.new(0, 0, 1)},
+            {n = Enum.NormalId.Back,   v = Vector3.new(0, 0, -1)},
+            {n = Enum.NormalId.Right,  v = Vector3.new(1, 0, 0)},
+            {n = Enum.NormalId.Left,   v = Vector3.new(-1, 0, 0)},
+            {n = Enum.NormalId.Top,    v = Vector3.new(0, 1, 0)},
+            {n = Enum.NormalId.Bottom, v = Vector3.new(0, -1, 0)},
+        }
+        local best, bestDist = Enum.NormalId.Front, math.huge
+        for _, entry in normals do
+            local dist = ((pos + entry.v * 1.5) - root.Position).Magnitude
+            if dist < bestDist then best, bestDist = entry.n, dist end
+        end
+        return best
+    end
+
+    Nuker = vain.Categories.Minigames:CreateModule({
+        Name = 'Nuker',
+        Tooltip = 'Automatically destroys beds and lucky blocks near you.',
+        Function = function(callback)
+            if callback then
+                luckyblocktable = {}
+                for _, v in pairs(store.blocks or {}) do
+                    if table.find(nukercustom.ObjectList, v.Name)
+                        or (nukerluckyblock.Enabled and tostring(v.Name):find('lucky'))
+                        or (nukerironore.Enabled and v.Name == 'iron_ore') then
+                        table.insert(luckyblocktable, v)
+                    end
+                end
+                Nuker:Clean(collectionService:GetInstanceAddedSignal('block'):Connect(function(v)
+                    if table.find(nukercustom.ObjectList, v.Name)
+                        or (nukerluckyblock.Enabled and tostring(v.Name):find('lucky'))
+                        or (nukerironore.Enabled and v.Name == 'iron_ore') then
+                        table.insert(luckyblocktable, v)
+                    end
+                end))
+                Nuker:Clean(collectionService:GetInstanceRemovedSignal('block'):Connect(function(v)
+                    local idx = table.find(luckyblocktable, v)
+                    if idx then table.remove(luckyblocktable, idx) end
+                end))
+                task.spawn(function()
+                    repeat
+                        if entitylib.isAlive then
+                            local root = entitylib.character.RootPart
+                            local tool = nukerlegit.Enabled and store.hand and store.hand.tool or {Name = 'wood_axe'}
+                            if nukerbeds.Enabled then
+                                for _, obj in collectionService:GetTagged('bed') do
+                                    if not entitylib.isAlive then break end
+                                    if not obj.Parent then continue end
+                                    if obj.Name == 'bed'
+                                        and tostring(obj:GetAttribute('TeamId')) == tostring(lplr:GetAttribute('Team')) then continue end
+                                    local shield = obj:GetAttribute('BedShieldEndTime')
+                                    if shield and shield > workspace:GetServerTimeNow() then continue end
+                                    if (root.Position - obj.Position).Magnitude <= nukerrange.Value then
+                                        if tool and bedwars.ItemTable and bedwars.ItemTable[tool.Name]
+                                            and bedwars.ItemTable[tool.Name].breakBlock
+                                            and pcall(bedwars.BlockController.isBlockBreakable, bedwars.BlockController, {blockPosition = obj.Position / 3}, lplr) then
+                                            pcall(bedwars.breakBlock, bedwars, obj.Position, nukereffects.Enabled, getBestBreakSide(obj.Position), false, nukeranimation.Enabled)
+                                            task.wait(nukerslowmode.Value ~= 0 and nukerslowmode.Value / 10 or 0)
+                                        end
+                                    end
+                                end
+                            end
+                            for _, obj in luckyblocktable do
+                                if not entitylib.isAlive then break end
+                                if obj and obj.Parent then
+                                    if (root.Position - obj.Position).Magnitude <= nukerrange.Value
+                                        and (nukerown.Enabled or obj:GetAttribute('PlacedByUserId') ~= lplr.UserId) then
+                                        if tool and bedwars.ItemTable and bedwars.ItemTable[tool.Name]
+                                            and bedwars.ItemTable[tool.Name].breakBlock then
+                                            pcall(bedwars.breakBlock, bedwars, obj.Position, nukereffects.Enabled, getBestBreakSide(obj.Position), true, nukeranimation.Enabled)
+                                            task.wait(nukerslowmode.Value ~= 0 and nukerslowmode.Value / 10 or 0)
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                        task.wait()
+                    until not Nuker.Enabled
+                end)
+            else
+                luckyblocktable = {}
+            end
+        end,
+    })
+    nukerslowmode  = Nuker:CreateSlider({ Name = 'Break Slowmode',         Min = 0, Max = 10, Default = 2,  Function = function() end })
+    nukerrange     = Nuker:CreateSlider({ Name = 'Break Range',            Min = 1, Max = 30, Default = 30, Function = function(val) nukerrange.Value = val end })
+    nukerlegit     = Nuker:CreateToggle({ Name = 'Hand Check',             Function = function() end })
+    nukereffects   = Nuker:CreateToggle({ Name = 'Show HealthBar & Effects', Default = true, Function = function() end })
+    nukeranimation = Nuker:CreateToggle({ Name = 'Break Animation',        Function = function() end })
+    nukerown       = Nuker:CreateToggle({ Name = 'Self Break',             Function = function() end })
+    nukerbeds      = Nuker:CreateToggle({ Name = 'Break Beds',             Function = function() end })
+    nukerluckyblock = Nuker:CreateToggle({ Name = 'Lucky Blocks',          Function = function() end })
+    nukerironore   = Nuker:CreateToggle({ Name = 'Iron Ore',               Function = function() end })
 end)
