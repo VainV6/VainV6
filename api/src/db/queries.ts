@@ -65,6 +65,29 @@ export async function touchLastSeen(db: D1Database, username: string): Promise<v
 
 export interface PlayerSeenRow { username: string; last_seen: number; }
 
+// Resolve tiers for a batch of usernames. Returns a lowercase-username -> tier map.
+// Usernames not in the whitelist are simply absent (caller treats them as Free/0).
+export async function getTiersForUsernames(
+  db: D1Database,
+  usernames: string[],
+): Promise<Record<string, number>> {
+  const map: Record<string, number> = {};
+  if (usernames.length === 0) return map;
+  // Cap to avoid oversized IN clauses; a server rarely has more than ~50 players.
+  const slice = usernames.slice(0, 100);
+  const placeholders = slice.map(() => 'LOWER(?)').join(', ');
+  const stmt = db.prepare(
+    `SELECT roblox_username, tier FROM whitelist WHERE LOWER(roblox_username) IN (${placeholders})`
+  );
+  const res = await (stmt.bind as (...a: string[]) => D1PreparedStatement)(
+    ...slice.map(u => u.toLowerCase())
+  ).all<{ roblox_username: string; tier: number }>();
+  for (const row of res.results) {
+    map[row.roblox_username.toLowerCase()] = row.tier;
+  }
+  return map;
+}
+
 export async function getOnlinePlayers(db: D1Database, windowMs = 30_000): Promise<PlayerSeenRow[]> {
   const cutoff = Date.now() - windowMs;
   const res = await db.prepare(

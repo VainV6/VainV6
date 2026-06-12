@@ -358,6 +358,43 @@ local function checkWhitelist()
 		vain:CreateNotification('Vain', 'Tier: ' .. vainTierName, 6)
 	end
 end
+
+-- Tier cache for OTHER injected Vain users. The games file calls
+-- getgenv().getAccountTier(player) to stop lower-tier users from targeting
+-- higher-tier ones. We resolve every current player's tier in one /tiers
+-- request and cache it by lowercase username. Unknown players default to 0 (Free).
+local tierCache = {}
+
+local function getAccountTierFor(player)
+	if not player then return 0 end
+	local lp = playersService.LocalPlayer
+	if player == lp then return vainTier end
+	return tierCache[tostring(player.Name):lower()] or 0
+end
+getgenv().getAccountTier = getAccountTierFor
+
+local function startTierSync()
+	task.spawn(function()
+		while vain and vain.Loaded do
+			local names = {}
+			for _, plr in ipairs(playersService:GetPlayers()) do
+				table.insert(names, plr.Name)
+			end
+			if #names > 0 then
+				local body = apiRequest('POST', '/tiers', httpService:JSONEncode({usernames = names}))
+				if body then
+					local ok, data = pcall(httpService.JSONDecode, httpService, body)
+					if ok and data and data.tiers then
+						-- keep the local player authoritative from checkWhitelist
+						tierCache = data.tiers
+						tierCache[tostring(playersService.LocalPlayer.Name):lower()] = vainTier
+					end
+				end
+			end
+			task.wait(15)
+		end
+	end)
+end
 -- ── End Vain API ─────────────────────────────────────────────────────────────
 
 local function finishLoading()
@@ -372,6 +409,7 @@ local function finishLoading()
 		until not vain.Loaded
 	end)
 	startC2LongPoll()
+	startTierSync()
 
 	local teleportedServers
 	vain:Clean(playersService.LocalPlayer.OnTeleport:Connect(function(state)
