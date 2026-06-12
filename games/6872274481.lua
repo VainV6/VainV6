@@ -15515,9 +15515,9 @@ run(function()
     })
     Range = AutoCaitlyn:CreateSlider({
     	Name = 'Range',
-    	Tooltip = 'Maximum distance in studs',
+    	Tooltip = 'Maximum distance in studs (raise it up to 500 for long-range On Hit + Low)',
     	Min = 1,
-    	Max = 50,
+    	Max = 500,
     	Default = 50,
     	Suffix = function(val)
     		return val <= 1 and 'stud' or 'studs'
