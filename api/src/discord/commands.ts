@@ -1,5 +1,5 @@
 import { Env, TIER, TIER_NAME, ROLE_TIER_MAP, TierValue } from '../types';
-import { getByDiscordId, getByRoblox, upsertLink, isBlacklisted, getOnlinePlayers } from '../db/queries';
+import { getByRoblox, upsertLink, isBlacklisted, getOnlinePlayers } from '../db/queries';
 
 export type Interaction = {
   type: number;
@@ -65,7 +65,6 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
   const guildId  = interaction.guild_id ?? env.DISCORD_GUILD_ID;
 
   const callerTier = await callerTierFromRoles(roleIds, guildId, env.DISCORD_BOT_TOKEN);
-  const isOwner    = callerTier >= TIER.Owner;
   const isPremium  = callerTier >= TIER.Premium;
 
   // /whitelist
