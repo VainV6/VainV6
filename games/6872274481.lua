@@ -6228,6 +6228,7 @@ run(function()
 	local FOV
 	local Range
 	local OtherProjectiles
+	local HitChance
 	local old
 	local targetOutline
 	local selectedTarget
@@ -6403,8 +6404,22 @@ run(function()
 							if projmeta.drawDurationSeconds then
 								drawDuration = projmeta.drawDurationSeconds
 							end
+							local aimDir = (calc - newlook.Position)
+							-- Hit Chance: on a failed roll, deflect the aim by a small random angle.
+							-- Rotating the direction (not offsetting a point) makes the linear miss
+							-- scale with distance to target automatically.
+							if HitChance and HitChance.Value < 100 and math.random(1, 100) > HitChance.Value then
+								local maxMissDeg = 4 * (1 - HitChance.Value / 100) -- worse hit% => wider deflection
+								local missAngle = math.rad((math.random() * 0.5 + 0.5) * maxMissDeg)
+								-- pick an arbitrary axis perpendicular to the aim direction and rotate around it
+								local dirUnit = aimDir.Unit
+								local up = math.abs(dirUnit.Y) < 0.99 and Vector3.yAxis or Vector3.xAxis
+								local perp = dirUnit:Cross(up).Unit
+								local axis = (perp * math.cos(math.random() * math.pi * 2) + dirUnit:Cross(perp).Unit * math.sin(math.random() * math.pi * 2)).Unit
+								aimDir = (CFrame.fromAxisAngle(axis, missAngle) * dirUnit) * aimDir.Magnitude
+							end
 							return {
-								initialVelocity = (calc - newlook.Position).Unit * projSpeed,
+								initialVelocity = aimDir.Unit * projSpeed,
 								positionFrom = offsetpos,
 								deltaT = lifetime,
 								gravitationalAcceleration = gravity,
@@ -6455,6 +6470,14 @@ run(function()
 		Max = 500,
 		Default = 100,
 		Tooltip = 'Maximum distance for target locking'
+	})
+	HitChance = ProjectileAimbot:CreateSlider({
+		Name = 'Hit Chance',
+		Min = 0,
+		Max = 100,
+		Default = 100,
+		Suffix = '%',
+		Tooltip = 'Chance for each shot to actually hit. Failed shots are deflected by a small angle that scales with distance, so they look like natural misses.'
 	})
 	TargetVisualiser = ProjectileAimbot:CreateToggle({Name = "Target Visualiser", Default = true})
 	OtherProjectiles = ProjectileAimbot:CreateToggle({
@@ -15448,8 +15471,10 @@ run(function()
     				if entitylib.isAlive and damageTable.fromEntity == lplr.Character and (entitylib.character.RootPart.Position - damageTable.entityInstance.HumanoidRootPart.Position).Magnitude <= Range.Value then
     					local state = bedwars.Store:getState()
     					if not state.Kit.activeContract then
+    						local belowThreshold = damageTable.entityInstance.Humanoid.Health < MinHP.Value
+    						local modeOk = (Mode.Value == 'On Hit') or (Mode.Value == 'On Low' and belowThreshold) or (Mode.Value == 'On Hit + Low' and belowThreshold)
     						for _, v in (state.Kit.availableContracts or {}) do
-    							if v.target and v.target.Name == damageTable.entityInstance.Name and (Mode.Value == 'On Hit' or damageTable.entityInstance.Humanoid.Health < MinHP.Value) then
+    							if v.target and v.target.Name == damageTable.entityInstance.Name and modeOk then
     								bedwars.Client:Get('BloodAssassinSelectContract'):SendToServer({
     									contractId = v.id,
     								})
@@ -15466,15 +15491,16 @@ run(function()
 
     Mode = AutoCaitlyn:CreateDropdown({
     	Name = 'Contract mode',
-    	List = {'On Hit', 'On Low'},
-    	Tooltip = 'On Hit - Contracts them whenever u start hitting them\nOn Low - When they\'re low',
+    	List = {'On Hit', 'On Low', 'On Hit + Low'},
+    	Tooltip = 'On Hit - Contracts them whenever u start hitting them\nOn Low - When they\'re low\nOn Hit + Low - While hitting them AND they\'re low',
     	ItemTooltips = {
     		['On Hit'] = 'Assigns the contract as soon as you start dealing damage to the enemy',
     		['On Low'] = 'Waits until the enemy is low health before assigning the contract',
+    		['On Hit + Low'] = 'Only contracts while you are actively hitting a target who is also below the health threshold',
     	},
     	Function = function(val)
     		if MinHP then
-    			MinHP.Object.Visible = val == 'On Low'
+    			MinHP.Object.Visible = val == 'On Low' or val == 'On Hit + Low'
     		end
     	end,
     	Default = 'On Low'
