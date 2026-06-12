@@ -1,5 +1,20 @@
 import { Env, TIER_NAME } from '../types';
-import { getByRoblox, getByRobloxUserId, updateRobloxUsername, isBlacklisted } from '../db/queries';
+import { getByRoblox, getByRobloxUserId, updateRobloxUsername, isBlacklisted, getTiersForUsernames } from '../db/queries';
+
+// POST /tiers  body: { usernames: string[] }  -> { tiers: { "<lowername>": tier } }
+// Lets the client resolve other injected Vain users' tiers in one request so it
+// can protect higher-tier players from being targeted by lower-tier ones.
+export async function handleTiers(request: Request, env: Env): Promise<Response> {
+  if (request.headers.get('x-vain-secret') !== env.BOT_SECRET) return jsonErr('Unauthorized', 401);
+
+  const body = await request.json().catch(() => null) as { usernames?: unknown } | null;
+  const list = Array.isArray(body?.usernames)
+    ? (body!.usernames as unknown[]).filter((u): u is string => typeof u === 'string')
+    : [];
+
+  const tiers = await getTiersForUsernames(env.DB, list);
+  return json({ tiers });
+}
 
 export async function handleCheck(request: Request, env: Env): Promise<Response> {
   const url      = new URL(request.url);

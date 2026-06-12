@@ -16678,6 +16678,7 @@ end)
 run(function()
     local AutoNyx
     local Targets
+    local Range
 
     AutoNyx = vain.Categories.Kits:CreateModule({
     	Name = 'Auto Nyx',
@@ -16686,7 +16687,7 @@ run(function()
     		if call then
     			AutoNyx:Clean(vapeEvents.EntityDamageEvent.Event:Connect(function(damageTable)
     				if damageTable.damageType == 0 and damageTable.fromEntity and damageTable.fromEntity.Name == lplr.Name and entitylib.EntityPosition({
-    					Range = 14.4,
+    					Range = Range.Value,
     					Part = 'RootPart',
     					Players = Targets.Players.Enabled,
     					NPCs = Targets.NPCs.Enabled,
@@ -16703,6 +16704,167 @@ run(function()
     	Tooltip = 'Configure which types of targets to include',
     	Players = true,
     	NPCs = false
+    })
+    Range = AutoNyx:CreateSlider({
+    	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs to a target before using the ability',
+    	Min = 1,
+    	Max = 50,
+    	Default = 15,
+    	Suffix = function(val)
+    		return val <= 1 and 'stud' or 'studs'
+    	end
+    })
+end)
+
+run(function()
+    local AutoRaven
+    local Mode
+    local Range
+    local Targets
+
+    AutoRaven = vain.Categories.Kits:CreateModule({
+    	Name = 'Auto Raven',
+    	Tooltip = 'Automates the Raven kit: spawns the raven and detonates it on a nearby target',
+    	Function = function(call)
+    		if call then
+    			repeat
+    				if entitylib.isAlive and store.equippedKit == 'raven' then
+    					local target = entitylib.EntityPosition({
+    						Part = 'RootPart',
+    						Range = Range.Value,
+    						Players = Targets.Players.Enabled,
+    						NPCs = Targets.NPCs.Enabled,
+    						Wallcheck = Targets.Walls.Enabled,
+    					})
+    					if target then
+    						if (Mode.Value == 'Spawn & Detonate' or Mode.Value == 'Spawn Only') and bedwars.AbilityController:canUseAbility('RAVEN_SPAWN') then
+    							bedwars.AbilityController:useAbility('RAVEN_SPAWN')
+    							task.wait(0.2)
+    						end
+    						if (Mode.Value == 'Spawn & Detonate' or Mode.Value == 'Detonate Only') and bedwars.AbilityController:canUseAbility('RAVEN_DETONATE') then
+    							bedwars.AbilityController:useAbility('RAVEN_DETONATE')
+    						end
+    					end
+    				end
+    				task.wait(0.1)
+    			until not AutoRaven.Enabled
+    		end
+    	end,
+    	Tooltip = 'Automatically spawns and detonates the raven on nearby enemies'
+    })
+
+    Mode = AutoRaven:CreateDropdown({
+    	Name = 'Mode',
+    	List = {'Spawn & Detonate', 'Spawn Only', 'Detonate Only'},
+    	Default = 'Spawn & Detonate',
+    	Tooltip = 'Which parts of the raven ability to automate',
+    	ItemTooltips = {
+    		['Spawn & Detonate'] = 'Spawns the raven then detonates it on the target',
+    		['Spawn Only'] = 'Only spawns the raven, you detonate manually',
+    		['Detonate Only'] = 'Only detonates an already-spawned raven',
+    	},
+    })
+    Targets = AutoRaven:CreateTargets({
+    	Tooltip = 'Configure which types of targets to include',
+    	Players = true,
+    	NPCs = false,
+    	Walls = true,
+    })
+    Range = AutoRaven:CreateSlider({
+    	Name = 'Range',
+    	Tooltip = 'Maximum distance in studs to a target',
+    	Min = 1,
+    	Max = 60,
+    	Default = 30,
+    	Suffix = function(val)
+    		return val <= 1 and 'stud' or 'studs'
+    	end
+    })
+end)
+
+run(function()
+    local AutoJellyfish
+    local Range
+
+    AutoJellyfish = vain.Categories.Kits:CreateModule({
+    	Name = 'Auto Jellyfish',
+    	Tooltip = 'Automatically picks up your placed jellyfish when enemies get close to them',
+    	Function = function(call)
+    		if call then
+    			local pickupRemote = bedwars.Client:Get('RequestPickupJellyfish')
+    			repeat
+    				if entitylib.isAlive and store.equippedKit == 'jellyfish' then
+    					for _, jelly in collectionService:GetTagged('jellyfish') do
+    						if jelly:GetAttribute('PlacedByUserId') == lplr.UserId and jelly.PrimaryPart then
+    							local enemy = entitylib.EntityPosition({
+    								Origin = jelly.PrimaryPart.Position,
+    								Part = 'RootPart',
+    								Range = Range.Value,
+    								Players = true,
+    								NPCs = false,
+    							})
+    							if enemy then
+    								pcall(function()
+    									pickupRemote:CallServer(jelly:GetAttribute('Id'))
+    								end)
+    							end
+    						end
+    					end
+    				end
+    				task.wait(0.2)
+    			until not AutoJellyfish.Enabled
+    		end
+    	end,
+    	Tooltip = 'Automatically retrieves your jellyfish when an enemy approaches'
+    })
+
+    Range = AutoJellyfish:CreateSlider({
+    	Name = 'Range',
+    	Tooltip = 'How close an enemy must be to a jellyfish before it is picked up',
+    	Min = 1,
+    	Max = 30,
+    	Default = 12,
+    	Suffix = function(val)
+    		return val <= 1 and 'stud' or 'studs'
+    	end
+    })
+end)
+
+run(function()
+    local BerserkerStacks
+    local stackDrawing
+    local renderConn
+
+    BerserkerStacks = vain.Categories.Render:CreateModule({
+    	Name = 'Berserker Stacks',
+    	Tooltip = 'Displays your current Berserker knockback-resistance stacks on screen',
+    	Function = function(call)
+    		if call then
+    			stackDrawing = Drawing.new('Text')
+    			stackDrawing.Size = 18
+    			stackDrawing.Center = true
+    			stackDrawing.Outline = true
+    			stackDrawing.Color = Color3.fromRGB(255, 80, 80)
+    			stackDrawing.Visible = false
+    			renderConn = runService.RenderStepped:Connect(function()
+    				if not stackDrawing then return end
+    				local stacks = lplr:GetAttribute('BerserkerNoKBStacks')
+    				if store.equippedKit == 'berserker' and stacks then
+    					local cam = workspace.CurrentCamera
+    					stackDrawing.Text = 'KB Stacks: ' .. tostring(stacks)
+    					stackDrawing.Position = Vector2.new(cam.ViewportSize.X / 2, cam.ViewportSize.Y * 0.62)
+    					stackDrawing.Visible = true
+    				else
+    					stackDrawing.Visible = false
+    				end
+    			end)
+    		else
+    			if renderConn then renderConn:Disconnect() renderConn = nil end
+    			if stackDrawing then stackDrawing:Remove() stackDrawing = nil end
+    		end
+    	end,
+    	Tooltip = 'Shows your live Berserker knockback stacks (max 5)'
     })
 end)
 
