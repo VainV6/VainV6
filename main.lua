@@ -355,7 +355,6 @@ local function checkWhitelist()
 	if vain then
 		vain.Tier     = vainTier
 		vain.TierName = vainTierName
-		vain:CreateNotification('Vain', 'Tier: ' .. vainTierName, 6)
 	end
 end
 
@@ -431,7 +430,11 @@ local function finishLoading()
 	if not shared.vainreload then
 		if not vain.Categories then return end
 		if vain.Categories.Main.Options['GUI bind indicator'].Enabled then
-			vain:CreateNotification('Finished Loading', 'Press '..table.concat(vain.Keybind, ' + '):upper()..' to open GUI', 5)
+			vain:CreateNotification(
+				'[VAIN] Finished Loading [Tier '..tostring(vainTier)..']',
+				'welcome '..playersService.LocalPlayer.Name..', press '..table.concat(vain.Keybind, ' + '):upper()..' to open GUI',
+				5
+			)
 		end
 	end
 end
