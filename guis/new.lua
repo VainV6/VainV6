@@ -6194,36 +6194,63 @@ do
 		return parsed, res.StatusCode
 	end
 
-	-- Collect current module data for upload
+	-- Collect ONLY enabled modules (with their settings) for upload — keeps payloads small
 	local function gatherProfileData()
 		local modules = {}
 		for name, mod in mainapi.Modules do
+			if not mod.Enabled then continue end
 			local opts = {}
 			if mod.Options then
 				for _, opt in mod.Options do
 					if opt.Save then opt:Save(opts) end
 				end
 			end
-			modules[name] = { Enabled = mod.Enabled, Options = opts }
+			modules[name] = { Enabled = true, Options = opts }
 		end
 		return http_:JSONEncode({ Modules = modules })
 	end
 
-	-- Apply downloaded profile data
-	local function applyProfileData(jsonStr)
+	-- Save a downloaded profile as a NEW local profile and switch to it (non-destructive)
+	local function applyProfileData(jsonStr, profileName)
 		local ok, data = pcall(http_.JSONDecode, http_, jsonStr)
 		if not ok or not data or not data.Modules then return false end
-		for name, saved in data.Modules do
-			local mod = mainapi.Modules[name]
-			if not mod then continue end
-			if saved.Options and mod.Options then
-				mainapi:LoadOptions(mod, saved.Options)
+
+		-- Pick a unique local profile name (avoid clobbering an existing one)
+		local baseName = (profileName and #profileName > 0) and profileName or 'downloaded'
+		local name = baseName
+		local function nameTaken(n)
+			for _, p in mainapi.Profiles do
+				if p.Name == n then return true end
 			end
-			if (saved.Enabled or false) ~= mod.Enabled then
-				mod:Toggle(true)
+			return false
+		end
+		local suffix = 2
+		while nameTaken(name) do
+			name = baseName .. ' ' .. suffix
+			suffix += 1
+		end
+
+		-- Build an on-disk savedata blob in the format mainapi:Load expects.
+		-- Only enabled modules are present in a downloaded profile.
+		local savedata = { Modules = {}, Categories = {}, Legit = {} }
+		for modName, saved in data.Modules do
+			if mainapi.Modules[modName] then
+				savedata.Modules[modName] = {
+					Enabled = saved.Enabled and true or false,
+					Bind = {},
+					Options = saved.Options or {},
+				}
 			end
 		end
-		return true
+
+		writefile('vain/profiles/' .. name .. mainapi.Place .. '.txt', http_:JSONEncode(savedata))
+		table.insert(mainapi.Profiles, { Name = name, Bind = {} })
+
+		-- Switch the active profile to the freshly created one and load it.
+		-- mainapi:Load refreshes the profile list UI (Categories.Profiles:ChangeValue) itself.
+		mainapi.Profile = name
+		mainapi:Load(true)
+		return true, name
 	end
 
 	-- ── Build browser window ──────────────────────────────────────────────────
@@ -6460,9 +6487,9 @@ do
 			task.spawn(function()
 				local res = apiRequest('POST', '/profiles/' .. profile.id .. '/install', { from = lplr.Name })
 				if res and res.data then
-					local success = applyProfileData(res.data)
+					local success, localName = applyProfileData(res.data, profile.name)
 					installBtn.Text = success and '✓' or '!'
-					mainapi:CreateNotification('Profiles', success and 'Installed: ' .. profile.name or 'Failed to apply profile', 4, success and nil or 'alert')
+					mainapi:CreateNotification('Profiles', success and ('Installed as local profile: ' .. (localName or profile.name)) or 'Failed to apply profile', 4, success and nil or 'alert')
 				else
 					installBtn.Text = '!'
 					mainapi:CreateNotification('Profiles', 'Install failed', 4, 'alert')

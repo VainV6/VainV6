@@ -27,14 +27,6 @@ function err(msg: string, status = 400): Response {
 }
 function authErr(): Response { return err('Unauthorized', 401); }
 
-async function authedUser(request: Request, env: Env) {
-  if (request.headers.get('x-vain-secret') !== env.BOT_SECRET) return null;
-  const body = await request.json().catch(() => null) as Record<string, string> | null;
-  if (!body?.from) return null;
-  const row = await getByRoblox(env.DB, body.from);
-  return row ? { row, body } : null;
-}
-
 // GET /profiles?game_id=X&sort=installs|newest|name&search=Y&page=N
 export async function handleListProfiles(request: Request, env: Env): Promise<Response> {
   const url    = new URL(request.url);
@@ -98,14 +90,28 @@ export async function handleCreateProfile(request: Request, env: Env): Promise<R
   if (!author) return err('Not whitelisted', 403);
   if (author.tier < TIER.Premium) return err('Premium or higher required to upload profiles', 403);
 
-  // Limit: 10 profiles per user per game
-  const count = await env.DB.prepare(
-    'SELECT COUNT(*) as c FROM global_profiles WHERE author_roblox_username = ? AND game_id = ?'
-  ).bind(body.from, body.game_id).first<{ c: number }>();
-  if ((count?.c ?? 0) >= 10) return err('Profile limit reached (10 per game)');
+  const now = Date.now();
+
+  // Rate limit: one upload per hour per author (Owner is exempt)
+  if (author.tier < TIER.Owner) {
+    const last = await env.DB.prepare(
+      'SELECT MAX(created_at) as t FROM global_profiles WHERE author_discord_id = ?'
+    ).bind(author.discord_id).first<{ t: number | null }>();
+    const lastUpload = last?.t ?? 0;
+    const HOUR = 60 * 60 * 1000;
+    if (lastUpload && now - lastUpload < HOUR) {
+      const minsLeft = Math.ceil((HOUR - (now - lastUpload)) / 60000);
+      return err(`You can upload one profile per hour. Try again in ${minsLeft} min`, 429);
+    }
+  }
+
+  // Names must be unique per game
+  const dup = await env.DB.prepare(
+    'SELECT 1 FROM global_profiles WHERE game_id = ? AND LOWER(name) = LOWER(?)'
+  ).bind(body.game_id, body.name).first();
+  if (dup) return err('A profile with that name already exists', 409);
 
   const id = crypto.randomUUID();
-  const now = Date.now();
   await env.DB.prepare(`
     INSERT INTO global_profiles (id, author_discord_id, author_roblox_username, game_id, name, description, data, installs, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
@@ -160,7 +166,7 @@ export async function handleDeleteProfile(request: Request, env: Env, id: string
   if (!profile) return err('Profile not found', 404);
 
   const isOwn = profile.author_discord_id === user.discord_id;
-  const canDelete = isOwn || user.tier >= TIER.Privileged;
+  const canDelete = isOwn || user.tier >= TIER.Owner;
   if (!canDelete) return err('Forbidden', 403);
 
   await env.DB.prepare('DELETE FROM global_profiles WHERE id = ?').bind(id).run();
