@@ -132,6 +132,30 @@ local function addBlur(parent)
 	return blur
 end
 
+-- Lock a module that has been patched by the game: force it off, make its
+-- Toggle a no-op, grey out the button and append a "[PATCHED]" marker so the
+-- user can see why it won't enable. Safe against profile auto-load re-enabling it.
+local function markPatched(module)
+	if not module then return end
+	if module.Enabled then
+		pcall(function() module:Toggle(true) end)
+	end
+	module.Toggle = function(self)
+		self.Enabled = false
+		if vain and vain.CreateNotification then
+			vain:CreateNotification(self.Name, 'This module has been patched and is disabled.', 3, 'alert')
+		end
+	end
+	local btn = module.Object
+	if btn then
+		btn.TextColor3 = Color3.fromRGB(90, 90, 90)
+		if not tostring(btn.Text):find('PATCHED') then
+			btn.Text = btn.Text .. "   <font color='#8a4a4a'>[PATCHED]</font>"
+			btn.RichText = true
+		end
+	end
+end
+
 local function collection(tags, module, customadd, customremove)
 	tags = typeof(tags) ~= 'table' and {tags} or tags
 	local objs, connections = {}, {}
@@ -7942,9 +7966,15 @@ run(function()
     					callbacksquad(plr)
     				end
 
+    				-- Apply directly to the newly added card instead of restarting the
+    				-- whole module (the old code toggled itself off/on, which combined
+    				-- with the infinite WaitForChild below would hang/flicker it).
     				KitDisplay:Clean(plrframe.ChildAdded:Connect(function(plr)
-    					KitDisplay:Toggle()
-    					KitDisplay:Toggle()
+    					task.delay(0.2, function()
+    						if KitDisplay.Enabled then
+    							callbacksquad(plr)
+    						end
+    					end)
     				end))
     			end
     		end
@@ -7956,9 +7986,15 @@ run(function()
     	Tooltip = 'Enables the Kit Display module',
     	Function = function(call)
     		if call then
-    			local DraftApp = lplr.PlayerGui:WaitForChild('MatchDraftApp', 9e9)
-    			setup5v5(DraftApp)
-    			setupSquad(DraftApp)
+    			-- Don't hang forever if enabled outside the draft phase. Wait for the
+    			-- draft UI in a background thread with a finite timeout, then set up.
+    			task.spawn(function()
+    				local DraftApp = lplr.PlayerGui:WaitForChild('MatchDraftApp', 30)
+    				if DraftApp and KitDisplay.Enabled then
+    					setup5v5(DraftApp)
+    					setupSquad(DraftApp)
+    				end
+    			end)
     		end
     	end,
     	Tooltip = 'Allows you to see the other opponent kits'
@@ -28968,6 +29004,8 @@ run(function()
         Function = function() end,
     })
     WallCheck = InfiniteFly:CreateToggle({ Name = 'Wall Check', Default = true, Function = function() end })
+
+    markPatched(InfiniteFly)
 end)
 
 -- ── Kit Speed Fix ─────────────────────────────────────────────────────────────
