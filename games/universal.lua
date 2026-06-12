@@ -73,7 +73,7 @@ local Phase = { Enabled = false }
 -- the game redirector; fall back to game.PlaceId.
 local overriddenModules = {
 	-- Bedwars (and its custom-match place 8444591321, which loads 6872274481)
-	[6872274481] = { ['Aim Assist'] = true, ['Fly'] = true, ['Hit Boxes'] = true },
+	[6872274481] = { ['Aim Assist'] = true, ['Fly'] = true, ['Hit Boxes'] = true, ['Auto Clicker'] = true },
 }
 local function moduleOverridden(name)
 	local place = (vain and vain.Place) or game.PlaceId
