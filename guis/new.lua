@@ -6267,6 +6267,19 @@ do
 	addCorner(browserWindow)
 	makeDraggable(browserWindow)
 
+	-- The GUI uses Enum.ZIndexBehavior.Global, so render order is by absolute
+	-- ZIndex across the whole GUI, NOT parent-then-child. Because the window sits
+	-- at ZIndex 10, every child must be raised above it or the window background
+	-- draws over its own contents (the "blank black frame" bug). Bump the whole
+	-- subtree above the window after building / after adding profile cards.
+	local function raiseChildren()
+		for _, d in browserWindow:GetDescendants() do
+			if d:IsA('GuiObject') and d.ZIndex < 11 then
+				d.ZIndex = 11
+			end
+		end
+	end
+
 	-- Title bar
 	local titleBar = Instance.new('Frame')
 	titleBar.Size = UDim2.new(1, 0, 0, 36)
@@ -6590,6 +6603,7 @@ do
 			for _, profile in res.profiles do
 				addProfileCard(profile, myRoblox)
 			end
+			raiseChildren()
 
 			totalPages = res.pages or 1
 			loadMoreBtn.Visible = currentPage < totalPages
@@ -6754,6 +6768,7 @@ do
 		browseBtn.MouseButton1Click:Connect(function()
 			browserWindow.Visible = not browserWindow.Visible
 			if browserWindow.Visible then
+				raiseChildren()
 				fetchProfiles(true)
 			end
 		end)
