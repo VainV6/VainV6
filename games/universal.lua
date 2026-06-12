@@ -1478,6 +1478,7 @@ run(function()
 end)
 
 run(function()
+    if moduleOverridden('Auto Clicker') then return end
     local AutoClicker
     local Mode
     local CPS
