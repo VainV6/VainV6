@@ -67,6 +67,52 @@ local TargetStrafeVector, SpiderShift, WaypointFolder
 local Spider = { Enabled = false }
 local Phase = { Enabled = false }
 
+-- Some game-specific files (e.g. Bedwars) provide richer versions of modules
+-- that universal also defines, which would otherwise show up as duplicates.
+-- For those places we skip the generic universal copy. vain.Place is set by
+-- the game redirector; fall back to game.PlaceId.
+local overriddenModules = {
+	-- Bedwars (and its custom-match place 8444591321, which loads 6872274481)
+	[6872274481] = { ['Aim Assist'] = true, ['Fly'] = true, ['Hit Boxes'] = true },
+}
+local function moduleOverridden(name)
+	local place = (vain and vain.Place) or game.PlaceId
+	local set = overriddenModules[place]
+	return set and set[name] or false
+end
+
+-- Modules that still exist but have been patched by the game on a given place.
+-- They stay visible but are force-disabled, greyed and marked "[PATCHED]".
+local patchedModules = {
+	[6872274481] = { ['Invisible'] = true },
+}
+local function modulePatched(name)
+	local place = (vain and vain.Place) or game.PlaceId
+	local set = patchedModules[place]
+	return set and set[name] or false
+end
+
+local function markPatched(module)
+	if not module then return end
+	if module.Enabled then
+		pcall(function() module:Toggle(true) end)
+	end
+	module.Toggle = function(self)
+		self.Enabled = false
+		if vain and vain.CreateNotification then
+			vain:CreateNotification(self.Name, 'This module has been patched and is disabled.', 3, 'alert')
+		end
+	end
+	local btn = module.Object
+	if btn then
+		btn.TextColor3 = Color3.fromRGB(90, 90, 90)
+		if not tostring(btn.Text):find('PATCHED') then
+			btn.RichText = true
+			btn.Text = btn.Text .. "   <font color='#8a4a4a'>[PATCHED]</font>"
+		end
+	end
+end
+
 local function addBlur(parent)
 	local blur = Instance.new('ImageLabel')
 	blur.Name = 'Blur'
@@ -1253,6 +1299,7 @@ end)
 ]]
 
 run(function()
+    if moduleOverridden('Aim Assist') then return end
     local AimAssist
     local Targets
     local Part
@@ -2278,6 +2325,7 @@ run(function()
 end)
 
 run(function()
+    if moduleOverridden('Fly') then return end
     local Options = { TPTiming = tick() }
     local Mode
     local FloatMode
@@ -2713,6 +2761,7 @@ run(function()
 end)
 
 run(function()
+    if moduleOverridden('Hit Boxes') then return end
     local HitBoxes
     local Targets
     local TargetPart
@@ -2881,6 +2930,10 @@ run(function()
     	end,
     	Tooltip = 'Turns you invisible.'
     })
+
+    if modulePatched('Invisible') then
+        markPatched(Invisible)
+    end
 end)
 
 run(function()
