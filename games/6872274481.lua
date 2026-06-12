@@ -23597,6 +23597,26 @@ run(function()
 		return true
 	end
 
+	local nfStateConnections = {}
+	local function nfDisableFallStates(character)
+		-- Blatant method (from CatV6): disable the Humanoid's StateChanged
+		-- listeners so the game never processes the fall->landed transition
+		-- that applies fall damage.
+		if not character then return end
+		local hum = character:FindFirstChildOfClass('Humanoid')
+		if not hum then return end
+		for _, v in getconnections(hum.StateChanged) do
+			table.insert(nfStateConnections, v)
+			pcall(function() v:Disable() end)
+		end
+	end
+	local function nfRestoreFallStates()
+		for _, v in nfStateConnections do
+			pcall(function() v:Enable() end)
+		end
+		table.clear(nfStateConnections)
+	end
+
 	local nfRakHookActive = false
 	local function nfRakHooked(packet)
 		if packet.AsArray[1] ~= 0x1b then return end
@@ -23705,6 +23725,21 @@ run(function()
 		Tooltip = '[BETA]',
 		Function = function(callback)
 			if callback then
+				-- Blatant method runs off connections, not the pearl loop
+				if NoFallMethod and NoFallMethod.Value == 'Blatant' then
+					if entitylib.isAlive then
+						nfDisableFallStates(entitylib.character.Character)
+					end
+					NoFall:Clean(entitylib.Events.LocalAdded:Connect(function(ent)
+						task.delay(1, function()
+							if NoFall.Enabled and NoFallMethod.Value == 'Blatant' then
+								nfDisableFallStates(ent.Character)
+							end
+						end)
+					end))
+					return
+				end
+
 				local fallStartY = nil
 				local pearlFired = false
 				local cooldown = 0
@@ -23777,16 +23812,18 @@ run(function()
 					pcall(raknet.remove_send_hook, nfRakHooked)
 					nfRakHookActive = false
 				end
+				nfRestoreFallStates()
 			end
 		end
 	})
 
 	NoFallMethod = NoFall:CreateDropdown({
 		Name = 'Method',
-		List = raknet and raknet.add_send_hook and {'TelePearl', 'Raknet'} or {'TelePearl'},
-		Default = 'TelePearl',
+		List = raknet and raknet.add_send_hook and {'Blatant', 'TelePearl', 'Raknet'} or {'Blatant', 'TelePearl'},
+		Default = 'Blatant',
 		Tooltip = 'more coming!!',
 		ItemTooltips = {
+			Blatant = 'Prevents fall damage by disabling the landing state the game uses to apply it (simple and reliable)',
 			TelePearl = 'Cancels fall damage by teleporting slightly upward at the moment of impact',
 			Raknet = 'Intercepts and drops the fall-damage packet at the network layer (requires Raknet)',
 		},
@@ -23797,6 +23834,14 @@ run(function()
 			if v ~= 'Raknet' and nfRakHookActive then
 				pcall(raknet.remove_send_hook, nfRakHooked)
 				nfRakHookActive = false
+			end
+			if v ~= 'Blatant' then
+				nfRestoreFallStates()
+			end
+			-- Restart so the newly selected method's mechanism takes over cleanly
+			if NoFall.Enabled then
+				NoFall:Toggle()
+				NoFall:Toggle()
 			end
 		end
 	})
