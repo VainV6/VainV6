@@ -156,6 +156,22 @@ local function markPatched(module)
 	end
 end
 
+-- universal.lua loads BEFORE this file and creates generic modules that
+-- duplicate richer Bedwars versions (named without spaces). Since this file
+-- loads second, vain.Modules already holds the universal copies — remove the
+-- ones we replace, and patch the ones that are dead on Bedwars. This is
+-- place-independent so it also works on custom-match places (8444591321).
+run(function()
+	for _, dupeName in {'Aim Assist', 'Auto Clicker', 'Hit Boxes'} do
+		if vain.Modules[dupeName] then
+			vain:Remove(dupeName)
+		end
+	end
+	if vain.Modules['Invisible'] then
+		markPatched(vain.Modules['Invisible'])
+	end
+end)
+
 local function collection(tags, module, customadd, customremove)
 	tags = typeof(tags) ~= 'table' and {tags} or tags
 	local objs, connections = {}, {}
