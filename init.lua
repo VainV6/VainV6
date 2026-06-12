@@ -60,14 +60,36 @@ end
 
 if not shared.VainDeveloper then
 	local commit = 'main'
-	local ok, res = pcall(function()
-		return game:HttpGet('https://api.github.com/repos/VainV6/Vain/commits/main', true)
-	end)
-	if ok and res then
-		local h = res:match('"sha":"([a-f0-9]+)"')
-		if h and #h == 40 then
-			commit = h
+
+	-- Resolve the latest commit SHA. The REST API is rate limited to 60 req/hr
+	-- per IP, so reinjecting often makes it fail and fall back to the 'main' ref,
+	-- which is CDN-cached for minutes and serves stale code. The git info/refs
+	-- endpoint is NOT API-rate-limited and returns the HEAD sha as plain text, so
+	-- we try it as a fallback to keep downloads pinned to a real (fresh) sha.
+	local function resolveSha()
+		local ok, res = pcall(function()
+			return game:HttpGet('https://api.github.com/repos/VainV6/Vain/commits/main', true)
+		end)
+		if ok and res then
+			local h = res:match('"sha":"([a-f0-9]+)"')
+			if h and #h == 40 then return h end
 		end
+		ok, res = pcall(function()
+			return game:HttpGet('https://github.com/VainV6/Vain/info/refs?service=git-upload-pack', true)
+		end)
+		if ok and res then
+			-- info/refs advertises the ref as "<pkt-len-hdr><40-hex-sha> refs/heads/main"
+			-- where the 4-char pkt-line length header is glued onto the sha with no
+			-- separator, so grab the hex run before the space and keep its last 40.
+			local h = res:match('(%x+) refs/heads/main')
+			if h and #h >= 40 then return h:sub(-40) end
+		end
+		return nil
+	end
+
+	local sha = resolveSha()
+	if sha then
+		commit = sha
 	end
 	if commit == 'main' or (isfile('vain/profiles/commit.txt') and readfile('vain/profiles/commit.txt') or '') ~= commit then
 		if commit ~= 'main' and isfile('vain/profiles/commit.txt') then
