@@ -19282,7 +19282,8 @@ run(function()
 		["alchemist"] = {
 			{"Thorns", "thorns", true},
 			{"Mushrooms", "mushrooms", true},
-			{"Flower", "wild_flower", true}
+			{"Flower", "wild_flower", true},
+			{"alchemy_crystal", "spirit"}
 		},
 		["star_collector"] = {
 			{"CritStar", "crit_star", true},
@@ -19290,6 +19291,21 @@ run(function()
 		},
 		["spirit_gardener"] = {
 			{"SpiritGardenerEnergy", "spirit", true}
+		},
+		["spirit_summoner"] = {
+			{"spiritGolem", "spirit"}
+		},
+		["summoner"] = {
+			{"spiritGolem", "spirit"}
+		},
+		["raven"] = {
+			{"raven", "raven_kit"}
+		},
+		["jellyfish"] = {
+			{"jellyfish", "jellyfish_kit"}
+		},
+		["axolotl"] = {
+			{"axolotl_model", "axolotl_kit"}
 		}
 	}
 
