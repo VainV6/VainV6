@@ -3739,6 +3739,7 @@ function mainapi:CreateCategory(categorysettings)
 			Enabled = false,
 			Options = {},
 			Bind = {},
+			Favourite = false,
 			Index = getTableSize(mainapi.Modules),
 			ExtraText = modulesettings.ExtraText,
 			Name = modulesettings.Name,
@@ -3814,6 +3815,28 @@ function mainapi:CreateCategory(categorysettings)
 		bindcovertext.FontFace = uipallet.Font
 		bindcovertext.Parent = bindcover
 		bind.Parent = modulebutton
+		local fav = Instance.new('TextButton')
+		addTooltip(fav, 'Favourite (pins module to top of category)')
+		fav.Name = 'Favourite'
+		fav.Size = UDim2.fromOffset(20, 21)
+		fav.Position = UDim2.new(1, -58, 0, 9)
+		fav.AnchorPoint = Vector2.new(1, 0)
+		fav.BackgroundColor3 = Color3.new(1, 1, 1)
+		fav.BackgroundTransparency = 0.92
+		fav.BorderSizePixel = 0
+		fav.AutoButtonColor = false
+		fav.Visible = false
+		fav.Text = ''
+		addCorner(fav, UDim.new(0, 4))
+		local favicon = Instance.new('ImageLabel')
+		favicon.Name = 'Icon'
+		favicon.Size = UDim2.fromOffset(12, 12)
+		favicon.Position = UDim2.new(0.5, -6, 0, 5)
+		favicon.BackgroundTransparency = 1
+		favicon.Image = getcustomasset('vain/assets/new/pin.png')
+		favicon.ImageColor3 = color.Dark(uipallet.Text, 0.43)
+		favicon.Parent = fav
+		fav.Parent = modulebutton
 		local dotsbutton = Instance.new('TextButton')
 		dotsbutton.Name = 'Dots'
 		dotsbutton.Size = UDim2.fromOffset(25, 40)
@@ -3880,6 +3903,17 @@ function mainapi:CreateCategory(categorysettings)
 			end
 		end
 
+		function moduleapi:SetFavourite(state, skipsort)
+			self.Favourite = state and true or false
+			favicon.ImageColor3 = self.Favourite and uipallet.Text or color.Dark(uipallet.Text, 0.43)
+			fav.BackgroundTransparency = self.Favourite and 0.85 or 0.92
+			-- favourited modules keep their star visible even when not hovered
+			fav.Visible = self.Favourite or hovered or modulechildren.Visible
+			if not skipsort then
+				mainapi:SortModules()
+			end
+		end
+
 		function moduleapi:Toggle(multiple)
 			if mainapi.ThreadFix then
 				setthreadidentity(8)
@@ -3930,6 +3964,16 @@ function mainapi:CreateCategory(categorysettings)
 			bindcover.Visible = true
 			mainapi.Binding = moduleapi
 		end)
+		fav.MouseEnter:Connect(function()
+			if not moduleapi.Favourite then favicon.ImageColor3 = color.Dark(uipallet.Text, 0.16) end
+		end)
+		fav.MouseLeave:Connect(function()
+			favicon.ImageColor3 = moduleapi.Favourite and uipallet.Text or color.Dark(uipallet.Text, 0.43)
+		end)
+		fav.MouseButton1Click:Connect(function()
+			moduleapi:SetFavourite(not moduleapi.Favourite)
+			mainapi:Save()
+		end)
 		dotsbutton.MouseEnter:Connect(function()
 			if not moduleapi.Enabled then
 				dots.ImageColor3 = uipallet.Text
@@ -3953,6 +3997,7 @@ function mainapi:CreateCategory(categorysettings)
 				modulebutton.BackgroundColor3 = color.Light(uipallet.Main, 0.02)
 			end
 			bind.Visible = #moduleapi.Bind > 0 or hovered or modulechildren.Visible
+			fav.Visible = moduleapi.Favourite or hovered or modulechildren.Visible
 		end)
 		modulebutton.MouseLeave:Connect(function()
 			hovered = false
@@ -3961,6 +4006,7 @@ function mainapi:CreateCategory(categorysettings)
 				modulebutton.BackgroundColor3 = uipallet.Main
 			end
 			bind.Visible = #moduleapi.Bind > 0 or hovered or modulechildren.Visible
+			fav.Visible = moduleapi.Favourite or hovered or modulechildren.Visible
 		end)
 		modulebutton.MouseButton1Click:Connect(function()
 			moduleapi:Toggle()
@@ -4023,20 +4069,7 @@ function mainapi:CreateCategory(categorysettings)
 		moduleapi.Object = modulebutton
 		mainapi.Modules[modulesettings.Name] = moduleapi
 
-		local sorting = {}
-		for _, v in mainapi.Modules do
-			sorting[v.Category] = sorting[v.Category] or {}
-			table.insert(sorting[v.Category], v.Name)
-		end
-
-		for _, sort in sorting do
-			table.sort(sort)
-			for i, v in sort do
-				mainapi.Modules[v].Index = i
-				mainapi.Modules[v].Object.LayoutOrder = i
-				mainapi.Modules[v].Children.LayoutOrder = i
-			end
-		end
+		mainapi:SortModules()
 
 		return moduleapi
 	end
@@ -5697,7 +5730,11 @@ function mainapi:Load(skipgui, profile)
 			end
 			object:SetBind(v.Bind)
 			object.Object.Bind.Visible = #v.Bind > 0
+			if object.SetFavourite then
+				object:SetFavourite(v.Favourite, true)
+			end
 		end
+		self:SortModules()
 
 		for i, v in savedata.Legit do
 			local object = self.Legit.Modules[i]
@@ -5789,6 +5826,28 @@ function mainapi:LoadOptions(object, savedoptions)
 	end
 end
 
+function mainapi:SortModules()
+	local sorting = {}
+	for _, v in self.Modules do
+		sorting[v.Category] = sorting[v.Category] or {}
+		table.insert(sorting[v.Category], v.Name)
+	end
+
+	for _, sort in sorting do
+		-- Favourited modules float to the top of the category, then alphabetical within each group.
+		table.sort(sort, function(a, b)
+			local fa, fb = self.Modules[a].Favourite, self.Modules[b].Favourite
+			if fa ~= fb then return fa end
+			return a < b
+		end)
+		for i, v in sort do
+			self.Modules[v].Index = i
+			self.Modules[v].Object.LayoutOrder = i
+			self.Modules[v].Children.LayoutOrder = i
+		end
+	end
+end
+
 function mainapi:Remove(obj)
 	local tab = (self.Modules[obj] and self.Modules or self.Legit.Modules[obj] and self.Legit.Modules or self.Categories)
 	if tab and tab[obj] then
@@ -5839,6 +5898,7 @@ function mainapi:Save(newprofile)
 	for i, v in self.Modules do
 		savedata.Modules[i] = {
 			Enabled = v.Enabled,
+			Favourite = v.Favourite or nil,
 			Bind = v.Bind.Button and {Mobile = true, X = v.Bind.Button.Position.X.Offset, Y = v.Bind.Button.Position.Y.Offset} or v.Bind,
 			Options = mainapi:SaveOptions(v, true)
 		}
