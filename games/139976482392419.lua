@@ -355,10 +355,8 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
 	local AutoFarm
-	local Range, FaceEnemy, CollectDrops
+	local Offset, Height, ReturnHome
 
-	-- Drops appear with names like DropTix / DropItem near dead enemies. We just
-	-- nudge our character onto them if collection is touch-based.
 	local function nearestEnemy()
 		if not aliveLocal() then return nil end
 		local myPos = entitylib.character.RootPart.Position
@@ -369,38 +367,72 @@ run(function()
 				if d < bestd then best, bestd = ent, d end
 			end
 		end
-		return best, bestd
+		return best
+	end
+
+	-- Teleport our character right next to an enemy: a few studs in front of its
+	-- hitbox (so we're in melee range and facing it), lifted slightly so we don't
+	-- clip into the model.
+	local function teleportTo(ent)
+		if not aliveLocal() then return end
+		local part = ent.Character and (ent.Character:FindFirstChild('EnemyHitBox') or ent.RootPart)
+		if not part then return end
+		local root = entitylib.character.RootPart
+		local offset = Offset and Offset.Value or 4
+		local height = Height and Height.Value or 0
+		-- stand `offset` studs toward the enemy from a tiny pull-back, facing it
+		local goal = part.Position + Vector3.new(0, height, 0)
+		local from = root.Position
+		local dir = (goal - from)
+		if dir.Magnitude > 0.1 then
+			goal = goal - dir.Unit * offset
+		end
+		pcall(function()
+			root.CFrame = CFrame.lookAt(goal, part.Position)
+		end)
 	end
 
 	AutoFarm = vain.Categories.Combat:CreateModule({
 		Name = 'AutoFarm',
 		Function = function(callback)
 			if callback then
+				local home = aliveLocal() and entitylib.character.RootPart.CFrame or nil
 				task.spawn(function()
 					repeat
 						local ent = nearestEnemy()
 						if ent and aliveLocal() then
-							if FaceEnemy and FaceEnemy.Enabled then
-								local root = entitylib.character.RootPart
-								pcall(function()
-									root.CFrame = CFrame.lookAt(root.Position, Vector3.new(ent.RootPart.Position.X, root.Position.Y, ent.RootPart.Position.Z))
-								end)
-							end
-							local range = Range and Range.Value or 30
-							if (ent.RootPart.Position - entitylib.character.RootPart.Position).Magnitude <= range then
+							-- teleport to the enemy and beat on it until it dies or
+							-- despawns, then loop to the next nearest -- so we sweep
+							-- through every enemy on the map.
+							repeat
+								teleportTo(ent)
 								attackEnemy(ent)
-							end
+								if targetinfo and targetinfo.Targets then
+									targetinfo.Targets[ent] = tick() + 0.5
+								end
+								task.wait(0.12)
+							until not AutoFarm.Enabled
+								or not ent.Character
+								or not ent.Character.Parent
+								or not ent.Humanoid
+								or ent.Humanoid.Health <= 0
+								or not aliveLocal()
+						else
+							task.wait(0.2)
 						end
-						task.wait(0.15)
 					until not AutoFarm.Enabled
+					-- optionally return to where we started once disabled
+					if ReturnHome and ReturnHome.Enabled and home and aliveLocal() then
+						pcall(function() entitylib.character.RootPart.CFrame = home end)
+					end
 				end)
 			end
 		end,
-		Tooltip = 'Targets the nearest enemy and attacks it. Pair with KillAura range. Anticheat note: only fires legitimate attacks, does not teleport.'
+		Tooltip = 'Teleports from enemy to enemy, attacking each until it dies -- sweeps the whole map. WARNING: teleporting is detectable; this is for games/servers where that is acceptable.'
 	})
-	Range = AutoFarm:CreateSlider({Name = 'Range', Min = 5, Max = 100, Default = 30, Suffix = 'studs'})
-	FaceEnemy = AutoFarm:CreateToggle({Name = 'Face Enemy', Default = true})
-	CollectDrops = AutoFarm:CreateToggle({Name = 'Collect Drops'})
+	Offset = AutoFarm:CreateSlider({Name = 'TP Distance', Min = 0, Max = 20, Default = 4, Suffix = 'studs', Tooltip = 'How far in front of the enemy to land.'})
+	Height = AutoFarm:CreateSlider({Name = 'TP Height', Min = -10, Max = 20, Default = 0, Suffix = 'studs', Tooltip = 'Vertical offset so you do not clip into the enemy.'})
+	ReturnHome = AutoFarm:CreateToggle({Name = 'Return On Disable', Tooltip = 'Teleport back to your start position when AutoFarm is turned off.'})
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
