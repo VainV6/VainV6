@@ -2394,9 +2394,13 @@ run(function()
     					if tick() - lastpredicted < 0.1 then
     						targetinfo.Targets[ent] = tick() + 1
     						local cframe, speed = findAim(gameCamera.CFrame, predicted or ent.RootPart.Position, dt, found, multi + ((entitylib.character.RootPart.Position.Y - ent.RootPart.Position.Y) / 7))
-    						if inputService.MouseEnabled and entitylib.character.Head.LocalTransparencyModifier == 1 then
+    						-- In first person move the camera directly; in third person nudge
+    						-- the mouse. The old check (Head.LocalTransparencyModifier == 1) was
+    						-- an unreliable first-person test that often left the aim doing
+    						-- nothing — use the shared isFirstPerson() helper instead.
+    						if isFirstPerson() then
     							gameCamera.CFrame = cframe
-    						elseif ThirdPerson.Enabled and inputService.MouseEnabled then
+    						elseif ThirdPerson.Enabled and inputService.MouseEnabled and mousemoverel then
     							local viewport = gameCamera:WorldToViewportPoint(predicted)
     							local pos = (Vector2.new(viewport.X, viewport.Y) - inputService:GetMouseLocation()) * (speed / 15)
     							mousemoverel(pos.X, pos.Y)
