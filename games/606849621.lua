@@ -364,9 +364,16 @@ run(function()
 		return fireHook(self, id, ...)
 	end)
 
+	-- AutoFeatures call jb:FireServer every loop tick. If a remote can't be
+	-- resolved (game updated -> obfuscated name changed), warn ONCE per remote
+	-- instead of spamming a notification on every single tick.
+	local warnedRemotes = {}
 	function jb:FireServer(id, ...)
 		if not remotes[id] then
-			notif('Vain', 'Failed to find remote ('..id..')', 10, 'alert')
+			if not warnedRemotes[id] then
+				warnedRemotes[id] = true
+				notif('Vain', 'Failed to find remote ('..id..')', 10, 'alert')
+			end
 			return
 		end
 		return hook(remotetable, remotes[id], ...)
