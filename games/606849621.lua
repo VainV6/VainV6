@@ -77,8 +77,10 @@ local function getVehicle(ent)
 end
 
 local function isArrested(name)
+	-- spec.Name is a localized display string, so match on PlayerName + the
+	-- presence of the ShouldArrest field (the arrest spec) instead of v.Name.
 	for i, v in jb.CircleAction.Specs do
-		if v.Name == 'Arrest' and v.PlayerName == name then
+		if v.PlayerName == name and v.ShouldArrest ~= nil then
 			return not v.ShouldArrest
 		end
 	end
@@ -1151,15 +1153,19 @@ run(function()
 				repeat
 					if entitylib.isAlive then
 						-- PRIMARY: drive off the game's own arrest prompts. CircleAction.Specs
-						-- holds an 'Arrest' spec per nearby criminal whose .ShouldArrest the
-						-- game flips true the INSTANT the target is genuinely arrestable
-						-- (police + handcuffs + in ArrestDistance). This is the authoritative
-						-- signal the server honours, and reading the live flag (not a state
-						-- transition) means a target ALREADY in range is caught too -- which is
-						-- what the distance-only check kept missing.
+						-- holds a spec per nearby criminal whose .ShouldArrest the game flips
+						-- true the INSTANT the target is genuinely arrestable (police +
+						-- handcuffs + in ArrestDistance). That flag is the authoritative
+						-- signal the server honours, and reading it live (not a transition)
+						-- catches a target that is ALREADY in range.
+						--
+						-- NOTE: spec.Name is a LOCALIZED display string (FormatByKey
+						-- "Action.Arrest"), so we must NOT match it against 'Arrest' -- that
+						-- was the regression that broke arresting entirely. We key purely on
+						-- the ShouldArrest flag + a PlayerName.
 						for _, spec in jb.CircleAction.Specs do
 							if not AutoArrest.Enabled then break end
-							if spec.Name == 'Arrest' and spec.ShouldArrest and spec.PlayerName then
+							if spec.ShouldArrest and spec.PlayerName then
 								tryArrest(playersService:FindFirstChild(spec.PlayerName))
 							end
 						end
