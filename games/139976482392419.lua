@@ -698,6 +698,100 @@ run(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
+--  ANTI HIT  (position desync -- enemies can't land hits on you)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- The enemy AI / damage scripts are server-authoritative and resolve hits against
+-- your *replicated* HumanoidRootPart position (proximity Magnitude + a raycast LoS
+-- to your root, as seen in the player-class proximity logic). Because your own
+-- character is network-owned by the client, we can replicate the root to a far-off
+-- point each physics step, then snap it back locally before render. The server sees
+-- you 500+ studs away -> every proximity/LoS check fails -> no hits land, while you
+-- keep playing normally where you actually are.
+run(function()
+	local AntiHit
+	local Distance, Direction
+	local stepConn, heartConn
+	local realCFrame    -- where you actually are (authoritative locally)
+	local syncing       -- guard so our own CFrame writes don't get captured as "real"
+
+	local DIRS = {
+		['Up'] = Vector3.new(0, 1, 0),
+		['Down'] = Vector3.new(0, -1, 0),
+		['Forward'] = Vector3.new(0, 0, -1),
+		['Sideways'] = Vector3.new(1, 0, 0),
+	}
+
+	local function rootPart()
+		return aliveLocal() and entitylib.character.RootPart or nil
+	end
+
+	AntiHit = vain.Categories.Blatant:CreateModule({
+		Name = 'Anti Hit',
+		Function = function(callback)
+			if callback then
+				realCFrame = nil
+				local dirName = Direction and Direction.Value or 'Up'
+				local offsetDir = DIRS[dirName] or DIRS['Up']
+
+				-- Stepped fires just before physics is replicated to the server.
+				-- Push the root far away so the server-side checks see you out of range.
+				stepConn = runService.Stepped:Connect(function()
+					local root = rootPart()
+					if not root then return end
+					-- capture the genuine position the game logic put us at this frame
+					if not syncing then realCFrame = root.CFrame end
+					local dist = Distance and Distance.Value or 500
+					syncing = true
+					root.CFrame = realCFrame + offsetDir * dist
+					syncing = false
+				end)
+
+				-- Heartbeat fires after replication. Snap back so you stay where you
+				-- really are locally (movement, camera, your own attacks all work).
+				heartConn = runService.Heartbeat:Connect(function()
+					local root = rootPart()
+					if not root or not realCFrame then return end
+					syncing = true
+					root.CFrame = realCFrame
+					syncing = false
+				end)
+
+				vain:Clean(stepConn)
+				vain:Clean(heartConn)
+			else
+				if stepConn then stepConn:Disconnect() stepConn = nil end
+				if heartConn then heartConn:Disconnect() heartConn = nil end
+				-- restore real position so we don't strand the player offset
+				local root = rootPart()
+				if root and realCFrame then
+					syncing = true
+					pcall(function() root.CFrame = realCFrame end)
+					syncing = false
+				end
+				realCFrame = nil
+			end
+		end,
+		Tooltip = 'Desyncs your replicated position so enemies cannot reach/hit you, while you keep playing normally. If you get rubber-banded or flagged, lower the distance.'
+	})
+
+	Distance = AntiHit:CreateSlider({
+		Name = 'Distance',
+		Min = 100,
+		Max = 1000,
+		Default = 500,
+		Suffix = 'studs',
+		Tooltip = 'How far away the server thinks you are. Higher = safer from AoE, but more visible desync.'
+	})
+
+	Direction = AntiHit:CreateDropdown({
+		Name = 'Direction',
+		List = {'Up', 'Down', 'Forward', 'Sideways'},
+		Default = 'Up',
+		Tooltip = 'Which way to push your replicated position. Up keeps you above the map and out of melee range.'
+	})
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
 --  ANTI AFK  (stay connected during long farms)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
