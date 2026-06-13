@@ -805,10 +805,20 @@ run(function()
 			if callback then
 				local hook
 				hook = hookfunction(jb.GunController.BulletEmitterOnLocalHitPlayer, function(...)
+					-- Guard the metadata arg: its position/type can shift between game
+					-- versions, and forcing fields on a non-table threw "index nil".
 					local shotData = select(15, ...)
-					shotData.isWallbang = nil
-					shotData.isHeadshot = true
-					return hook(...)
+					if type(shotData) == 'table' then
+						shotData.isWallbang = nil
+						shotData.isHeadshot = true
+					end
+					-- pcall the original: if the gun's damage remote isn't present on
+					-- this hit (Gun.lua FindFirstChild(DAMAGE_REMOTE_NAME) -> nil), the
+					-- original errors -- swallow it so it doesn't spam the console.
+					local results = {pcall(hook, ...)}
+					if results[1] then
+						return table.unpack(results, 2)
+					end
 				end)
 	
 				repeat
