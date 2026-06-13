@@ -355,7 +355,7 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
 	local AutoFarm
-	local Offset, Height, ReturnHome
+	local Offset, Height, ReturnHome, CollectDrops, DropRange
 
 	local function nearestEnemy()
 		if not aliveLocal() then return nil end
@@ -368,6 +368,51 @@ run(function()
 			end
 		end
 		return best
+	end
+
+	-- Loot drops (Tix / coins / orbs / item pickups) spawn into the workspace
+	-- after a kill. Templates don't name the live container, so we detect them
+	-- heuristically: a BasePart (or model with a part) whose name looks like a
+	-- pickup. The game has a Tix magnet, so teleporting ONTO a drop collects it.
+	local function looksLikeDrop(obj)
+		local n = obj.Name
+		if n:match('[Tt]ix') or n:match('[Dd]rop') or n:match('[Oo]rb')
+			or n:match('[Pp]ickup') or n:match('[Cc]oin') or n:match('[Gg]old')
+			or n:match('[Ll]oot') then
+			-- ignore our own ESP/UI and enemy config flags
+			return obj:IsA('BasePart') or (obj:IsA('Model') and obj:FindFirstChildWhichIsA('BasePart', true) ~= nil)
+		end
+		return false
+	end
+
+	local function dropPart(obj)
+		return obj:IsA('BasePart') and obj or obj:FindFirstChildWhichIsA('BasePart', true)
+	end
+
+	-- Collect every nearby drop by teleporting onto each in turn.
+	local function sweepDrops()
+		if not (CollectDrops and CollectDrops.Enabled) or not aliveLocal() then return end
+		local root = entitylib.character.RootPart
+		local range = DropRange and DropRange.Value or 200
+		-- collect into a list first so we don't iterate a changing workspace
+		local drops = {}
+		for _, obj in workspace:GetDescendants() do
+			if looksLikeDrop(obj) then
+				local part = dropPart(obj)
+				if part and (part.Position - root.Position).Magnitude <= range then
+					table.insert(drops, part)
+				end
+			end
+		end
+		for _, part in drops do
+			if not AutoFarm.Enabled or not aliveLocal() then break end
+			if part.Parent then
+				pcall(function()
+					entitylib.character.RootPart.CFrame = CFrame.new(part.Position + Vector3.new(0, 2, 0))
+				end)
+				task.wait(0.08)
+			end
+		end
 	end
 
 	-- Teleport our character right next to an enemy: a few studs in front of its
@@ -417,7 +462,11 @@ run(function()
 								or not ent.Humanoid
 								or ent.Humanoid.Health <= 0
 								or not aliveLocal()
+							-- enemy just died: grab any loot it dropped
+							sweepDrops()
 						else
+							-- no enemies right now: collect leftover drops, then idle
+							sweepDrops()
 							task.wait(0.2)
 						end
 					until not AutoFarm.Enabled
@@ -432,6 +481,8 @@ run(function()
 	})
 	Offset = AutoFarm:CreateSlider({Name = 'TP Distance', Min = 0, Max = 20, Default = 4, Suffix = 'studs', Tooltip = 'How far in front of the enemy to land.'})
 	Height = AutoFarm:CreateSlider({Name = 'TP Height', Min = -10, Max = 20, Default = 0, Suffix = 'studs', Tooltip = 'Vertical offset so you do not clip into the enemy.'})
+	CollectDrops = AutoFarm:CreateToggle({Name = 'Collect Drops', Tooltip = 'After each kill, teleport onto nearby loot drops (Tix/coins/orbs/pickups) to collect them.'})
+	DropRange = AutoFarm:CreateSlider({Name = 'Drop Range', Min = 20, Max = 500, Default = 200, Suffix = 'studs', Tooltip = 'Only collect drops within this range of you.'})
 	ReturnHome = AutoFarm:CreateToggle({Name = 'Return On Disable', Tooltip = 'Teleport back to your start position when AutoFarm is turned off.'})
 end)
 
@@ -440,15 +491,11 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
 	local BowAimbot
-	local Range, Hitbox, ProjectileSpeed
+	local Range, ProjectileSpeed, Gravity
 
 	local rayCheck = RaycastParams.new()
 	rayCheck.FilterType = Enum.RaycastFilterType.Exclude
 
-	-- Bows in this game fire toward the mouse; we hook mouse position resolution
-	-- by overriding where the local mouse points while the bow is drawn. Since the
-	-- exact projectile API is per-gear, we expose this as an aim-assist: it snaps
-	-- the camera/aim toward the predicted enemy point so the normal shot lands.
 	local function bestTarget()
 		if not aliveLocal() then return nil end
 		local myPos = entitylib.character.RootPart.Position
@@ -463,38 +510,88 @@ run(function()
 		return best
 	end
 
+	-- Compute the lead point: where to aim so a projectile of `speed` under
+	-- `gravity` intercepts the best target, using the shared ballistic solver.
+	local function computeAimPoint()
+		local ent = bestTarget()
+		if not ent or not aliveLocal() then return nil, nil end
+		local part = ent.Character:FindFirstChild('EnemyHitBox') or ent.RootPart
+		local origin = entitylib.character.RootPart.Position
+		rayCheck.FilterDescendantsInstances = {lplr.Character, ent.Character, gameCamera}
+		local speed = ProjectileSpeed and ProjectileSpeed.Value or 150
+		local grav = Gravity and Gravity.Value or workspace.Gravity
+		local vel = part.AssemblyLinearVelocity
+		if not vel or vel.Magnitude < 0.01 then vel = part.Velocity end
+		local calc = prediction.SolveTrajectory(origin, speed, grav, part.Position, vel, workspace.Gravity, ent.HipHeight, nil, rayCheck)
+		return (calc or part.Position), ent
+	end
+
+	-- Rewrite the aim argument(s) of a fire call to our predicted point. The bow's
+	-- ServerControl is invoked with a Vector3 (mouse hit) or a CFrame (look) -- we
+	-- don't know which slot, so we swap the FIRST positional Vector3/CFrame we see
+	-- with the lead point, leaving everything else untouched.
+	local function rewriteArgs(aim, ...)
+		local args = {...}
+		for i, v in args do
+			local t = typeof(v)
+			if t == 'Vector3' then
+				args[i] = aim
+				return table.unpack(args, 1, select('#', ...))
+			elseif t == 'CFrame' then
+				args[i] = CFrame.lookAt(v.Position, aim)
+				return table.unpack(args, 1, select('#', ...))
+			end
+		end
+		return ...
+	end
+
+	-- Is `self` the ServerControl RemoteFunction of the tool we have equipped?
+	-- RemoteFunction.InvokeServer is one shared C function, so we hook it ONCE
+	-- globally and only rewrite when the call belongs to our equipped weapon.
+	local function isEquippedServerControl(self)
+		if typeof(self) ~= 'Instance' or not self:IsA('RemoteFunction') or self.Name ~= 'ServerControl' then
+			return false
+		end
+		local tool = self.Parent
+		return tool and tool:IsA('Tool') and tool.Parent == lplr.Character
+	end
+
+	local original
+	local function installHook()
+		if original then return end
+		original = hookfunction(Instance.new('RemoteFunction').InvokeServer, function(self, ...)
+			if BowAimbot.Enabled and isEquippedServerControl(self) then
+				local aim = computeAimPoint()
+				if aim then
+					return original(self, rewriteArgs(aim, ...))
+				end
+			end
+			return original(self, ...)
+		end)
+	end
+
 	BowAimbot = vain.Categories.Combat:CreateModule({
 		Name = 'Bow Aimbot',
 		Function = function(callback)
+			-- The global InvokeServer hook stays installed (its body is gated on
+			-- BowAimbot.Enabled), so toggling just flips the flag -- no re-hooking.
 			if callback then
-				task.spawn(function()
-					repeat
-						local ent = bestTarget()
-						if ent and inputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-							local part = ent.Character:FindFirstChild('EnemyHitBox') or ent.RootPart
-							local origin = entitylib.character.RootPart.Position
-							rayCheck.FilterDescendantsInstances = {lplr.Character, ent.Character, gameCamera}
-							local speed = ProjectileSpeed and ProjectileSpeed.Value or 150
-							local vel = part.AssemblyLinearVelocity
-							if not vel or vel.Magnitude < 0.01 then vel = part.Velocity end
-							local aim = part.Position
-							local calc = prediction.SolveTrajectory(origin, speed, workspace.Gravity, part.Position, vel, workspace.Gravity, ent.HipHeight, nil, rayCheck)
-							if calc then aim = calc end
-							-- snap the camera toward the predicted point (aim assist)
-							pcall(function()
-								gameCamera.CFrame = CFrame.lookAt(gameCamera.CFrame.Position, aim)
-							end)
-							if targetinfo and targetinfo.Targets then targetinfo.Targets[ent] = tick() + 0.5 end
-						end
-						task.wait()
-					until not BowAimbot.Enabled
-				end)
+				installHook()
 			end
 		end,
-		Tooltip = 'Leads the nearest enemy with your projectile speed and aims your camera at the predicted point while firing. Uses the shared ballistic solver.'
+		Tooltip = 'Silently redirects your bow/projectile shots to a lead point computed by the ballistic solver -- hooks the weapon ServerControl and rewrites the aim, no camera/cursor movement.'
 	})
 	Range = BowAimbot:CreateSlider({Name = 'Range', Min = 20, Max = 600, Default = 250, Suffix = 'studs'})
 	ProjectileSpeed = BowAimbot:CreateSlider({Name = 'Projectile Speed', Min = 50, Max = 500, Default = 150})
+	Gravity = BowAimbot:CreateSlider({Name = 'Projectile Gravity', Min = 0, Max = 400, Default = math.floor(workspace.Gravity), Tooltip = 'Gravity of the projectile arc. 0 = straight line (no drop).'})
+
+	-- restore the global InvokeServer hook when Vain unloads
+	vain:Clean(function()
+		if original then
+			pcall(restorefunction, Instance.new('RemoteFunction').InvokeServer)
+			original = nil
+		end
+	end)
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
