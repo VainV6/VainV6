@@ -1590,6 +1590,161 @@ run(function()
 	})
 end)
 
+-- ===========================================================================
+-- Vehicle exploits. The AlexChassis is CLIENT-SIDE physics: your client computes
+-- your own car's drive force / torque each frame from a chassis state object.
+-- VehicleUtils.GetLocalVehiclePacket() returns that live state (it exposes
+-- .AreTiresPopped, .LaunchSpeedMult, .Traction, .Model, .Make ...), so mutating
+-- those fields changes how YOUR car drives, with no remote -- the server doesn't
+-- re-derive your physics. (It still validates POSITION, so an absurd speed can
+-- get position-rolled; keep the multiplier reasonable.)
+-- ===========================================================================
+run(function()
+	-- live local-vehicle chassis state, or nil if you're not driving
+	local function chassis()
+		local vc = jb.VehicleController
+		if not vc or not vc.GetLocalVehiclePacket then return nil end
+		local ok, packet = pcall(vc.GetLocalVehiclePacket)
+		if ok and type(packet) == 'table' and not packet.Passenger then
+			return packet
+		end
+		return nil
+	end
+
+	-- Vehicle Speed: LaunchSpeedMult multiplies the drive force (the game sets it
+	-- to 4 for a split second on launch, then decays it). Pinning it to a chosen
+	-- value gives permanent extra acceleration + top speed.
+	local VehicleSpeed
+	local SpeedMult
+	VehicleSpeed = vain.Categories.Utility:CreateModule({
+		Name = 'Vehicle Speed',
+		Function = function(callback)
+			if callback then
+				task.spawn(function()
+					repeat
+						local c = chassis()
+						if c then
+							c.LaunchSpeedMult = (SpeedMult and SpeedMult.Value) or 2
+						end
+						task.wait()
+					until not VehicleSpeed.Enabled
+					-- let the game decay it back naturally
+					local c = chassis()
+					if c then c.LaunchSpeedMult = nil end
+				end)
+			end
+		end,
+		Tooltip = 'Permanent speed/acceleration boost for your car by pinning the chassis LaunchSpeedMult. Client-side physics only (no remote). Keep it modest -- the server still checks your POSITION, so extreme values can get you rolled back.'
+	})
+	SpeedMult = VehicleSpeed:CreateSlider({
+		Name = 'Multiplier',
+		Min = 1,
+		Max = 10,
+		Default = 2,
+		Decimal = 10,
+		Suffix = 'x',
+		Tooltip = 'Drive-force multiplier. 2-3x is usually safe; higher may trip the position anticheat.'
+	})
+end)
+
+run(function()
+	-- Ignore Popped Tires: AreTiresPopped is recomputed from tire health every
+	-- frame and, when true, spins you out / kills your speed. Force it false so
+	-- flat tires never affect how your car drives.
+	local function chassis()
+		local vc = jb.VehicleController
+		if not vc or not vc.GetLocalVehiclePacket then return nil end
+		local ok, packet = pcall(vc.GetLocalVehiclePacket)
+		if ok and type(packet) == 'table' and not packet.Passenger then return packet end
+		return nil
+	end
+	local IgnorePopped
+	IgnorePopped = vain.Categories.Utility:CreateModule({
+		Name = 'Ignore Popped Tires',
+		Function = function(callback)
+			if callback then
+				task.spawn(function()
+					repeat
+						local c = chassis()
+						if c then
+							c.AreTiresPopped = false
+							c._spinOutLeft = nil
+							c._spinOutAt = nil
+						end
+						task.wait()
+					until not IgnorePopped.Enabled
+				end)
+			end
+		end,
+		Tooltip = 'Drive normally even with popped tires -- forces the chassis AreTiresPopped flag off each frame so you never spin out or slow down. Client physics only.'
+	})
+end)
+
+run(function()
+	-- Perfect Traction / No Flip: pin Traction high (no skidding) and keep the car
+	-- upright by clearing the upside-down timer the chassis uses before it flips.
+	local function chassis()
+		local vc = jb.VehicleController
+		if not vc or not vc.GetLocalVehiclePacket then return nil end
+		local ok, packet = pcall(vc.GetLocalVehiclePacket)
+		if ok and type(packet) == 'table' and not packet.Passenger then return packet end
+		return nil
+	end
+	local Traction
+	Traction = vain.Categories.Utility:CreateModule({
+		Name = 'Vehicle Traction',
+		Function = function(callback)
+			if callback then
+				task.spawn(function()
+					repeat
+						local c = chassis()
+						if c then
+							c.Traction = 1
+							c.UpsideDownTime = nil -- never reach the auto-flip threshold
+						end
+						task.wait()
+					until not Traction.Enabled
+				end)
+			end
+		end,
+		Tooltip = 'Maximum grip (no skidding/drifting away) and prevents your car from flipping. Pins the chassis Traction and clears its upside-down timer. Client physics only.'
+	})
+end)
+
+run(function()
+	-- Instant Tire Repair: keep every tire on your car topped up to its max health
+	-- (VehicleTireHealth attribute) so they can never be popped.
+	local IronTires
+	IronTires = vain.Categories.Utility:CreateModule({
+		Name = 'Iron Tires',
+		Function = function(callback)
+			if callback then
+				task.spawn(function()
+					local vc = jb.VehicleController
+					repeat
+						local ok, packet = pcall(vc.GetLocalVehiclePacket)
+						local model = ok and type(packet) == 'table' and packet.Model
+						if model and not packet.Passenger then
+							for _, part in model:GetDescendants() do
+								if part:IsA('BasePart') and part:GetAttribute('VehicleTireHealth') ~= nil then
+									local maxh = part:GetAttribute('MaxVehicleTireHealth') or 100
+									if part:GetAttribute('VehicleTireHealth') < maxh then
+										pcall(function()
+											if vc.setTireHealth then vc.setTireHealth(part, maxh) else part:SetAttribute('VehicleTireHealth', maxh) end
+										end)
+									end
+								end
+							end
+						end
+						task.wait(0.2)
+					until not IronTires.Enabled
+				end)
+			end
+		end,
+		Tooltip = 'Keeps your tires repaired to full health so they can never stay popped (refills the VehicleTireHealth attribute). Pair with Ignore Popped Tires.'
+	})
+end)
+
 run(function()
 	-- Infinite Jetpack fuel: the JetPack controller (Game.JetPack.JetPack) stores
 	-- the local fuel as plain table fields LocalFuel / LocalMaxFuel on the returned
