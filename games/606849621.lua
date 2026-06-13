@@ -779,15 +779,27 @@ run(function()
 					return pos
 				end
 
-				-- force every bullet to be hitscan so it arrives the instant it is fired
+				-- force every bullet to be hitscan so it arrives the instant it is fired,
+				-- AND make the bullet ray ignore all world geometry. The BulletEmitter
+				-- registers a player hit by RootPart proximity but FIRST raycasts for a
+				-- collidable surface -- a car body sits between you and the seated player
+				-- and absorbs the shot, which is why in-car targets rarely took damage.
+				-- Setting IgnoreList = {workspace} (same trick Wallbang uses) makes the
+				-- ray pass through the car so the proximity hit on the occupant lands.
 				Aimbot:Clean(runService.RenderStepped:Connect(function()
 					local item = jb.ItemSystemController:GetLocalEquipped()
 					if item and item.BulletEmitter then
 						rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.001))
+						item.BulletEmitter.IgnoreList = {workspace}
 					end
 				end))
 			else
 				jb.GunController.TransformLocalMousePosition = Hooked
+				-- restore normal bullet collision on the currently equipped gun
+				local item = jb.ItemSystemController:GetLocalEquipped()
+				if item and item.BulletEmitter then
+					item.BulletEmitter.IgnoreList = {}
+				end
 			end
 		end,
 		Tooltip = 'Instantly hits the highest-priority target in range with zero bullet travel time. No aiming or camera movement -- just shoot. Works through car bodies on players in vehicles.'
@@ -918,7 +930,12 @@ run(function()
 	-- Read the live Most Wanted list. The game no longer scrapes a workspace UI
 	-- board; bounties are a JSON array in ReplicatedStorage.BountyData.Value,
 	-- decoded by Bounty.BountyBoardService into .Bounties = {{UserId, Bounty}, ...}.
-	-- We read that service directly and return a UserId -> bounty-number map.
+	--
+	-- We decode the raw BountyData.Value JSON FIRST: requiring BountyBoardService
+	-- from the exploit thread can hand back a fresh module instance whose init()
+	-- never ran, leaving .Bounties empty (this is why BountyESP showed nothing).
+	-- The raw value is always populated by the server. The service is only a
+	-- secondary source if the JSON decode somehow fails.
 	local bountyService = select(2, pcall(function()
 		return require(replicatedStorage.Bounty.BountyBoardService)
 	end))
@@ -926,16 +943,19 @@ run(function()
 	local function readBoard()
 		local map = {}
 		local list
-		if type(bountyService) == 'table' and type(bountyService.Bounties) == 'table' then
-			list = bountyService.Bounties
-		else
-			-- fallback: decode the raw BountyData JSON ourselves
-			local data = replicatedStorage:FindFirstChild('BountyData')
-			if data then
-				local ok, decoded = pcall(function() return httpService:JSONDecode(data.Value) end)
-				if ok and type(decoded) == 'table' then list = decoded end
+
+		local data = replicatedStorage:FindFirstChild('BountyData')
+		if data then
+			local ok, decoded = pcall(function() return httpService:JSONDecode(data.Value) end)
+			if ok and type(decoded) == 'table' and next(decoded) ~= nil then
+				list = decoded
 			end
 		end
+		-- secondary: the service's decoded cache (only if it actually has entries)
+		if not list and type(bountyService) == 'table' and type(bountyService.Bounties) == 'table' and next(bountyService.Bounties) ~= nil then
+			list = bountyService.Bounties
+		end
+
 		if type(list) ~= 'table' then return map end
 		for _, entry in list do
 			if type(entry) == 'table' and entry.UserId then
