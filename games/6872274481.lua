@@ -1775,11 +1775,15 @@ local AimAssist
 					end
 
 					-- Target Health filter: only assist when the target is at or below
-					-- the chosen health, e.g. for finishing low enemies.
+					-- the chosen health. BedWars stores real health on the character's
+					-- 'Health' attribute (Humanoid.Health is often a fixed 100), and
+					-- entitylib mirrors it on ent.Health — use that, like the Health sort.
 					if HealthCheck and HealthCheck.Enabled then
-						local hum = ent.Character and ent.Character:FindFirstChildOfClass('Humanoid')
-						local hp = hum and hum.Health or (ent.Humanoid and ent.Humanoid.Health) or 0
-						if hp > (HealthThreshold and HealthThreshold.Value or 100) then
+						local hp = ent.Health
+						if hp == nil and ent.Character then
+							hp = ent.Character:GetAttribute('Health')
+						end
+						if hp and hp > (HealthThreshold and HealthThreshold.Value or 100) then
 							return
 						end
 					end
