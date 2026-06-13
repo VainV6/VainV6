@@ -293,6 +293,7 @@ run(function()
 		HotbarItemSystem = require(replicatedStorage.Hotbar.HotbarItemSystem),
 		InventoryItemSystem = require(replicatedStorage.Inventory.InventoryItemSystem),
 		ItemSystemController = require(replicatedStorage.Game.ItemSystem.ItemSystem),
+		JetPackController = require(replicatedStorage.Game.JetPack.JetPack),
 		PlayerUtils = require(replicatedStorage.Game.PlayerUtils),
 		RagdollController = require(replicatedStorage.Module.AlexRagdoll),
 		TaserController = require(replicatedStorage.Game.Item.Taser),
@@ -609,6 +610,13 @@ run(function()
 	-- Both live on item.Config and are client-owned -- the game reads them to aim
 	-- the shot / shake your camera; it does not change movement/position, so the
 	-- position-based anticheat has nothing to flag. Originals restored on disable.
+	--
+	-- It also kills RECOIL: each shot the gun calls item.SpringCamera:Accelerate(
+	-- dir * 0.15 * CamShakeMagnitude * t) (verified in Game.Item.Gun), so zeroing
+	-- CamShakeMagnitude already cancels the kick. As a belt-and-suspenders for guns
+	-- with a non-shake recoil path, we also pin the recoil spring's velocity (.v)
+	-- and position (.p) to zero each tick -- the Spring (Module.Spring) stores its
+	-- state in .p/.v/.Target, so a zeroed spring produces no camera movement.
 	local NoSpread
 	local FIELDS = {'BulletSpread', 'CamShakeMagnitude'}
 	local originals = {} -- [Config] = {Field = originalValue}
@@ -633,7 +641,16 @@ run(function()
 							end
 						end
 					end
-					task.wait(0.1)
+					-- damp the recoil spring so any residual kick decays to nothing
+					local spring = item and item.SpringCamera
+					if type(spring) == 'table' then
+						pcall(function()
+							spring.v = spring.v * 0
+							spring.p = spring.p * 0
+							if spring.Target then spring.Target = spring.Target * 0 end
+						end)
+					end
+					task.wait(0.05)
 				until not NoSpread.Enabled
 			else
 				for cfg, fields in originals do
@@ -644,7 +661,7 @@ run(function()
 				table.clear(originals)
 			end
 		end,
-		Tooltip = 'Removes bullet spread AND the camera shake on your equipped gun for pinpoint, jolt-free shots. Client-side gun config only (no movement), so the anticheat does not flag it.'
+		Tooltip = 'Removes bullet spread, camera shake AND recoil on your equipped gun for pinpoint, jolt-free shots. Client-side gun config + recoil spring only (no movement), so the anticheat does not flag it.'
 	})
 end)
 
@@ -1046,7 +1063,7 @@ run(function()
 	local RAGDOLL_STATES = {
 		Enum.HumanoidStateType.FallingDown,
 		Enum.HumanoidStateType.Ragdoll,
-		Enum.HumanoidStateType.PlatformStand,
+		Enum.HumanoidStateType.PlatformStanding,
 	}
 	local function setRagdollStates(enabled)
 		local char = entitylib.isAlive and entitylib.character
@@ -1136,7 +1153,38 @@ run(function()
 		Tooltip = 'Infinite boost for the local car'
 	})
 end)
-	
+
+run(function()
+	-- Infinite Jetpack fuel: the JetPack controller (Game.JetPack.JetPack) stores
+	-- the local fuel as plain table fields LocalFuel / LocalMaxFuel on the returned
+	-- module, and consumes it client-side each thrust frame (LocalFuel = LocalFuel
+	-- - dt * ...). We just keep LocalFuel pinned to LocalMaxFuel on a cycle -- same
+	-- approach as InfiniteNitro. Pure local state, never fires a remote, so there's
+	-- nothing for the anticheat to flag.
+	local InfiniteJetpack
+	local jp = jb.JetPackController
+
+	InfiniteJetpack = vain.Categories.Utility:CreateModule({
+		Name = 'InfiniteJetpack',
+		Function = function(callback)
+			if type(jp) ~= 'table' or type(jp.LocalFuel) ~= 'number' then
+				if callback then
+					notif('InfiniteJetpack', 'Could not find the jetpack fuel (game updated?). Disabling.', 6, 'alert')
+					InfiniteJetpack:Toggle()
+				end
+				return
+			end
+			if callback then
+				repeat
+					jp.LocalFuel = jp.LocalMaxFuel or jp.LocalFuel
+					task.wait(0.1)
+				until not InfiniteJetpack.Enabled
+			end
+		end,
+		Tooltip = 'Keeps your jetpack fuel topped up so it never runs out. Local fuel state only (no remote), so the anticheat does not flag it.'
+	})
+end)
+
 run(function()
 	local InstantAction
 	InstantAction = vain.Categories.Utility:CreateModule({
