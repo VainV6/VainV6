@@ -186,6 +186,16 @@ local function isGUIOpen()
 	return inputService.MouseBehavior == Enum.MouseBehavior.Default
 end
 
+-- True when an entity is a valid enemy target. Uses the cached Targetable
+-- flag (entitylib keeps it in sync with entitylib.targetCheck), falling back
+-- to a live targetCheck so it works before the flag is first computed.
+local function isEnemy(ent)
+	if not ent then return false end
+	if ent.Targetable ~= nil then return ent.Targetable end
+	local ok, res = pcall(entitylib.targetCheck, ent)
+	return ok and res or false
+end
+
 -- True when the held item is a bow or crossbow. toolType is 'bow' for both in
 -- some states, so also check the tool name to reliably catch crossbows.
 local function isHoldingBowCrossbow()
@@ -1580,6 +1590,7 @@ local AimAssist
 	local ShakeToggle
 	local ShakeAmount
 	local WorkWithProjectiles
+	local LimitToItem
 	local MinDistance
 	local HealthCheck
 	local HealthThreshold
@@ -1660,13 +1671,18 @@ local AimAssist
 						return
 					end
 
-					local validWeapon = store.hand.toolType == 'sword'
-					if WorkWithProjectiles and WorkWithProjectiles.Enabled then
-						validWeapon = validWeapon or isHoldingBowCrossbow()
-					end
-					if not validWeapon then
-						lockedTarget = nil
-						return
+					-- By default AimAssist works with any held item. 'Limit to item'
+					-- restores the old behavior: only assist while holding a sword
+					-- (or a bow/crossbow when Work With Projectiles is on).
+					if LimitToItem and LimitToItem.Enabled then
+						local validWeapon = store.hand.toolType == 'sword'
+						if WorkWithProjectiles and WorkWithProjectiles.Enabled then
+							validWeapon = validWeapon or isHoldingBowCrossbow()
+						end
+						if not validWeapon then
+							lockedTarget = nil
+							return
+						end
 					end
 
 					-- ClickAim gates on a recent sword swing, which never fires for a bow.
@@ -1892,6 +1908,17 @@ local AimAssist
 		Tooltip = 'FOV cone for target acquisition'
 	})
 
+	MinDistance = AimAssist:CreateSlider({
+		Name = 'Min Distance',
+		Tooltip = 'Don\'t assist on targets closer than this (0 = no minimum)',
+		Min = 0,
+		Max = 50,
+		Default = 0,
+		Suffix = function(val)
+			return val <= 1 and 'stud' or 'studs'
+		end
+	})
+
 	SmoothnessToggle = AimAssist:CreateToggle({
 		Name = 'Smoothness',
 		Default = false,
@@ -1954,18 +1981,13 @@ local AimAssist
 	WorkWithProjectiles = AimAssist:CreateToggle({
 		Name = 'Work With Projectiles',
 		Default = false,
-		Tooltip = 'Also activates when holding bows or crossbows'
+		Tooltip = 'Also activates when holding bows or crossbows (only matters with Limit to item on)'
 	})
 
-	MinDistance = AimAssist:CreateSlider({
-		Name = 'Min Distance',
-		Tooltip = 'Don\'t assist on targets closer than this (0 = no minimum)',
-		Min = 0,
-		Max = 50,
-		Default = 0,
-		Suffix = function(val)
-			return val <= 1 and 'stud' or 'studs'
-		end
+	LimitToItem = AimAssist:CreateToggle({
+		Name = 'Limit to item',
+		Default = false,
+		Tooltip = 'Only assist while holding a weapon (sword, or bow/crossbow with Work With Projectiles). Off = works with any held item.'
 	})
 
 	HealthCheck = AimAssist:CreateToggle({
