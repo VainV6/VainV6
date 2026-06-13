@@ -1082,14 +1082,34 @@ run(function()
 	-- keep RE-FIRING until the server actually registers the arrest, instead of
 	-- giving up after one packet -- this is what makes it land 100% of the time
 	-- even if the first attempt is dropped or arrives a frame too early.
+	-- BUILD-PROOF arrest: instead of firing a hardcoded obfuscated alias (which the
+	-- game re-randomizes every update), call the game's OWN arrest action. Every
+	-- nearby criminal has a CircleAction spec; the arrest spec has spec.ShouldArrest
+	-- and a spec:Callback that, when run, executes the real arrest with the correct
+	-- alias + server remap. We just invoke that callback -- no alias to maintain.
+	-- Falls back to the raw remote only if the spec/callback can't be found.
+	local function callSpecArrest(name)
+		local specs = jb.CircleAction and jb.CircleAction.Specs
+		if type(specs) ~= 'table' then return false end
+		for _, spec in specs do
+			if spec.PlayerName == name and spec.ShouldArrest and type(spec.Callback) == 'function' then
+				local ok = pcall(function() spec:Callback(true) end)
+				return ok
+			end
+		end
+		return false
+	end
+
 	local function tryArrest(plr)
 		if not plr then return end
 		local last = arrestDebounce[plr]
 		if not last or tick() - last > 0.1 then
 			arrestDebounce[plr] = tick()
-			-- the game fires the arrest remote with the PLAYER INSTANCE
-			-- (Players:FindFirstChild(name) -> Player), not the name string
-			jb:FireServer('Arrest', plr)
+			-- prefer the game's own arrest callback (alias-proof); fall back to the
+			-- decoded remote alias if no live spec exists for this player yet.
+			if not callSpecArrest(plr.Name) then
+				jb:FireServer('Arrest', plr)
+			end
 		end
 	end
 
