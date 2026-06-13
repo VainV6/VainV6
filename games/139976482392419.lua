@@ -1263,7 +1263,7 @@ end)
 -- reserve), in your chosen price order, stopping when you can't afford more.
 run(function()
 	local AutoBuy
-	local BuyGears, BuyAccessories, BuySacrifices
+	local BuyEverything, BuyGears, BuyAccessories, BuySacrifices
 	local Whitelist, ItemPicker, MaxPrice, Reserve, Order, BuyDelay
 	local lastInShop = false
 	local busy = false
@@ -1308,6 +1308,8 @@ run(function()
 	end
 
 	local function wanted(item, category)
+		-- Buy Everything overrides all filters (still bound by Max Price / Reserve)
+		if BuyEverything and BuyEverything.Enabled then return true end
 		-- category gate
 		local tog = catToggle[category]
 		if tog and not tog.Enabled then return false end
@@ -1388,6 +1390,7 @@ run(function()
 		Tooltip = 'Buys whitelisted/enabled-category items whenever they appear in the shop. The Item Picker lists every item in the game - tick the ones you want and Auto Buy grabs them as soon as they are stocked and affordable.'
 	})
 
+	BuyEverything = AutoBuy:CreateToggle({Name = 'Buy Everything', Tooltip = 'Buy every item in the shop, ignoring the category toggles and whitelist. Still respects Max Price and Keep Reserve.'})
 	BuyGears = AutoBuy:CreateToggle({Name = 'Buy Gears', Default = true, Tooltip = 'Buy items from the Gears shelf.'})
 	BuyAccessories = AutoBuy:CreateToggle({Name = 'Buy Accessories', Tooltip = 'Buy items from the Accessories shelf.'})
 	BuySacrifices = AutoBuy:CreateToggle({Name = 'Buy Sacrifices', Tooltip = 'Buy items from the Sacrifices shelf.'})
