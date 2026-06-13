@@ -1134,11 +1134,34 @@ end)
 run(function()
 	local AutoBuy
 	local BuyGears, BuyAccessories, BuySacrifices
-	local Whitelist, MaxPrice, Reserve, Order, BuyDelay
+	local Whitelist, ItemPicker, MaxPrice, Reserve, Order, BuyDelay
 	local lastInShop = false
 	local busy = false
 
 	local catToggle = {}   -- filled after toggles exist
+
+	-- Build a de-duplicated, sorted list of the item names currently on the
+	-- shop shelves and push it into the Item Picker dropdown. The shop is only
+	-- populated between rounds, so this needs to be (re)run while in the shop.
+	local function refreshPicker(announce)
+		if not ItemPicker then return end
+		local seen, names = {}, {}
+		forEachShopItem(function(item)
+			local nm = itemName(item)
+			if nm and nm ~= '' and not seen[nm] then
+				seen[nm] = true
+				table.insert(names, nm)
+			end
+		end)
+		table.sort(names)
+		if #names == 0 then
+			ItemPicker:Change({'(enter the shop, then Refresh)'})
+			if announce then notif('Auto Buy', 'No shop items found - open the shop first.') end
+		else
+			ItemPicker:Change(names)
+			if announce then notif('Auto Buy', ('Found %d shop items.'):format(#names)) end
+		end
+	end
 
 	-- build a lowercase lookup from the whitelist entries
 	local function whitelistSet()
@@ -1218,13 +1241,15 @@ run(function()
 				lastInShop = inShop()
 				-- buy once immediately if we're already in the shop
 				if lastInShop then task.spawn(runBuy) end
-				AutoBuy:Clean(runService.Heartbeat:Connect(function()
-					local now = inShop()
-					if now and not lastInShop then
-						task.spawn(runBuy)   -- just entered the shop
-					end
-					lastInShop = now
-				end))
+					if lastInShop then task.spawn(refreshPicker) end
+					AutoBuy:Clean(runService.Heartbeat:Connect(function()
+						local now = inShop()
+						if now and not lastInShop then
+							task.spawn(refreshPicker)   -- repopulate the picker with this shop's items
+							task.spawn(runBuy)          -- just entered the shop
+						end
+						lastInShop = now
+					end))
 			end
 		end,
 		Tooltip = 'Automatically buys shop items that pass your filters as soon as you enter the shop. Set a name whitelist for exact picks, or use the category toggles to buy broadly.'
@@ -1238,7 +1263,28 @@ run(function()
 	Whitelist = AutoBuy:CreateTextList({
 		Name = 'Name Whitelist',
 		Placeholder = 'item name',
-		Tooltip = 'Item names to buy (one per entry, partial match, case-insensitive). Leave empty to buy everything in the enabled categories.'
+		Tooltip = 'Item names to buy (one per entry, partial match, case-insensitive). Leave empty to buy everything in the enabled categories. Use the Item Picker below to fill this without typing.'
+	})
+	ItemPicker = AutoBuy:CreateDropdown({
+		Name = 'Item Picker',
+		List = {'(enter the shop, then Refresh)'},
+		Function = function(name, mouse)
+			-- only react to actual clicks, and skip the placeholder entry
+			if not mouse or not name or name:sub(1, 1) == '(' then return end
+			if Whitelist then
+				Whitelist:ChangeValue(name)   -- toggles the name in/out of the whitelist
+				local present = table.find(Whitelist.ListEnabled, name) ~= nil
+				notif('Auto Buy', (present and 'Added "%s" to whitelist.' or 'Removed "%s" from whitelist.'):format(name))
+			end
+		end,
+		Tooltip = 'Pick a real shop item by name to toggle it in the whitelist (no typing needed). Populates when you enter the shop; hit Refresh Items if it looks empty.'
+	})
+	AutoBuy:CreateButton({
+		Name = 'Refresh Items',
+		Function = function()
+			refreshPicker(true)
+		end,
+		Tooltip = 'Re-scan the current shop and repopulate the Item Picker. Do this while the shop is open.'
 	})
 	MaxPrice = AutoBuy:CreateSlider({
 		Name = 'Max Price',
