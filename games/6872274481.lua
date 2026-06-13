@@ -186,6 +186,16 @@ local function isGUIOpen()
 	return inputService.MouseBehavior == Enum.MouseBehavior.Default
 end
 
+-- True when the held item is a bow or crossbow. toolType is 'bow' for both in
+-- some states, so also check the tool name to reliably catch crossbows.
+local function isHoldingBowCrossbow()
+	if not store.hand then return false end
+	local tt = store.hand.toolType
+	if tt == 'bow' or tt == 'crossbow' then return true end
+	local name = store.hand.tool and store.hand.tool.Name
+	return name ~= nil and (name:find('bow') ~= nil or name:find('crossbow') ~= nil)
+end
+
 local function collection(tags, module, customadd, customremove)
 	tags = typeof(tags) ~= 'table' and {tags} or tags
 	local objs, connections = {}, {}
@@ -1656,7 +1666,9 @@ local AimAssist
 						return
 					end
 
-					if ClickAim and ClickAim.Enabled then
+					-- ClickAim gates on a recent sword swing, which never fires for a bow.
+					-- Skip the gate while holding a bow/crossbow so projectile assist works.
+					if ClickAim and ClickAim.Enabled and not isHoldingBowCrossbow() then
 						local sc = bedwars.SwordController
 						if not sc or not sc.lastAttack or (workspace:GetServerTimeNow() - sc.lastAttack) >= 0.4 then
 							return
