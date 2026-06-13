@@ -12,6 +12,21 @@ local mainapi = {
 	Libraries = {},
 	Modules = {},
 	FavouritesCategory = false,
+	-- Patch notes shown in the changelog popup (newest first). Each entry is
+	-- { Version = '...', Date = '...', Changes = { 'line', ... } }.
+	PatchNotes = {
+		{
+			Version = '4.18',
+			Date = 'June 2026',
+			Changes = {
+				'Reworked the trajectory solver: removed the broken gravity hack that made projectile aimbots land above/below targets, added real target-fall prediction.',
+				'Reworked Targets/Friends: notifies when a listed target or friend is in the server, and highlights targets at all times (not through walls).',
+				'Added a Favourites category mode (System Settings): moves favourited modules into their own category instead of pinning them.',
+				'Removed Ping Compensation from Projectile Aimbot.',
+				'Added this patch notes panel.',
+			},
+		},
+	},
 	Place = game.PlaceId,
 	Profile = 'default',
 	Profiles = {},
@@ -2559,6 +2574,15 @@ function mainapi:CreateGUI()
 	discordbutton.Image = getcustomasset('vain/assets/new/discord.png')
 	discordbutton.Parent = window
 	addTooltip(discordbutton, 'Join discord')
+	local patchbutton = Instance.new('ImageButton')
+	patchbutton.Name = 'PatchNotes'
+	patchbutton.Size = UDim2.fromOffset(16, 16)
+	patchbutton.Position = UDim2.new(1, -78, 0, 11)
+	patchbutton.BackgroundTransparency = 1
+	patchbutton.Image = getcustomasset('vain/assets/new/info.png')
+	patchbutton.ImageColor3 = color.Light(uipallet.Main, 0.37)
+	patchbutton.Parent = window
+	addTooltip(patchbutton, 'Patch notes')
 	local settingspane = Instance.new('TextButton')
 	settingspane.Size = UDim2.fromScale(1, 1)
 	settingspane.BackgroundColor3 = color.Dark(uipallet.Main, 0.02)
@@ -2600,6 +2624,100 @@ function mainapi:CreateGUI()
 	settingsversion.FontFace = uipallet.Font
 	settingsversion.Parent = settingspane
 	addCorner(settingspane)
+
+	-- ── Patch notes panel ──────────────────────────────────────────────────
+	local patchpane = Instance.new('TextButton')
+	patchpane.Name = 'PatchNotes'
+	patchpane.Size = UDim2.fromScale(1, 1)
+	patchpane.BackgroundColor3 = color.Dark(uipallet.Main, 0.02)
+	patchpane.AutoButtonColor = false
+	patchpane.Visible = false
+	patchpane.Text = ''
+	patchpane.ZIndex = 2
+	patchpane.Parent = window
+	local patchtitle = Instance.new('TextLabel')
+	patchtitle.Name = 'Title'
+	patchtitle.Size = UDim2.new(1, -36, 0, 20)
+	patchtitle.Position = UDim2.fromOffset(36, 11)
+	patchtitle.BackgroundTransparency = 1
+	patchtitle.Text = 'Patch notes'
+	patchtitle.TextXAlignment = Enum.TextXAlignment.Left
+	patchtitle.TextColor3 = uipallet.Text
+	patchtitle.TextSize = 13
+	patchtitle.FontFace = uipallet.Font
+	patchtitle.ZIndex = 2
+	patchtitle.Parent = patchpane
+	local patchclose = addCloseButton(patchpane)
+	patchclose.ZIndex = 2
+	local patchback = Instance.new('ImageButton')
+	patchback.Name = 'Back'
+	patchback.Size = UDim2.fromOffset(16, 16)
+	patchback.Position = UDim2.fromOffset(11, 13)
+	patchback.BackgroundTransparency = 1
+	patchback.Image = getcustomasset('vain/assets/new/back.png')
+	patchback.ImageColor3 = color.Light(uipallet.Main, 0.37)
+	patchback.ZIndex = 2
+	patchback.Parent = patchpane
+	addCorner(patchpane)
+	local patchscroll = Instance.new('ScrollingFrame')
+	patchscroll.Name = 'Children'
+	patchscroll.Size = UDim2.new(1, -8, 1, -45)
+	patchscroll.Position = UDim2.fromOffset(0, 41)
+	patchscroll.BackgroundTransparency = 1
+	patchscroll.BorderSizePixel = 0
+	patchscroll.ScrollBarThickness = 3
+	patchscroll.ScrollBarImageColor3 = color.Light(uipallet.Main, 0.2)
+	patchscroll.CanvasSize = UDim2.new()
+	patchscroll.ZIndex = 2
+	patchscroll.Parent = patchpane
+	local patchlist = Instance.new('UIListLayout')
+	patchlist.SortOrder = Enum.SortOrder.LayoutOrder
+	patchlist.Padding = UDim.new(0, 6)
+	patchlist.Parent = patchscroll
+	local patchpad = Instance.new('UIPadding')
+	patchpad.PaddingLeft = UDim.new(0, 12)
+	patchpad.PaddingRight = UDim.new(0, 6)
+	patchpad.PaddingTop = UDim.new(0, 4)
+	patchpad.PaddingBottom = UDim.new(0, 8)
+	patchpad.Parent = patchscroll
+
+	-- Build the changelog entries from mainapi.PatchNotes (newest first)
+	for entryindex, entry in ipairs(mainapi.PatchNotes) do
+		local header = Instance.new('TextLabel')
+		header.Name = 'Header'
+		header.Size = UDim2.new(1, 0, 0, 16)
+		header.BackgroundTransparency = 1
+		header.Text = entry.Version .. (entry.Date and ('  ·  ' .. entry.Date) or '')
+		header.TextXAlignment = Enum.TextXAlignment.Left
+		header.TextColor3 = uipallet.Text
+		header.TextSize = 12
+		header.FontFace = uipallet.FontSemiBold
+		header.LayoutOrder = entryindex * 1000
+		header.ZIndex = 2
+		header.Parent = patchscroll
+		for changeindex, line in ipairs(entry.Changes) do
+			local bullet = Instance.new('TextLabel')
+			bullet.Name = 'Change'
+			bullet.AutomaticSize = Enum.AutomaticSize.Y
+			bullet.Size = UDim2.new(1, 0, 0, 0)
+			bullet.BackgroundTransparency = 1
+			bullet.Text = '• ' .. line
+			bullet.TextXAlignment = Enum.TextXAlignment.Left
+			bullet.TextYAlignment = Enum.TextYAlignment.Top
+			bullet.TextWrapped = true
+			bullet.TextColor3 = color.Dark(uipallet.Text, 0.25)
+			bullet.TextSize = 11
+			bullet.FontFace = uipallet.Font
+			bullet.LayoutOrder = entryindex * 1000 + changeindex
+			bullet.ZIndex = 2
+			bullet.Parent = patchscroll
+		end
+	end
+	patchlist:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
+		patchscroll.CanvasSize = UDim2.fromOffset(0, patchlist.AbsoluteContentSize.Y + 12)
+	end)
+	patchscroll.CanvasSize = UDim2.fromOffset(0, patchlist.AbsoluteContentSize.Y + 12)
+
 	local settingschildren = Instance.new('Frame')
 	settingschildren.Name = 'Children'
 	settingschildren.Size = UDim2.new(1, 0, 1, -57)
@@ -3638,6 +3756,27 @@ function mainapi:CreateGUI()
 	end)
 	settingsbutton.MouseButton1Click:Connect(function()
 		settingspane.Visible = true
+	end)
+	patchbutton.MouseEnter:Connect(function()
+		patchbutton.ImageColor3 = uipallet.Text
+	end)
+	patchbutton.MouseLeave:Connect(function()
+		patchbutton.ImageColor3 = color.Light(uipallet.Main, 0.37)
+	end)
+	patchbutton.MouseButton1Click:Connect(function()
+		patchpane.Visible = true
+	end)
+	patchback.MouseEnter:Connect(function()
+		patchback.ImageColor3 = uipallet.Text
+	end)
+	patchback.MouseLeave:Connect(function()
+		patchback.ImageColor3 = color.Light(uipallet.Main, 0.37)
+	end)
+	patchback.MouseButton1Click:Connect(function()
+		patchpane.Visible = false
+	end)
+	patchclose.MouseButton1Click:Connect(function()
+		patchpane.Visible = false
 	end)
 	windowlist:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
 		if self.ThreadFix then
