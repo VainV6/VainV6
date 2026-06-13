@@ -38,7 +38,24 @@ local whitelist = vain.Libraries.whitelist
 local prediction = vain.Libraries.prediction
 local targetinfo = vain.Libraries.targetinfo
 local sessioninfo = vain.Libraries.sessioninfo
-local vm = loadstring(downloadFile('vain/libraries/vm.lua'), 'vm')()
+-- vm.lua is a custom Luau bytecode VM used to map remotes to friendly names.
+-- The load can fail (missing file, a download that 404s, an executor without the
+-- functions vm.lua needs), which previously left `vm` nil and crashed dumpRemotes
+-- at first use. Load it defensively so a failure is non-fatal.
+local vm
+do
+	local ok, chunk = pcall(downloadFile, 'vain/libraries/vm.lua')
+	if ok and chunk then
+		local loader = loadstring(chunk, 'vm')
+		if loader then
+			local ran, res = pcall(loader)
+			if ran then vm = res end
+		end
+	end
+	if type(vm) ~= 'table' or type(vm.luau_deserialize) ~= 'function' then
+		vm = nil
+	end
+end
 
 local jb = {}
 local InfNitro = {Enabled = false}
@@ -145,11 +162,26 @@ end)
 entitylib.start()
 
 run(function()
+	local getscriptbytecode = getscriptbytecode or (getgenv and getgenv().getscriptbytecode) or dumpstring
 	local function dumpRemotes(scripts, renamed)
 		local returned = {}
 
+		-- If the bytecode VM or the bytecode dumper is unavailable on this
+		-- executor, we can't derive friendly remote names. Return empty so the
+		-- module still loads (fireHook just falls back to raw remote ids).
+		if type(vm) ~= 'table' or type(vm.luau_deserialize) ~= 'function' or type(getscriptbytecode) ~= 'function' then
+			return returned
+		end
+
 		for _, scr in scripts do
-			local deserializedcode = vm.luau_deserialize(getscriptbytecode(scr))
+			-- Wrap per-script so one unparseable script (or a deserialize error)
+			-- doesn't abort the whole dump and crash module init.
+			local ok, deserializedcode = pcall(function()
+				return vm.luau_deserialize(getscriptbytecode(scr))
+			end)
+			if not ok or type(deserializedcode) ~= 'table' or not deserializedcode.protoList then
+				continue
+			end
 
 			for _, proto in deserializedcode.protoList do
 				local stack, top, code = {}, -1, proto.code
