@@ -1614,8 +1614,16 @@ run(function()
 	-- Vehicle Speed: LaunchSpeedMult multiplies the drive force (the game sets it
 	-- to 4 for a split second on launch, then decays it). Pinning it to a chosen
 	-- value gives permanent extra acceleration + top speed.
+	--
+	-- The same multiplier ALSO scales TurnSpeed (when 'Sync Turning' is on) so you
+	-- swerve proportionally harder the faster you go -- the chassis damps turning at
+	-- high speed (v366 = exp(-speed/400)...), so a 5x car at 500mph normally barely
+	-- turns; scaling TurnSpeed by the multiplier cancels that. We capture each car's
+	-- BASE TurnSpeed the first time we see it so we multiply, not pin to a constant.
 	local VehicleSpeed
 	local SpeedMult
+	local SyncTurning
+	local baseTurn = setmetatable({}, {__mode = 'k'}) -- [chassis] = original TurnSpeed
 	VehicleSpeed = vain.Categories.Utility:CreateModule({
 		Name = 'Vehicle Speed',
 		Function = function(callback)
@@ -1624,17 +1632,25 @@ run(function()
 					repeat
 						local c = chassis()
 						if c then
-							c.LaunchSpeedMult = (SpeedMult and SpeedMult.Value) or 2
+							local mult = (SpeedMult and SpeedMult.Value) or 2
+							c.LaunchSpeedMult = mult
+							if (not SyncTurning or SyncTurning.Enabled) and type(c.TurnSpeed) == 'number' then
+								if baseTurn[c] == nil then baseTurn[c] = c.TurnSpeed end
+								c.TurnSpeed = baseTurn[c] * mult
+							end
 						end
 						task.wait()
 					until not VehicleSpeed.Enabled
-					-- let the game decay it back naturally
+					-- restore: let speed decay naturally, put turn speed back to stock
 					local c = chassis()
-					if c then c.LaunchSpeedMult = nil end
+					if c then
+						c.LaunchSpeedMult = nil
+						if baseTurn[c] then c.TurnSpeed = baseTurn[c] end
+					end
 				end)
 			end
 		end,
-		Tooltip = 'Permanent speed/acceleration boost for your car by pinning the chassis LaunchSpeedMult. Client-side physics only (no remote). Keep it modest -- the server still checks your POSITION, so extreme values can get you rolled back.'
+		Tooltip = 'Permanent speed/acceleration boost for your car by pinning the chassis LaunchSpeedMult. With Sync Turning on, the same multiplier sharpens your steering so a fast car still swerves. Client physics only -- keep it modest, the server checks POSITION so extreme values can get you rolled back.'
 	})
 	SpeedMult = VehicleSpeed:CreateSlider({
 		Name = 'Multiplier',
@@ -1643,7 +1659,12 @@ run(function()
 		Default = 2,
 		Decimal = 10,
 		Suffix = 'x',
-		Tooltip = 'Drive-force multiplier. 2-3x is usually safe; higher may trip the position anticheat.'
+		Tooltip = 'Drive-force multiplier (also scales turning when Sync Turning is on). 2-3x is usually safe; higher may trip the position anticheat.'
+	})
+	SyncTurning = VehicleSpeed:CreateToggle({
+		Name = 'Sync Turning',
+		Default = true,
+		Tooltip = 'Scale your steering by the same multiplier so you can still swerve sharply at high speed (cancels the game\'s high-speed turn damping).'
 	})
 end)
 
@@ -1742,6 +1763,87 @@ run(function()
 			end
 		end,
 		Tooltip = 'Keeps your tires repaired to full health so they can never stay popped (refills the VehicleTireHealth attribute). Pair with Ignore Popped Tires.'
+	})
+end)
+
+run(function()
+	-- Vehicle Fly (CFrame): anchor the car's Engine and drive its CFrame directly
+	-- from WASD relative to the camera (+ Space/Shift for up/down). CFrame fly is
+	-- snappy but it MOVES YOUR POSITION in big steps, so Jailbreak's position
+	-- anticheat may roll you back -- lower speeds and short bursts are safer.
+	local VehicleFly
+	local FlySpeed
+	local flyConn
+	local anchored = {} -- [part] = previous Anchored state, to restore
+
+	local function chassis()
+		local vc = jb.VehicleController
+		if not vc or not vc.GetLocalVehiclePacket then return nil end
+		local ok, packet = pcall(vc.GetLocalVehiclePacket)
+		if ok and type(packet) == 'table' and not packet.Passenger then return packet end
+		return nil
+	end
+
+	-- WASD/Space/Shift -> a camera-relative movement direction
+	local function inputDir()
+		local d = Vector3.zero
+		local cf = gameCamera.CFrame
+		if inputService:IsKeyDown(Enum.KeyCode.W) then d += cf.LookVector end
+		if inputService:IsKeyDown(Enum.KeyCode.S) then d -= cf.LookVector end
+		if inputService:IsKeyDown(Enum.KeyCode.A) then d -= cf.RightVector end
+		if inputService:IsKeyDown(Enum.KeyCode.D) then d += cf.RightVector end
+		if inputService:IsKeyDown(Enum.KeyCode.Space) then d += Vector3.yAxis end
+		if inputService:IsKeyDown(Enum.KeyCode.LeftShift) then d -= Vector3.yAxis end
+		return d.Magnitude > 0 and d.Unit or Vector3.zero
+	end
+
+	local function stopFly()
+		if flyConn then flyConn:Disconnect() flyConn = nil end
+		for part, was in anchored do
+			pcall(function() part.Anchored = was end)
+		end
+		table.clear(anchored)
+	end
+
+	VehicleFly = vain.Categories.Utility:CreateModule({
+		Name = 'Vehicle Fly',
+		Function = function(callback)
+			if callback then
+				flyConn = runService.RenderStepped:Connect(function(dt)
+					local c = chassis()
+					local model = c and c.Model
+					local engine = model and model:FindFirstChild('Engine')
+					if not engine then return end
+					-- anchor the whole assembly so the chassis physics stop fighting us
+					for _, p in model:GetDescendants() do
+						if p:IsA('BasePart') and anchored[p] == nil then
+							anchored[p] = p.Anchored
+							p.Anchored = true
+						end
+					end
+					local speed = (FlySpeed and FlySpeed.Value) or 120
+					local dir = inputDir()
+					-- keep the car level (face the camera's heading) and step the CFrame
+					local pivot = engine.AssemblyRootPart or engine
+					local look = gameCamera.CFrame.LookVector
+					local flat = Vector3.new(look.X, 0, look.Z)
+					flat = flat.Magnitude > 0 and flat.Unit or pivot.CFrame.LookVector
+					local pos = pivot.Position + dir * speed * dt
+					model:PivotTo(CFrame.lookAt(pos, pos + flat))
+				end)
+			else
+				stopFly()
+			end
+		end,
+		Tooltip = 'Fly your car with WASD + Space/Shift (camera-relative). Anchors the car and steps its CFrame. Snappy but moves your position in jumps, so the server position anticheat may roll you back -- use lower speeds.'
+	})
+	FlySpeed = VehicleFly:CreateSlider({
+		Name = 'Fly Speed',
+		Min = 20,
+		Max = 400,
+		Default = 120,
+		Suffix = function(val) return val == 1 and 'stud/s' or 'studs/s' end,
+		Tooltip = 'How fast the car flies. Lower is less likely to trip the position anticheat.'
 	})
 end)
 
