@@ -227,10 +227,19 @@ local function itemIcon(model)
 	for _, d in model:GetDescendants() do
 		if (d:IsA('ImageLabel') or d:IsA('ImageButton')) and d.Image ~= '' then return d.Image end
 	end
-	-- a mesh texture or decal on the handle
+	-- a mesh texture or decal on the handle. Note: SpecialMesh has .TextureId,
+	-- but MeshPart uses .TextureID (capital D) - reading the wrong one errors, so
+	-- read each by its real property and pcall to be safe.
 	for _, d in model:GetDescendants() do
-		if (d:IsA('SpecialMesh') or d:IsA('MeshPart')) and d.TextureId and d.TextureId ~= '' then return d.TextureId end
-		if d:IsA('Decal') and d.Texture ~= '' then return d.Texture end
+		if d:IsA('SpecialMesh') then
+			local ok, tex = pcall(function() return d.TextureId end)
+			if ok and tex and tex ~= '' then return tex end
+		elseif d:IsA('MeshPart') then
+			local ok, tex = pcall(function() return d.TextureID end)
+			if ok and tex and tex ~= '' then return tex end
+		elseif d:IsA('Decal') and d.Texture ~= '' then
+			return d.Texture
+		end
 	end
 	return nil
 end
@@ -1273,8 +1282,8 @@ run(function()
 			if nm and nm ~= '' and not seen[nm] then
 				seen[nm] = true
 				table.insert(names, nm)
-				local ic = itemIcon(item)
-				if ic then icons[nm] = ic end
+				local ok, ic = pcall(itemIcon, item)   -- never let one odd item abort the load
+				if ok and ic then icons[nm] = ic end
 			end
 		end)
 		table.sort(names)
