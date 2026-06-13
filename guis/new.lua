@@ -2588,15 +2588,20 @@ function mainapi:CreateGUI()
 	settingsbutton.Parent = window
 	addTooltip(settingsbutton, 'Open settings')
 	local settingsicon = Instance.new('ImageLabel')
+	-- The three header icons (settings, discord, patch notes) are centre-aligned
+	-- with equal 22px spacing on a shared centre-y (18) via AnchorPoint(0.5,0.5),
+	-- so they line up perfectly. Centre-x from right edge: -20 / -42 / -64.
 	settingsicon.Size = UDim2.fromOffset(14, 14)
-	settingsicon.Position = UDim2.fromOffset(15, 12)
+	settingsicon.AnchorPoint = Vector2.new(0.5, 0.5)
+	settingsicon.Position = UDim2.fromScale(0.5, 0.5)
 	settingsicon.BackgroundTransparency = 1
 	settingsicon.Image = getcustomasset('vain/assets/new/guisettings.png')
 	settingsicon.ImageColor3 = color.Light(uipallet.Main, 0.37)
 	settingsicon.Parent = settingsbutton
 	local discordbutton = Instance.new('ImageButton')
 	discordbutton.Size = UDim2.fromOffset(16, 16)
-	discordbutton.Position = UDim2.new(1, -56, 0, 11)
+	discordbutton.AnchorPoint = Vector2.new(0.5, 0.5)
+	discordbutton.Position = UDim2.new(1, -42, 0, 18)
 	discordbutton.BackgroundTransparency = 1
 	discordbutton.Image = getcustomasset('vain/assets/new/discord.png')
 	discordbutton.Parent = window
@@ -2604,7 +2609,8 @@ function mainapi:CreateGUI()
 	local patchbutton = Instance.new('ImageButton')
 	patchbutton.Name = 'PatchNotes'
 	patchbutton.Size = UDim2.fromOffset(16, 16)
-	patchbutton.Position = UDim2.new(1, -78, 0, 11)
+	patchbutton.AnchorPoint = Vector2.new(0.5, 0.5)
+	patchbutton.Position = UDim2.new(1, -64, 0, 18)
 	patchbutton.BackgroundTransparency = 1
 	patchbutton.Image = getcustomasset('vain/assets/new/patchnotes.png')
 	patchbutton.ImageColor3 = color.Light(uipallet.Main, 0.37)
@@ -3817,7 +3823,7 @@ function mainapi:CreateGUI()
 		window.Size = UDim2.fromOffset(220, 42 + windowlist.AbsoluteContentSize.Y / scale.Scale)
 		for _, v in categoryapi.Buttons do
 			if v.Icon then
-				v.Object.Text = string.rep(' ', 36 * scale.Scale)..v.Name
+				v.Object.Text = v.Name
 			end
 		end
 	end)
