@@ -16,6 +16,18 @@ local mainapi = {
 	-- { Version = '...', Date = '...', Changes = { 'line', ... } }.
 	PatchNotes = {
 		{
+			Version = '4.19',
+			Date = 'June 2026',
+			Changes = {
+				'Jailbreak: fixed AutoArrest, AutoTaze, AutoPop and Punch after the game update broke their remotes; AutoArrest is now instant and ejects targets from vehicles.',
+				'Jailbreak: new Aimbot (target priority by distance/cursor/angle/health/threat, aim part, extended range) that now damages players inside cars.',
+				'Jailbreak: new standalone Hitscan module - bullets hit instantly with zero travel time.',
+				'Jailbreak: fixed BountyESP not showing anything.',
+				'Server Hop now retries until it finds an open server instead of giving up on full servers.',
+				'Fixed the category icon and title alignment in the menu.',
+			},
+		},
+		{
 			Version = '4.18',
 			Date = 'June 2026',
 			Changes = {
@@ -36,7 +48,7 @@ local mainapi = {
 	Scale = {Value = 1},
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
-	Version = '4.18',
+	Version = '4.19',
 	Windows = {}
 }
 
@@ -2594,7 +2606,7 @@ function mainapi:CreateGUI()
 	patchbutton.Size = UDim2.fromOffset(16, 16)
 	patchbutton.Position = UDim2.new(1, -78, 0, 11)
 	patchbutton.BackgroundTransparency = 1
-	patchbutton.Image = getcustomasset('vain/assets/new/info.png')
+	patchbutton.Image = getcustomasset('vain/assets/new/patchnotes.png')
 	patchbutton.ImageColor3 = color.Light(uipallet.Main, 0.37)
 	patchbutton.Parent = window
 	addTooltip(patchbutton, 'Patch notes')
@@ -2848,8 +2860,13 @@ function mainapi:CreateGUI()
 		button.TextSize = 14
 		button.FontFace = uipallet.Font
 		button.Parent = children
+		-- PaddingLeft insets BOTH the title text AND every child (incl. the icon).
+		-- We want the title to start at x=34, so PaddingLeft = 34. The icon should
+		-- sit at the true left margin x=12, so its Position.X cancels the padding:
+		-- rendered x = PaddingLeft + Position.X => 12 = 34 + (-22).
+		local titlePad = categorysettings.Icon and 34 or 13
 		local buttonPadding = Instance.new('UIPadding')
-		buttonPadding.PaddingLeft = UDim.new(0, categorysettings.Icon and 34 or 13)
+		buttonPadding.PaddingLeft = UDim.new(0, titlePad)
 		buttonPadding.Parent = button
 		local icon
 		if categorysettings.Icon then
@@ -2857,7 +2874,7 @@ function mainapi:CreateGUI()
 			icon.Name = 'Icon'
 			icon.Size = categorysettings.Size
 			local iconH = categorysettings.Size.Y.Offset
-			icon.Position = UDim2.fromOffset(8, math.floor((40 - iconH) / 2))
+			icon.Position = UDim2.fromOffset(12 - titlePad, math.floor((40 - iconH) / 2))
 			icon.BackgroundTransparency = 1
 			icon.Image = categorysettings.Icon
 			icon.ImageColor3 = color.Dark(uipallet.Text, 0.16)
