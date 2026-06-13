@@ -1767,10 +1767,11 @@ run(function()
 end)
 
 run(function()
-	-- Vehicle Fly (CFrame): anchor the car's Engine and drive its CFrame directly
-	-- from WASD relative to the camera (+ Space/Shift for up/down). CFrame fly is
-	-- snappy but it MOVES YOUR POSITION in big steps, so Jailbreak's position
-	-- anticheat may roll you back -- lower speeds and short bursts are safer.
+	-- Vehicle Fly: WASD + Space/Shift, camera-relative. Two modes:
+	--   Velocity (default, lower risk) - drive the car's AssemblyLinearVelocity each
+	--     frame; movement stays continuous so the position anticheat rarely rolls it.
+	--   CFrame (higher risk) - anchor the assembly and step its CFrame; snappier but
+	--     jumps position, so the anticheat may roll you back.
 	local VehicleFly
 	local FlySpeed
 	local flyConn
@@ -1797,6 +1798,8 @@ run(function()
 		return d.Magnitude > 0 and d.Unit or Vector3.zero
 	end
 
+	local FlyMode
+
 	local function stopFly()
 		if flyConn then flyConn:Disconnect() flyConn = nil end
 		for part, was in anchored do
@@ -1805,37 +1808,70 @@ run(function()
 		table.clear(anchored)
 	end
 
+	-- CFrame fly: anchor the assembly and step the model's CFrame. Snappy but
+	-- jumps position -> higher chance the position anticheat rolls you back.
+	local function flyCFrame(dt)
+		local c = chassis()
+		local model = c and c.Model
+		local engine = model and model:FindFirstChild('Engine')
+		if not engine then return end
+		for _, p in model:GetDescendants() do
+			if p:IsA('BasePart') and anchored[p] == nil then
+				anchored[p] = p.Anchored
+				p.Anchored = true
+			end
+		end
+		local speed = (FlySpeed and FlySpeed.Value) or 120
+		local dir = inputDir()
+		local pivot = engine.AssemblyRootPart or engine
+		local look = gameCamera.CFrame.LookVector
+		local flat = Vector3.new(look.X, 0, look.Z)
+		flat = flat.Magnitude > 0 and flat.Unit or pivot.CFrame.LookVector
+		local pos = pivot.Position + dir * speed * dt
+		model:PivotTo(CFrame.lookAt(pos, pos + flat))
+	end
+
+	-- Velocity fly: DON'T anchor -- drive the assembly's velocity toward the input
+	-- each frame (gravity cancelled). Movement stays continuous, so the position
+	-- anticheat is far less likely to roll you back. Lower risk.
+	local function flyVelocity()
+		-- ensure nothing is left anchored from a previous CFrame run
+		if next(anchored) then
+			for part, was in anchored do pcall(function() part.Anchored = was end) end
+			table.clear(anchored)
+		end
+		local c = chassis()
+		local model = c and c.Model
+		local engine = model and model:FindFirstChild('Engine')
+		if not engine then return end
+		local speed = (FlySpeed and FlySpeed.Value) or 120
+		local dir = inputDir()
+		-- set the whole assembly's velocity; if no input, hover (zero velocity) so
+		-- gravity doesn't pull the car down.
+		engine.AssemblyLinearVelocity = dir * speed
+	end
+
 	VehicleFly = vain.Categories.Utility:CreateModule({
 		Name = 'Vehicle Fly',
 		Function = function(callback)
 			if callback then
 				flyConn = runService.RenderStepped:Connect(function(dt)
-					local c = chassis()
-					local model = c and c.Model
-					local engine = model and model:FindFirstChild('Engine')
-					if not engine then return end
-					-- anchor the whole assembly so the chassis physics stop fighting us
-					for _, p in model:GetDescendants() do
-						if p:IsA('BasePart') and anchored[p] == nil then
-							anchored[p] = p.Anchored
-							p.Anchored = true
-						end
+					if (FlyMode and FlyMode.Value) == 'CFrame' then
+						flyCFrame(dt)
+					else
+						flyVelocity()
 					end
-					local speed = (FlySpeed and FlySpeed.Value) or 120
-					local dir = inputDir()
-					-- keep the car level (face the camera's heading) and step the CFrame
-					local pivot = engine.AssemblyRootPart or engine
-					local look = gameCamera.CFrame.LookVector
-					local flat = Vector3.new(look.X, 0, look.Z)
-					flat = flat.Magnitude > 0 and flat.Unit or pivot.CFrame.LookVector
-					local pos = pivot.Position + dir * speed * dt
-					model:PivotTo(CFrame.lookAt(pos, pos + flat))
 				end)
 			else
 				stopFly()
 			end
 		end,
-		Tooltip = 'Fly your car with WASD + Space/Shift (camera-relative). Anchors the car and steps its CFrame. Snappy but moves your position in jumps, so the server position anticheat may roll you back -- use lower speeds.'
+		Tooltip = 'Fly your car with WASD + Space/Shift (camera-relative). Velocity mode is smooth and lower-risk; CFrame mode is snappier but jumps position so the anticheat may roll you back. Use lower speeds.'
+	})
+	FlyMode = VehicleFly:CreateDropdown({
+		Name = 'Mode',
+		List = { 'Velocity', 'CFrame' },
+		Tooltip = 'Velocity - smooth, continuous movement (lower risk of position rollback)\nCFrame - instant/snappy control (higher risk)'
 	})
 	FlySpeed = VehicleFly:CreateSlider({
 		Name = 'Fly Speed',
