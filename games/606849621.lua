@@ -739,91 +739,61 @@ run(function()
 		Name = 'Aimbot',
 		Function = function(callback)
 			if callback then
-				-- redirect the trajectory of every shot to the highest-priority target
-				Hooked = jb.GunController.TransformLocalMousePosition
-				jb.GunController.TransformLocalMousePosition = function(self, pos)
-					local part = AimPart and AimPart.Value or 'Head'
-					local ent = entitylib.EntityPosition({
+				-- Pick the current best target by the chosen priority.
+				local function pickTarget()
+					return entitylib.EntityPosition({
 						Range = Range.Value,
 						Wallcheck = Target.Walls.Enabled and true or nil,
-						Part = part,
+						Part = AimPart and AimPart.Value or 'Head',
 						Sort = sorts[Priority and Priority.Value or 'Distance'],
 						Origin = entitylib.isAlive and entitylib.character.RootPart.Position or nil,
 						Players = Target.Players.Enabled,
 						NPCs = Target.NPCs.Enabled
 					})
-					-- If the target is seated in a vehicle, force RootPart aiming. The
-					-- BulletEmitter registers a player hit purely by ray-vs-RootPart
-					-- proximity BEFORE any wall/surface check, so a shot whose path passes
-					-- through the RootPart sphere lands even though the car body would
-					-- block a normal surface raycast. The Head sits higher and is often
-					-- occluded by the roof, which is why in-car shots missed.
-					if ent and ent.Humanoid and (ent.Humanoid.Sit or ent.Humanoid.SeatPart) and ent.RootPart then
-						part = 'RootPart'
-					end
-					if ent and ent[part] then
-						local item = jb.ItemSystemController:GetLocalEquipped()
-						if item then
-							-- Exclude the target's WHOLE character model (and any vehicle it
-							-- is seated in) from the local-hit raycast. When a player is in a
-							-- car the bullet would otherwise stop on the car body and never
-							-- register on the player -- this is why ~90% of in-vehicle shots
-							-- missed. Filtering the seat/vehicle lets the hit land on the
-							-- occupant.
-							local filter = {gameCamera, ent.Character}
-							local seat = ent.Humanoid and ent.Humanoid.SeatPart
-							if seat then
-								local veh = seat:FindFirstAncestorWhichIsA('Model')
-								if veh then table.insert(filter, veh) end
-							end
-							AimRaycast.FilterDescendantsInstances = filter
-							AimRaycast.CollisionGroup = ent[part].CollisionGroup
-							-- target velocity is zero in the solve: bullets are made hitscan
-							-- below, so there is nothing to lead.
-							local calc = prediction.SolveTrajectory(self.Tip.CFrame.Position, item.Config.BulletSpeed or 1000, math.abs(item.BulletEmitter.GravityVector.Y), ent[part].Position, Vector3.zero, workspace.Gravity, ent.HipHeight, nil, AimRaycast)
-							if calc then
-								targetinfo.Targets[ent] = tick() + 1
-								return calc
-							end
-							-- trajectory blocked: still point straight at the part so the
-							-- shot at least travels toward them instead of the cursor
-							targetinfo.Targets[ent] = tick() + 1
-							return ent[part].Position
-						end
-					end
-					return pos
 				end
 
-				-- force every bullet to be hitscan so it arrives the instant it is fired,
-				-- AND make the bullet ray ignore all world geometry. The BulletEmitter
-				-- registers a player hit by RootPart proximity but FIRST raycasts for a
-				-- collidable surface -- a car body sits between you and the seated player
-				-- and absorbs the shot, which is why in-car targets rarely took damage.
-				-- Setting IgnoreList = {workspace} (same trick Wallbang uses) makes the
-				-- ray pass through the car so the proximity hit on the occupant lands.
-				--
-				-- AND inflate each target's RootPart hit radius. The emitter sizes its
-				-- proximity sphere from RootPart:GetAttribute('HitRadius') (default 3,
-				-- see CombatUtils.getRootPartHitRadius). The proximity check runs BEFORE
-				-- the surface raycast, so a large radius means any shot passing near the
-				-- RootPart registers regardless of the car body -- this is what actually
-				-- makes in-vehicle targets take damage reliably.
+				-- HOOK THE HIT FUNCTION (not the mouse). The gun calls
+				-- BulletEmitterOnLocalHitPlayer(self, humanoid, ...) whenever a bullet
+				-- registers a hit, then fires the damage remote at that humanoid. We
+				-- swap the humanoid argument for the current target's humanoid, so any
+				-- bullet that lands a hit deals its damage to your target -- no aim
+				-- redirect, no cursor/camera movement. Combined with the inflated hit
+				-- radius below, every shot you fire near a target damages exactly them,
+				-- through car bodies and without leading.
+				Hooked = hookfunction(jb.GunController.BulletEmitterOnLocalHitPlayer, function(self, humanoid, ...)
+					local ent = pickTarget()
+					if ent and ent.Humanoid then
+						humanoid = ent.Humanoid
+					end
+					return Hooked(self, humanoid, ...)
+				end)
+
+				-- Make every bullet hitscan (instant), let the ray pass through world
+				-- geometry (IgnoreList = {workspace}), and inflate every target's
+				-- RootPart hit radius. The emitter sizes its proximity sphere from
+				-- RootPart:GetAttribute('HitRadius') (default 3, see
+				-- CombatUtils.getRootPartHitRadius) and checks it BEFORE the surface
+				-- raycast, so a large radius means a shot anywhere near the target lands
+				-- regardless of the car body -- this is what makes in-vehicle targets
+				-- take damage reliably.
 				Aimbot:Clean(runService.RenderStepped:Connect(function()
 					local item = jb.ItemSystemController:GetLocalEquipped()
 					if item and item.BulletEmitter then
 						rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.001))
 						item.BulletEmitter.IgnoreList = {workspace}
 					end
-					for _, ent in entitylib.List do
-						if ent.RootPart and ent.Targetable
-							and ((ent.Player and Target.Players.Enabled) or (ent.NPC and Target.NPCs.Enabled)) then
-							inflatedRoots[ent.RootPart] = true
-							ent.RootPart:SetAttribute('HitRadius', HITBOX_RADIUS)
+					local ent = pickTarget()
+					if ent then targetinfo.Targets[ent] = tick() + 1 end
+					for _, e in entitylib.List do
+						if e.RootPart and e.Targetable
+							and ((e.Player and Target.Players.Enabled) or (e.NPC and Target.NPCs.Enabled)) then
+							inflatedRoots[e.RootPart] = true
+							e.RootPart:SetAttribute('HitRadius', HITBOX_RADIUS)
 						end
 					end
 				end))
 			else
-				jb.GunController.TransformLocalMousePosition = Hooked
+				pcall(restorefunction, jb.GunController.BulletEmitterOnLocalHitPlayer)
 				-- restore normal bullet collision on the currently equipped gun
 				local item = jb.ItemSystemController:GetLocalEquipped()
 				if item and item.BulletEmitter then
@@ -836,7 +806,7 @@ run(function()
 				table.clear(inflatedRoots)
 			end
 		end,
-		Tooltip = 'Instantly hits the highest-priority target in range with zero bullet travel time. No aiming or camera movement -- just shoot. Works through car bodies on players in vehicles.'
+		Tooltip = 'Hooks the bullet hit function and forces every shot onto the highest-priority target -- no cursor or camera movement. Inflated hitboxes + hitscan make it land through car bodies and at any range.'
 	})
 	Target = Aimbot:CreateTargets({Players = true})
 	AimPart = Aimbot:CreateDropdown({
