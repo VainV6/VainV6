@@ -154,6 +154,7 @@ local cacheExpire, cache = tick()
 local serverHopFilter -- remembers the sort so retries (TeleportInitFailed, exhausted page) reuse it
 local serverHopRetries = 0
 local SERVERHOP_MAX_RETRIES = 30 -- bound the full-search restarts so we never loop forever
+local SERVERHOP_FREE_SLOTS = 2 -- require this many open slots so the server doesn't fill during the teleport
 local function serverHop(pointer, filter)
 	filter = filter or serverHopFilter or 'Descending'
 	serverHopFilter = filter
@@ -186,9 +187,16 @@ local function serverHop(pointer, filter)
 		data = ok and decoded or nil
 	end
 	if data and data.data then
+		-- Require at least SERVERHOP_FREE_SLOTS open slots, not just "not 100% full".
+		-- With Descending sort the API returns the FULLEST servers first, so without a
+		-- margin we keep picking 1-from-full servers that fill in the teleport race ->
+		-- GameFull -> retry -> the next-fullest -> "only finds full servers". A margin
+		-- skips those. maxplayers can be reported per-server, so prefer v.maxPlayers.
 		for _, v in data.data do
+			local cap = tonumber(v.maxPlayers) or playersService.MaxPlayers
+			local playing = tonumber(v.playing) or cap
 			if
-				tonumber(v.playing) < playersService.MaxPlayers
+				playing <= cap - SERVERHOP_FREE_SLOTS
 				and not table.find(visited, v.id)
 				and not table.find(attempted, v.id)
 			then
