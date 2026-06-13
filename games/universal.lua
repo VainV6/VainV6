@@ -151,7 +151,13 @@ end
 
 local visited, attempted, tpSwitch = {}, {}, false
 local cacheExpire, cache = tick()
+local serverHopFilter -- remembers the sort so retries (TeleportInitFailed, exhausted page) reuse it
+local serverHopRetries = 0
+local SERVERHOP_MAX_RETRIES = 30 -- bound the full-search restarts so we never loop forever
 local function serverHop(pointer, filter)
+	filter = filter or serverHopFilter or 'Descending'
+	serverHopFilter = filter
+
 	visited = shared.vainserverhoplist and shared.vainserverhoplist:split('/') or {}
 	if not table.find(visited, game.JobId) then
 		table.insert(visited, game.JobId)
@@ -184,6 +190,8 @@ local function serverHop(pointer, filter)
 				table.insert(attempted, v.id)
 
 				notif('Vain', 'Found! Teleporting.', 5)
+				-- if the teleport itself fails (the server filled up between the API
+				-- listing and our request), TeleportInitFailed below retries the next one.
 				teleportService:TeleportToPlaceInstance(game.PlaceId, v.id)
 				return
 			end
@@ -192,17 +200,69 @@ local function serverHop(pointer, filter)
 		if data.nextPageCursor then
 			serverHop(data.nextPageCursor, filter)
 		else
-			notif('Vain', 'Failed to find an available server.', 5, 'warning')
+			-- We exhausted every page without an available server (all full / already
+			-- attempted). Don't give up -- servers free up, so restart the search from
+			-- the first page after a short wait, bounded by SERVERHOP_MAX_RETRIES.
+			serverHopRetries += 1
+			if serverHopRetries <= SERVERHOP_MAX_RETRIES then
+				-- force a fresh fetch instead of serving the cached (exhausted) page
+				cacheExpire = tick()
+				notif('Vain', 'All servers full -- retrying (' .. serverHopRetries .. '/' .. SERVERHOP_MAX_RETRIES .. ')...', 4)
+				task.delay(3, function()
+					serverHop(nil, filter)
+				end)
+			else
+				serverHopRetries = 0
+				notif('Vain', 'Failed to find an available server after ' .. SERVERHOP_MAX_RETRIES .. ' tries.', 5, 'warning')
+			end
 		end
 	else
-		notif(
-			'Vain',
-			'Failed to grab servers. (' .. (data and data.errors[1].message or 'no data') .. ')',
-			5,
-			'warning'
-		)
+		-- HTTP fetch failed (rate limit, no connection). Retry rather than abort so a
+		-- transient failure doesn't silently leave the user where they started.
+		serverHopRetries += 1
+		if serverHopRetries <= SERVERHOP_MAX_RETRIES then
+			cacheExpire = tick()
+			notif(
+				'Vain',
+				'Failed to grab servers (' .. (data and data.errors and data.errors[1].message or 'no data') .. ') -- retrying...',
+				4,
+				'warning'
+			)
+			task.delay(5, function()
+				serverHop(nil, filter)
+			end)
+		else
+			serverHopRetries = 0
+			notif('Vain', 'Failed to grab servers after ' .. SERVERHOP_MAX_RETRIES .. ' tries.', 5, 'warning')
+		end
 	end
 end
+
+-- When a hop teleport fails (most commonly the server filled up after we picked it),
+-- mark it attempted and immediately try the next available server.
+vain:Clean(teleportService.TeleportInitFailed:Connect(function(player, result)
+	if player ~= lplr or not serverHopFilter then
+		return
+	end
+	if result == Enum.TeleportResult.GameFull
+		or result == Enum.TeleportResult.Flooded
+		or result == Enum.TeleportResult.Unauthorized
+		or result == Enum.TeleportResult.Failure
+	then
+		serverHopRetries += 1
+		if serverHopRetries <= SERVERHOP_MAX_RETRIES then
+			cacheExpire = tick() -- the listing is stale, refetch
+			notif('Vain', 'That server was full -- finding another...', 4, 'warning')
+			task.delay(result == Enum.TeleportResult.Flooded and 6 or 1, function()
+				serverHop(nil, serverHopFilter)
+			end)
+		else
+			serverHopRetries = 0
+			serverHopFilter = nil
+			notif('Vain', 'Gave up server hopping after repeated teleport failures.', 5, 'warning')
+		end
+	end
+end))
 
 vain:Clean(lplr.OnTeleport:Connect(function()
 	if not tpSwitch then
@@ -6855,10 +6915,11 @@ run(function()
     	Function = function(callback)
     		if callback then
     			ServerHop:Toggle()
+    			serverHopRetries = 0 -- fresh retry budget for this hop
     			serverHop(nil, Sort.Value)
     		end
     	end,
-    	Tooltip = 'Teleports into a unique server',
+    	Tooltip = 'Teleports into an available server, retrying until it finds one that is not full',
     })
     Sort = ServerHop:CreateDropdown({
     	Name = 'Sort',
