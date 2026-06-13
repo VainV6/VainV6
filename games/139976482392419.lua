@@ -850,6 +850,112 @@ run(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
+--  FREEZE ENEMIES  (network-ownership anchor -- enemies can't move)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- Enemy NPCs are unanchored Humanoid models with no explicit SetNetworkOwner call,
+-- so Roblox auto-assigns physics ownership of each one to the *nearest player*.
+-- When you're close, YOUR client simulates that enemy's physics, and the server
+-- replicates whatever you simulate. So anchoring the enemy's root (or zeroing its
+-- velocity) on your client freezes it server-side -- the basis of the old Hit Boxes
+-- side effect, done deliberately and cleanly here.
+run(function()
+	local FreezeEnemies
+	local Range, Mode, BossOnly
+	local conn
+	local frozen = {}   -- [BasePart] = original Anchored, so we can restore
+
+	local function isBoss(ent)
+		local n = (ent.Character and enemyName(ent.Character) or ''):lower()
+		return n:find('boss') ~= nil
+	end
+
+	local function freezePart(part)
+		if not part then return end
+		if Mode and Mode.Value == 'Velocity Lock' then
+			-- keep it owned + pinned without anchoring (some hits need it unanchored)
+			part.AssemblyLinearVelocity = Vector3.zero
+			part.AssemblyAngularVelocity = Vector3.zero
+		else
+			if frozen[part] == nil then frozen[part] = part.Anchored end
+			part.Anchored = true
+		end
+	end
+
+	local function thaw(part)
+		if part and frozen[part] ~= nil then
+			pcall(function() part.Anchored = frozen[part] end)
+		end
+		frozen[part] = nil
+	end
+
+	local function thawAll()
+		for part in frozen do
+			thaw(part)
+		end
+		table.clear(frozen)
+	end
+
+	FreezeEnemies = vain.Categories.Blatant:CreateModule({
+		Name = 'Freeze Enemies',
+		Function = function(callback)
+			if callback then
+				conn = runService.Heartbeat:Connect(function()
+					if not aliveLocal() then return end
+					local myPos = entitylib.character.RootPart.Position
+					local range = Range and Range.Value or 80
+					-- track which parts are in range this frame so we can thaw the rest
+					local stillFrozen = {}
+					for _, ent in entitylib.List do
+						if ent.NPC and ent.RootPart and ent.Humanoid and ent.Humanoid.Health > 0 then
+							if BossOnly and BossOnly.Enabled and not isBoss(ent) then continue end
+							if (ent.RootPart.Position - myPos).Magnitude <= range then
+								freezePart(ent.RootPart)
+								stillFrozen[ent.RootPart] = true
+							end
+						end
+					end
+					-- thaw anything anchored last frame that's now out of range / dead
+					if not (Mode and Mode.Value == 'Velocity Lock') then
+						for part in frozen do
+							if not stillFrozen[part] then thaw(part) end
+						end
+					end
+				end)
+				vain:Clean(conn)
+			else
+				if conn then conn:Disconnect() conn = nil end
+				thawAll()
+			end
+		end,
+		Tooltip = 'Pins nearby enemies in place by anchoring the ones your client owns. They stop chasing and attacking, so you can farm them freely.'
+	})
+
+	Range = FreezeEnemies:CreateSlider({
+		Name = 'Range',
+		Min = 20,
+		Max = 300,
+		Default = 80,
+		Suffix = 'studs',
+		Tooltip = 'Only freeze enemies within this distance (you must be near enough to own their physics).'
+	})
+	Mode = FreezeEnemies:CreateDropdown({
+		Name = 'Mode',
+		List = {'Anchor', 'Velocity Lock'},
+		Default = 'Anchor',
+		Tooltip = 'Anchor = fully pinned (most reliable). Velocity Lock = keeps them unanchored but stationary, in case a hitbox needs unanchored parts.'
+	})
+	BossOnly = FreezeEnemies:CreateToggle({
+		Name = 'Bosses Only',
+		Tooltip = 'Only freeze bosses (leave trash mobs free to be farmed normally).'
+	})
+
+	-- safety: restore anything we anchored if our character dies/respawns
+	vain:Clean(entitylib.Events.EntityRemoved:Connect(function(ent)
+		if ent.RootPart then thaw(ent.RootPart) end
+	end))
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
 --  ANTI AFK  (stay connected during long farms)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
