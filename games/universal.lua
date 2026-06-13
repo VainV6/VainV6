@@ -6541,6 +6541,32 @@ run(function()
 end)
 
 run(function()
+    -- Dex is a standalone explorer/DataModel browser. It builds its own window, so
+    -- we just launch it once when toggled on (guarded so re-toggling doesn't open
+    -- a second copy) and report any load failure instead of crashing.
+    local Dex
+    local loaded = false
+
+    Dex = vain.Categories.Utility:CreateModule({
+    	Name = 'Dex Explorer',
+    	Function = function(callback)
+    		if callback and not loaded then
+    			local suc, err = pcall(function()
+    				return loadstring(game:HttpGet('https://raw.githubusercontent.com/infyiff/backup/main/dex.lua'))()
+    			end)
+    			if suc then
+    				loaded = true
+    			else
+    				notif('Dex Explorer', 'Failed to load Dex: ' .. tostring(err), 6, 'warning')
+    				if Dex.Enabled then Dex:Toggle() end
+    			end
+    		end
+    	end,
+    	Tooltip = 'Opens the Dex explorer (DataModel browser) in its own window'
+    })
+end)
+
+run(function()
     local AntiRagdoll
 
     AntiRagdoll = vain.Categories.Utility:CreateModule({
