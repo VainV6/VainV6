@@ -80,6 +80,11 @@ local function inRound()
 	return flag.Value == false
 end
 
+local function inShop()
+	local flag = replicatedStorage:FindFirstChild('IsInShop')
+	return flag ~= nil and flag.Value == true
+end
+
 local function isFriend(plr, recolor)
 	if plr and vain.Categories.Friends.Options['Use friends'].Enabled then
 		local friend = table.find(vain.Categories.Friends.ListEnabled, plr.Name) and true
@@ -114,6 +119,86 @@ local function enemyName(model)
 		return nameLabel.Text
 	end
 	return model.Name
+end
+
+-- ── Shop helpers ──────────────────────────────────────────────────────────────
+-- Between rounds you're in workspace.Shop. Buyable items live under VisualGears /
+-- VisualAccessories / VisualSacrifices; each item model holds a ProximityPrompt
+-- (usually on a ShopFalseHandle) you trigger to buy, plus a Price and a name. The
+-- layout is built at runtime, so we introspect each model defensively rather than
+-- assuming fixed child paths.
+local SHOP_CATEGORIES = {
+	Gears = 'VisualGears',
+	Accessories = 'VisualAccessories',
+	Sacrifices = 'VisualSacrifices',
+}
+
+local function shopFolder()
+	return workspace:FindFirstChild('Shop')
+end
+
+-- current Tix (the spendable currency)
+local function getTix()
+	local stats = lplr:FindFirstChild('leaderstats')
+	local tix = stats and stats:FindFirstChild('Tix')
+	if tix then return tix.Value end
+	local pv = lplr:FindFirstChild('PlayerValues')
+	tix = pv and pv:FindFirstChild('Tix')
+	return tix and tix.Value or 0
+end
+
+-- pull a numeric price out of an item model (a Price value, or digits in any
+-- price-ish label text)
+local function itemPrice(model)
+	local p = model:FindFirstChild('Price', true)
+	if p then
+		if p:IsA('ValueBase') then return tonumber(p.Value) or 0 end
+		if p:IsA('TextLabel') or p:IsA('TextButton') then
+			local n = tostring(p.Text):gsub('%D', '')
+			return tonumber(n) or 0
+		end
+	end
+	-- fall back to the prompt's ObjectText / any label with a number
+	for _, d in model:GetDescendants() do
+		if (d:IsA('TextLabel') or d:IsA('TextButton')) and d.Text:lower():find('tix') then
+			local n = tostring(d.Text):gsub('%D', '')
+			if tonumber(n) then return tonumber(n) end
+		end
+	end
+	return 0
+end
+
+-- best-effort display name for an item model
+local function itemName(model)
+	local n = model:GetAttribute('ItemName')
+	if type(n) == 'string' and n ~= '' then return n end
+	local info = model:FindFirstChild('ItemName', true) or model:FindFirstChild('Title', true)
+	if info and (info:IsA('TextLabel') or info:IsA('TextButton')) and info.Text ~= '' then
+		return info.Text
+	end
+	return model.Name
+end
+
+-- the ProximityPrompt used to purchase this item, if any
+local function itemPrompt(model)
+	return model:FindFirstChildWhichIsA('ProximityPrompt', true)
+end
+
+-- iterate buyable items, calling fn(model, category, prompt) for each
+local function forEachShopItem(fn)
+	local shop = shopFolder()
+	if not shop then return end
+	for category, folderName in SHOP_CATEGORIES do
+		local folder = shop:FindFirstChild(folderName)
+		if folder then
+			for _, item in folder:GetChildren() do
+				if item:IsA('Model') or item:IsA('Folder') then
+					local prompt = itemPrompt(item)
+					if prompt then fn(item, category, prompt) end
+				end
+			end
+		end
+	end
 end
 
 -- ── entitylib setup for NPC enemies ───────────────────────────────────────────
@@ -388,7 +473,7 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
 	local AutoFarm
-	local Offset, Height, ReturnHome, CollectDrops, DropRange
+	local Offset, Height, ReturnHome, CollectDrops, CollectHearts, CollectShields, DropRange
 
 	local function nearestEnemy()
 		if not aliveLocal() then return nil end
@@ -403,34 +488,75 @@ run(function()
 		return best
 	end
 
-	-- Loot drops are inserted into the workspace.Tixes folder. The game has a Tix
-	-- magnet, so teleporting ONTO a drop collects it.
+	-- Loot drops land in TWO folders: workspace.EnemiesDrops (enemy loot) and
+	-- workspace.Tixes (currency). Collection is server-side on touch, so we both
+	-- teleport onto the drop AND fire the touch interest to make the pickup register.
+	local DROP_FOLDERS = {'EnemiesDrops', 'Tixes'}
+
 	local function dropPart(obj)
 		return obj:IsA('BasePart') and obj or obj:FindFirstChildWhichIsA('BasePart', true)
 	end
 
-	-- Collect every nearby drop by teleporting onto each in turn.
+	-- classify a drop part by name (its own + its ancestor model) so we can filter.
+	-- returns 'heart' | 'shield' | 'tix' | 'loot'
+	local function dropKind(part)
+		local name = part.Name:lower()
+		local model = part:FindFirstAncestorWhichIsA('Model')
+		if model then name = name .. ' ' .. model.Name:lower() end
+		if name:find('heart') or name:find('health') or name:find('heal') then return 'heart' end
+		if name:find('shield') then return 'shield' end
+		if name:find('tix') or part:IsDescendantOf(workspace:FindFirstChild('Tixes') or workspace) then return 'tix' end
+		return 'loot'
+	end
+
+	-- force a touch between our root and the drop so the server's Touched pickup fires
+	local function touchDrop(part)
+		local root = entitylib.character.RootPart
+		if not root then return end
+		pcall(function()
+			firetouchinterest(part, root, 0)
+			firetouchinterest(part, root, 1)
+			firetouchinterest(part, root, 0)
+		end)
+	end
+
+	-- Collect every nearby enabled drop by teleporting onto each in turn.
 	local function sweepDrops()
-		if not (CollectDrops and CollectDrops.Enabled) or not aliveLocal() then return end
-		local folder = workspace:FindFirstChild('Tixes')
-		if not folder then return end
+		if not aliveLocal() then return end
+		-- run if ANY collect option is on (master loot, hearts, or shields)
+		local wantLoot = CollectDrops and CollectDrops.Enabled
+		local wantHearts = CollectHearts and CollectHearts.Enabled
+		local wantShields = CollectShields and CollectShields.Enabled
+		if not (wantLoot or wantHearts or wantShields) then return end
+
 		local root = entitylib.character.RootPart
 		local range = DropRange and DropRange.Value or 200
-		-- snapshot first so we don't iterate a folder that's changing as we collect
+		-- snapshot first so we don't iterate folders that change as we collect
 		local drops = {}
-		for _, obj in folder:GetChildren() do
-			local part = dropPart(obj)
-			if part and (part.Position - root.Position).Magnitude <= range then
-				table.insert(drops, part)
+		for _, folderName in DROP_FOLDERS do
+			local folder = workspace:FindFirstChild(folderName)
+			if folder then
+				for _, obj in folder:GetDescendants() do
+					if obj:IsA('BasePart') and (obj.Position - root.Position).Magnitude <= range then
+						local kind = dropKind(obj)
+						-- generic loot / tix follow the master toggle; hearts & shields
+						-- have their own toggles so you can grab them even with loot off
+						local take = (kind == 'heart' and wantHearts)
+							or (kind == 'shield' and wantShields)
+							or ((kind == 'tix' or kind == 'loot') and wantLoot)
+						if take then table.insert(drops, obj) end
+					end
+				end
 			end
 		end
 		for _, part in drops do
 			if not AutoFarm.Enabled or not aliveLocal() then break end
 			if part.Parent then
 				pcall(function()
-					entitylib.character.RootPart.CFrame = CFrame.new(part.Position + Vector3.new(0, 2, 0))
+					entitylib.character.RootPart.CFrame = CFrame.new(part.Position + Vector3.new(0, 1, 0))
 				end)
-				task.wait(0.08)
+				touchDrop(part)
+				task.wait(0.07)
 			end
 		end
 	end
@@ -501,7 +627,9 @@ run(function()
 	})
 	Offset = AutoFarm:CreateSlider({Name = 'TP Distance', Min = 0, Max = 20, Default = 4, Suffix = 'studs', Tooltip = 'How far in front of the enemy to land.'})
 	Height = AutoFarm:CreateSlider({Name = 'TP Height', Min = -10, Max = 20, Default = 0, Suffix = 'studs', Tooltip = 'Vertical offset so you do not clip into the enemy.'})
-	CollectDrops = AutoFarm:CreateToggle({Name = 'Collect Drops', Tooltip = 'After each kill, teleport onto nearby loot drops (Tix/coins/orbs/pickups) to collect them.'})
+	CollectDrops = AutoFarm:CreateToggle({Name = 'Collect Drops', Tooltip = 'After each kill, teleport onto nearby loot (EnemiesDrops) and Tix and force-touch them so they collect.'})
+	CollectHearts = AutoFarm:CreateToggle({Name = 'Collect Hearts', Tooltip = 'Also grab nearby heart / health pickups (works even if Collect Drops is off).'})
+	CollectShields = AutoFarm:CreateToggle({Name = 'Collect Shields', Tooltip = 'Also grab nearby shield pickups (works even if Collect Drops is off).'})
 	DropRange = AutoFarm:CreateSlider({Name = 'Drop Range', Min = 20, Max = 500, Default = 200, Suffix = 'studs', Tooltip = 'Only collect drops within this range of you.'})
 	ReturnHome = AutoFarm:CreateToggle({Name = 'Return On Disable', Tooltip = 'Teleport back to your start position when AutoFarm is turned off.'})
 end)
@@ -994,6 +1122,225 @@ run(function()
 			end
 		end,
 		Tooltip = 'Prevents the 20-minute AFK kick so long auto-farms keep running.'
+	})
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
+--  AUTO BUY  (purchase shop items automatically, fully filtered)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- On entering the shop, scan every buyable item and trigger its ProximityPrompt
+-- for the ones that pass your filters (category, name whitelist, price cap, Tix
+-- reserve), in your chosen price order, stopping when you can't afford more.
+run(function()
+	local AutoBuy
+	local BuyGears, BuyAccessories, BuySacrifices
+	local Whitelist, MaxPrice, Reserve, Order, BuyDelay
+	local lastInShop = false
+	local busy = false
+
+	local catToggle = {}   -- filled after toggles exist
+
+	-- build a lowercase lookup from the whitelist entries
+	local function whitelistSet()
+		local set, any = {}, false
+		local list = Whitelist and Whitelist.ListEnabled or {}
+		for _, word in list do
+			local w = tostring(word):gsub('^%s+', ''):gsub('%s+$', ''):lower()
+			if w ~= '' then set[w] = true any = true end
+		end
+		return set, any
+	end
+
+	local function wanted(item, category)
+		-- category gate
+		local tog = catToggle[category]
+		if tog and not tog.Enabled then return false end
+		-- name whitelist (if any entries, item must match one)
+		local set, hasList = whitelistSet()
+		if hasList then
+			local nm = itemName(item):lower()
+			local hit = false
+			for w in set do
+				if nm:find(w, 1, true) then hit = true break end
+			end
+			if not hit then return false end
+		end
+		return true
+	end
+
+	local function runBuy()
+		if busy then return end
+		busy = true
+		local ok = pcall(function()
+			local cap = MaxPrice and MaxPrice.Value or 0          -- 0 = no per-item cap
+			local reserve = Reserve and Reserve.Value or 0
+			local order = Order and Order.Value or 'Cheapest first'
+
+			-- collect eligible items with their prices
+			local list = {}
+			forEachShopItem(function(item, category, prompt)
+				if wanted(item, category) then
+					local price = itemPrice(item)
+					if cap == 0 or price <= cap then
+						table.insert(list, {item = item, prompt = prompt, price = price})
+					end
+				end
+			end)
+
+			-- order by price preference
+			table.sort(list, function(a, b)
+				if order == 'Expensive first' then return a.price > b.price end
+				return a.price < b.price
+			end)
+
+			for _, entry in list do
+				if not AutoBuy.Enabled or not inShop() then break end
+				if getTix() - entry.price < reserve then
+					-- can't afford while keeping the reserve; with cheapest-first this
+					-- means nothing else fits either
+					if order ~= 'Expensive first' then break end
+				else
+					pcall(function()
+						fireproximityprompt(entry.prompt)
+					end)
+					task.wait(BuyDelay and BuyDelay.Value or 0.3)
+				end
+			end
+		end)
+		busy = false
+		return ok
+	end
+
+	AutoBuy = vain.Categories.Utility:CreateModule({
+		Name = 'Auto Buy',
+		Function = function(callback)
+			if callback then
+				lastInShop = inShop()
+				-- buy once immediately if we're already in the shop
+				if lastInShop then task.spawn(runBuy) end
+				AutoBuy:Clean(runService.Heartbeat:Connect(function()
+					local now = inShop()
+					if now and not lastInShop then
+						task.spawn(runBuy)   -- just entered the shop
+					end
+					lastInShop = now
+				end))
+			end
+		end,
+		Tooltip = 'Automatically buys shop items that pass your filters as soon as you enter the shop. Set a name whitelist for exact picks, or use the category toggles to buy broadly.'
+	})
+
+	BuyGears = AutoBuy:CreateToggle({Name = 'Buy Gears', Default = true, Tooltip = 'Buy items from the Gears shelf.'})
+	BuyAccessories = AutoBuy:CreateToggle({Name = 'Buy Accessories', Tooltip = 'Buy items from the Accessories shelf.'})
+	BuySacrifices = AutoBuy:CreateToggle({Name = 'Buy Sacrifices', Tooltip = 'Buy items from the Sacrifices shelf.'})
+	catToggle = {Gears = BuyGears, Accessories = BuyAccessories, Sacrifices = BuySacrifices}
+
+	Whitelist = AutoBuy:CreateTextList({
+		Name = 'Name Whitelist',
+		Placeholder = 'item name',
+		Tooltip = 'Item names to buy (one per entry, partial match, case-insensitive). Leave empty to buy everything in the enabled categories.'
+	})
+	MaxPrice = AutoBuy:CreateSlider({
+		Name = 'Max Price',
+		Min = 0,
+		Max = 5000,
+		Default = 0,
+		Suffix = 'Tix',
+		Tooltip = 'Never buy a single item priced above this. 0 = no cap.'
+	})
+	Reserve = AutoBuy:CreateSlider({
+		Name = 'Keep Reserve',
+		Min = 0,
+		Max = 5000,
+		Default = 0,
+		Suffix = 'Tix',
+		Tooltip = 'Always keep at least this many Tix unspent.'
+	})
+	Order = AutoBuy:CreateDropdown({
+		Name = 'Priority',
+		List = {'Cheapest first', 'Expensive first'},
+		Default = 'Cheapest first',
+		Tooltip = 'When funds are limited: buy more cheap items, or fewer expensive ones first.'
+	})
+	BuyDelay = AutoBuy:CreateSlider({
+		Name = 'Buy Delay',
+		Min = 0.05,
+		Max = 2,
+		Default = 0.3,
+		Decimal = 100,
+		Suffix = 's',
+		Tooltip = 'Delay between purchases (give the server time to register each buy).'
+	})
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
+--  AUTO READY  (click the ready button to start the next round)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- The next wave starts when players ready up via the PlayersReady button in the
+-- spawn zone (a part with a ClickDetector). Auto Ready fires that ClickDetector
+-- as soon as you're in the shop so rounds start without manual input.
+run(function()
+	local AutoReady
+	local ReadyDelay
+	local lastInShop = false
+
+	-- locate the ready ClickDetector anywhere under the spawn zone / workspace
+	local function findReadyClick()
+		local zone = workspace:FindFirstChild('SpawnZone2', true) or workspace
+		local label = zone:FindFirstChild('PlayersReady', true)
+		if label then
+			local cd = label:FindFirstChildWhichIsA('ClickDetector', true)
+			if cd then return cd end
+			-- ClickDetector might sit on a sibling part of the label's model
+			local model = label:FindFirstAncestorWhichIsA('Model')
+			if model then
+				local cd2 = model:FindFirstChildWhichIsA('ClickDetector', true)
+				if cd2 then return cd2 end
+			end
+		end
+		return nil
+	end
+
+	local function pressReady()
+		local cd = findReadyClick()
+		if cd then
+			pcall(function() fireclickdetector(cd) end)
+			return true
+		end
+		return false
+	end
+
+	AutoReady = vain.Categories.Utility:CreateModule({
+		Name = 'Auto Ready',
+		Function = function(callback)
+			if callback then
+				lastInShop = false
+				AutoReady:Clean(runService.Heartbeat:Connect(function()
+					local now = inShop()
+					if now and not lastInShop then
+						local d = ReadyDelay and ReadyDelay.Value or 0
+						if d > 0 then
+							task.delay(d, function()
+								if AutoReady.Enabled and inShop() then pressReady() end
+							end)
+						else
+							pressReady()
+						end
+					end
+					lastInShop = now
+				end))
+			end
+		end,
+		Tooltip = 'Automatically presses the Ready button when you enter the shop to start the next round. Pairs with Auto Buy (raise the delay to let buys finish first).'
+	})
+
+	ReadyDelay = AutoReady:CreateSlider({
+		Name = 'Delay',
+		Min = 0,
+		Max = 30,
+		Default = 0,
+		Suffix = 's',
+		Tooltip = 'Seconds to wait in the shop before readying up. Raise this if you want Auto Buy / manual shopping to finish first.'
 	})
 end)
 
