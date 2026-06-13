@@ -151,31 +151,80 @@ local function unitSpace()
 	return (cur and cur.Value) or 0, (max and max.Value) or 0
 end
 
--- list of spawnable unit names (from the Units.Default folder)
+-- ObjectStats (ReplicatedStorage.Utilities.ObjectStats) is the source of truth:
+-- it maps unit names -> {Cost, Space} AND building names -> {Recruits = {...}}.
+local objectStats = (function()
+	local util = replicatedStorage:FindFirstChild('Utilities')
+	local mod = util and util:FindFirstChild('ObjectStats')
+	if mod then
+		local ok, t = pcall(require, mod)
+		if ok and type(t) == 'table' then return t end
+	end
+	return {}
+end)()
+
+-- list of spawnable unit names (entries in ObjectStats that have a Cost but no
+-- Recruits list -- i.e. units, not buildings). Falls back to Units.Default.
 local function spawnableNames()
 	local out = {}
-	local units = replicatedStorage:FindFirstChild('Units')
-	local def = units and units:FindFirstChild('Default')
-	if def then
-		for _, u in def:GetChildren() do
-			out[#out + 1] = u.Name
+	for name, info in pairs(objectStats) do
+		if type(info) == 'table' and info.Cost ~= nil and info.Recruits == nil then
+			out[#out + 1] = name
+		end
+	end
+	if #out == 0 then
+		local units = replicatedStorage:FindFirstChild('Units')
+		local def = units and units:FindFirstChild('Default')
+		if def then
+			for _, u in def:GetChildren() do out[#out + 1] = u.Name end
 		end
 	end
 	table.sort(out)
 	return out
 end
 
--- fire the spawn remote for a unit at a position, ONLY if affordable + space
--- (matches the client gate the game uses, so the server accepts it)
-local function trySpawn(name, position)
-	local stats = unitStats(name)
+-- which of MY buildings can recruit this unit? returns the building model (so we
+-- can pass its PrimaryPart). The Spawn remote's 2nd arg is the RECRUITING
+-- BUILDING'S PrimaryPart, NOT a world position -- passing a Vector3 was why
+-- nothing spawned.
+local function recruiterFor(unitName)
+	local mf = myFolder()
+	local buildings = mf and mf:FindFirstChild('Buildings')
+	if not buildings then return nil end
+	for _, b in buildings:GetChildren() do
+		if b:IsA('Model') and b.PrimaryPart and b:GetAttribute('Destroyed') ~= true then
+			local info = objectStats[b.Name]
+			local recruits = info and info.Recruits
+			if type(recruits) == 'table' and table.find(recruits, unitName) then
+				return b
+			end
+		end
+	end
+	return nil
+end
+
+-- {Cost, Space} for a unit, preferring ObjectStats (the real values the server uses)
+local function statsFor(name)
+	local info = objectStats[name]
+	if type(info) == 'table' and info.Cost ~= nil then
+		return {Cost = info.Cost or 0, Space = info.Space or 1}
+	end
+	return unitStats(name)
+end
+
+-- Recruit a unit from a building that can train it, ONLY if affordable + space
+-- (matches the client gate so the server accepts it). Returns true on a fire.
+local function trySpawn(name)
+	local stats = statsFor(name)
 	if not stats then return false end
 	if getCash() < stats.Cost then return false end
 	local cur, max = unitSpace()
-	if cur + stats.Space > max then return false end
+	if (cur + (stats.Space or 0)) > max then return false end
+	local building = recruiterFor(name)
+	if not building or not building.PrimaryPart then return false end
 	local remote = replicatedStorage:FindFirstChild('Spawn')
 	if not remote then return false end
-	return pcall(function() remote:FireServer(name, position) end)
+	return pcall(function() remote:FireServer(name, building.PrimaryPart) end)
 end
 
 -- ---------------------------------------------------------------------------
@@ -249,20 +298,6 @@ run(function()
 	local AutoSpawn
 	local UnitChoice
 
-	local function spawnPosition()
-		-- spawn near your castle / character; the server places the unit at your base
-		local char = lplr.Character
-		local hrp = char and char:FindFirstChild('HumanoidRootPart')
-		if hrp then return hrp.Position end
-		local mf = myFolder()
-		local buildings = mf and mf:FindFirstChild('Buildings')
-		if buildings then
-			local castle = buildings:FindFirstChild('Castle') or buildings:FindFirstChildWhichIsA('Model')
-			if castle and castle.PrimaryPart then return castle.PrimaryPart.Position end
-		end
-		return workspace.CurrentCamera and workspace.CurrentCamera.CFrame.Position or Vector3.zero
-	end
-
 	AutoSpawn = vain.Categories.Utility:CreateModule({
 		Name = 'Auto Spawn',
 		Function = function(callback)
@@ -271,7 +306,7 @@ run(function()
 					repeat
 						local name = UnitChoice and UnitChoice.Value
 						if name and name ~= '' then
-							trySpawn(name, spawnPosition())
+							trySpawn(name)
 						end
 						task.wait(0.5)
 					until not AutoSpawn.Enabled
@@ -327,10 +362,7 @@ run(function()
 	local PrimaryUnit
 	local Aggro
 
-	-- the build order Auto Play falls back to for economy/army when cash allows.
-	-- Builders/Houses raise the unit cap; the primary unit fills the army.
-	local ECONOMY = {'Builder', 'House'}
-
+	-- castle position used as the army's home/rally point
 	local function castlePos()
 		local mf = myFolder()
 		local buildings = mf and mf:FindFirstChild('Buildings')
@@ -343,6 +375,13 @@ run(function()
 		return hrp and hrp.Position or (workspace.CurrentCamera and workspace.CurrentCamera.CFrame.Position) or Vector3.zero
 	end
 
+	-- count how many of a unit I currently have, by name
+	local function countUnit(name)
+		local n = 0
+		for _, u in myUnits() do if u.Name == name then n += 1 end end
+		return n
+	end
+
 	AutoPlay = vain.Categories.Blatant:CreateModule({
 		Name = 'Auto Play',
 		Function = function(callback)
@@ -353,21 +392,22 @@ run(function()
 					return
 				end
 				task.spawn(function()
-					notif('Auto Play', 'Running: building economy, producing army, and attacking the nearest enemy.', 5)
-					local base = castlePos()
+					notif('Auto Play', 'Running: economy (builders), army production, and attacking the nearest enemy.', 5)
 					repeat
-						-- 1) ECONOMY: keep the cap growing while there is unused space + cash
+						local base = castlePos()
+						-- 1) ECONOMY: keep a couple of Builders alive. Builders raise your
+						-- cap by constructing houses, so they are the actual economy unit
+						-- (House / Builder Hut are BUILDINGS -- placed, not Spawn-recruited).
 						local cur, max = unitSpace()
 						if max - cur >= 1 then
-							-- try a builder/house first to grow the cap, then the army unit
 							local spawned = false
-							for _, eco in ECONOMY do
-								if trySpawn(eco, base) then spawned = true break end
+							if countUnit('Builder') < 2 then
+								spawned = trySpawn('Builder')
 							end
 							-- 2) ARMY: fill remaining space with the primary unit
 							local unit = (PrimaryUnit and PrimaryUnit.Value) or 'Knight'
 							if not spawned and unit ~= '' then
-								trySpawn(unit, base)
+								trySpawn(unit)
 							end
 						end
 
