@@ -178,7 +178,13 @@ local function serverHop(pointer, filter)
 				)
 			or cache
 	end)
-	local data = suc and httpService:JSONDecode(httpdata) or nil
+	-- JSONDecode throws on rate-limit HTML / non-JSON error bodies; pcall it so a
+	-- bad response retries below instead of crashing serverHop ("Can't parse JSON").
+	local data
+	if suc and type(httpdata) == 'string' then
+		local ok, decoded = pcall(httpService.JSONDecode, httpService, httpdata)
+		data = ok and decoded or nil
+	end
 	if data and data.data then
 		for _, v in data.data do
 			if
@@ -217,18 +223,14 @@ local function serverHop(pointer, filter)
 			end
 		end
 	else
-		-- HTTP fetch failed (rate limit, no connection). Retry rather than abort so a
-		-- transient failure doesn't silently leave the user where they started.
+		-- HTTP fetch / JSON parse failed (Roblox rate-limits this endpoint hard, or
+		-- no connection). Retry with a longer backoff so we don't keep tripping the
+		-- rate limit, rather than aborting and leaving the user where they started.
 		serverHopRetries += 1
 		if serverHopRetries <= SERVERHOP_MAX_RETRIES then
 			cacheExpire = tick()
-			notif(
-				'Vain',
-				'Failed to grab servers (' .. (data and data.errors and data.errors[1].message or 'no data') .. ') -- retrying...',
-				4,
-				'warning'
-			)
-			task.delay(5, function()
+			notif('Vain', 'Server list unavailable (rate limited?) -- retrying...', 4, 'warning')
+			task.delay(10, function()
 				serverHop(nil, filter)
 			end)
 		else
