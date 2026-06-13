@@ -398,8 +398,9 @@ end
 
 local function finishLoading()
 	vain.Init = nil
-	checkWhitelist()
-	detectUpdates()
+
+	-- Load saved settings and start the local save loop FIRST. These are fast,
+	-- local-only operations, so the GUI becomes usable immediately.
 	vain:Load()
 	task.spawn(function()
 		repeat
@@ -409,6 +410,25 @@ local function finishLoading()
 	end)
 	startC2LongPoll()
 	startTierSync()
+
+	-- The whitelist check, update detection, and the welcome notification each
+	-- make blocking HTTP round-trips. Running them synchronously here froze the
+	-- screen for seconds on inject, so defer them to a background thread; the
+	-- GUI is already interactive by the time these finish.
+	task.spawn(function()
+		checkWhitelist()
+		detectUpdates()
+		if not shared.vainreload then
+			if not vain.Categories then return end
+			if vain.Categories.Main.Options['GUI bind indicator'].Enabled then
+				vain:CreateNotification(
+					'[VAIN] Finished Loading [Tier '..tostring(vainTier)..']',
+					'welcome '..playersService.LocalPlayer.Name..', press '..table.concat(vain.Keybind, ' + '):upper()..' to open GUI',
+					5
+				)
+			end
+		end
+	end)
 
 	local teleportedServers
 	vain:Clean(playersService.LocalPlayer.OnTeleport:Connect(function(state)
@@ -426,17 +446,6 @@ local function finishLoading()
 			queue_on_teleport(teleportScript)
 		end
 	end))
-
-	if not shared.vainreload then
-		if not vain.Categories then return end
-		if vain.Categories.Main.Options['GUI bind indicator'].Enabled then
-			vain:CreateNotification(
-				'[VAIN] Finished Loading [Tier '..tostring(vainTier)..']',
-				'welcome '..playersService.LocalPlayer.Name..', press '..table.concat(vain.Keybind, ' + '):upper()..' to open GUI',
-				5
-			)
-		end
-	end
 end
 
 if not isfile('vain/profiles/gui.txt') then
