@@ -726,6 +726,15 @@ run(function()
 						Players = Target.Players.Enabled,
 						NPCs = Target.NPCs.Enabled
 					})
+					-- If the target is seated in a vehicle, force RootPart aiming. The
+					-- BulletEmitter registers a player hit purely by ray-vs-RootPart
+					-- proximity BEFORE any wall/surface check, so a shot whose path passes
+					-- through the RootPart sphere lands even though the car body would
+					-- block a normal surface raycast. The Head sits higher and is often
+					-- occluded by the roof, which is why in-car shots missed.
+					if ent and ent.Humanoid and (ent.Humanoid.Sit or ent.Humanoid.SeatPart) and ent.RootPart then
+						part = 'RootPart'
+					end
 					if ent and ent[part] then
 						local item = jb.ItemSystemController:GetLocalEquipped()
 						if item then
@@ -1029,39 +1038,70 @@ end)
 
 run(function()
 	local AutoArrest = {Enabled = false}
-	
+	local InstaArrest
+	local ArrestRange
+	local arrestDebounce = {} -- [Player] = tick(), avoid re-firing on the same target every frame
+
 	AutoArrest = vain.Categories.Blatant:CreateModule({
 		Name = 'AutoArrest',
 		Function = function(callback)
 			if callback then
 				repeat
 					local item = jb.ItemSystemController:GetLocalEquipped()
-					if item and item.__ClassName == 'Handcuffs' then
+					-- InstaArrest: don't wait for handcuffs to be equipped or for the
+					-- old 0.6s cooldown -- arrest the instant a criminal is in range.
+					local insta = not InstaArrest or InstaArrest.Enabled
+					if insta or (item and item.__ClassName == 'Handcuffs') then
 						local localPosition = entitylib.character.Humanoid.HumanoidUnloadServerPosition.Value
+						local range = (ArrestRange and ArrestRange.Value) or 18.4
 						local plrs = entitylib.AllPosition({
 							Players = true,
 							Part = 'RootPart',
-							Range = 50
+							Range = math.max(50, range)
 						})
-	
+
 						for _, ent in plrs do
 							if not AutoArrest.Enabled then break end
 							if ent.Player and isIllegal(ent) then
 								local vehicle = ent.Humanoid.Sit and getVehicle(ent) or nil
 								if vehicle then
 									jb:FireServer('Eject', vehicle)
-								elseif not isArrested(ent.Player.Name) and (localPosition - ent.RootPart.Position).Magnitude < 18.4 then
-									jb:FireServer('Arrest', ent.Player.Name)
-									task.wait(0.6)
+								elseif not isArrested(ent.Player.Name) and (localPosition - ent.RootPart.Position).Magnitude < range then
+									-- short per-target debounce so we fire once on entry,
+									-- not every 16ms while the server processes the arrest
+									local last = arrestDebounce[ent.Player]
+									if not last or tick() - last > 0.5 then
+										arrestDebounce[ent.Player] = tick()
+										-- the game fires the arrest remote with the PLAYER
+										-- INSTANCE (Players:FindFirstChild(name) -> Player),
+										-- not the name string
+										jb:FireServer('Arrest', ent.Player)
+									end
 								end
 							end
 						end
 					end
 					task.wait(0.016)
 				until not AutoArrest.Enabled
+				table.clear(arrestDebounce)
 			end
 		end,
-		Tooltip = 'Automatically uses handcuffs on nearby entities'
+		Tooltip = 'Instantly arrests nearby criminals the moment they are in range. Ejects them from vehicles first.'
+	})
+	InstaArrest = AutoArrest:CreateToggle({
+		Name = 'Insta Arrest',
+		Default = true,
+		Tooltip = 'Arrest immediately without needing handcuffs equipped or waiting between arrests.'
+	})
+	ArrestRange = AutoArrest:CreateSlider({
+		Name = 'Arrest Range',
+		Min = 1,
+		Max = 50,
+		Default = 18,
+		Suffix = function(val)
+			return val == 1 and 'stud' or 'studs'
+		end,
+		Tooltip = 'How close a criminal must be to arrest. The server enforces ~18 studs; higher values just try sooner.'
 	})
 end)
 	
