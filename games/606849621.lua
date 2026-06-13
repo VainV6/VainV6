@@ -699,8 +699,19 @@ run(function()
 		local dot = math.clamp(gameCamera.CFrame.LookVector:Dot(dir.Unit), -1, 1)
 		return math.acos(dot)
 	end
+	-- screen-space distance (pixels) from the actual mouse cursor to the entity;
+	-- smaller = nearer the cursor. Off-screen / behind-camera targets are pushed last.
+	local function entCursor(ent)
+		local part = ent[AimPart and AimPart.Value or 'Head'] or ent.RootPart
+		if not part then return math.huge end
+		local screen, onScreen = gameCamera:WorldToViewportPoint(part.Position)
+		if not onScreen then return math.huge end
+		local mouse = inputService:GetMouseLocation()
+		return (Vector2.new(screen.X, screen.Y) - mouse).Magnitude
+	end
 	local sorts = {
 		Distance = function(a, b) return a.Magnitude < b.Magnitude end,
+		Cursor = function(a, b) return entCursor(a.Entity) < entCursor(b.Entity) end,
 		Angle = function(a, b) return entAngle(a.Entity) < entAngle(b.Entity) end,
 		Health = function(a, b) return entHealth(a.Entity) < entHealth(b.Entity) end,
 		-- threat = whoever is both close AND low-health (easy + dangerous kills first)
@@ -789,8 +800,8 @@ run(function()
 	})
 	Priority = Aimbot:CreateDropdown({
 		Name = 'Priority',
-		List = {'Distance', 'Angle', 'Health', 'Threat'},
-		Tooltip = 'Who to target first:\nDistance - closest to you\nAngle - closest to your crosshair\nHealth - lowest HP\nThreat - close AND low HP'
+		List = {'Distance', 'Cursor', 'Angle', 'Health', 'Threat'},
+		Tooltip = 'Who to target first:\nDistance - closest to you\nCursor - nearest to your mouse cursor on screen\nAngle - closest to your crosshair\nHealth - lowest HP\nThreat - close AND low HP'
 	})
 	Range = Aimbot:CreateSlider({
 		Name = 'Range',
