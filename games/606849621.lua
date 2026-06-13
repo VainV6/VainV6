@@ -1089,6 +1089,36 @@ run(function()
 		end
 	end
 
+	-- AutoArrest needs Handcuffs EQUIPPED (the diagnostic showed cuffs=false was
+	-- the blocker -- you can't arrest with another item out). Equip them for the
+	-- user via the game's own inventory system instead of requiring it manually.
+	local lastEquipTry = 0
+	local function ensureHandcuffs()
+		local equipped = jb.ItemSystemController:GetLocalEquipped()
+		if equipped and equipped.__ClassName == 'Handcuffs' then return true end
+		-- throttle so we don't spam equip every frame
+		if tick() - lastEquipTry < 0.5 then return false end
+		lastEquipTry = tick()
+		local inv = jb.InventoryItemSystem
+		if not inv or not inv.getInventoryItemsFor then return false end
+		local ok, items = pcall(inv.getInventoryItemsFor, lplr)
+		if not ok or type(items) ~= 'table' then return false end
+		for _, it in items do
+			local name = it.obj and it.obj.Name
+			if name == 'Handcuffs' then
+				pcall(function()
+					if inv.toggleEquip then
+						inv.toggleEquip(it)
+					elseif it.AttemptSetEquipped then
+						it:AttemptSetEquipped(true)
+					end
+				end)
+				return false -- equip is async; report not-yet-equipped this pass
+			end
+		end
+		return false
+	end
+
 	AutoArrest = vain.Categories.Blatant:CreateModule({
 		Name = 'AutoArrest',
 		Function = function(callback)
@@ -1103,38 +1133,37 @@ run(function()
 				-- too-strict distance/team gate was silently rejecting valid arrests. Handcuffs
 				-- equipped + Police team are the only local prerequisites (u803/u756).
 				repeat
-					local item = jb.ItemSystemController:GetLocalEquipped()
-					local hasCuffs = item and item.__ClassName == 'Handcuffs' or false
 					local mine = teamOf(lplr)
-					if entitylib.isAlive and mine == 'Police' and hasCuffs then
-						local seen, fired = 0, 0
-						local plrs = entitylib.AllPosition({ Players = true, Part = 'RootPart', Range = 1000 })
-						for _, ent in plrs do
-							if not AutoArrest.Enabled then break end
-							local plr = ent.Player
-							local tchar = plr and plr.Character
-							if plr and tchar and ent.Humanoid and teamOf(plr) == 'Prisoner' then
-								seen += 1
-								local inVehicle = ent.Humanoid.Sit
-									or tchar:GetAttribute('InVehicle')
-									or getVehicle(ent)
-								local cuffed = tchar:GetAttribute('HasHandcuffs')
-								if inVehicle then
-									local vehicle = getVehicle(ent)
-									if vehicle then jb:FireServer('Eject', vehicle) end
-								elseif not cuffed then
-									tryArrest(plr)
-									fired += 1
+					if entitylib.isAlive and mine == 'Police' then
+						-- auto-equip handcuffs (the diagnostic showed cuffs=false was the
+						-- blocker). hasCuffs is true only once they are actually out.
+						local hasCuffs = ensureHandcuffs()
+						if not diagDone then
+							diagDone = true
+							notif('AutoArrest', ('Active. Team='..tostring(mine)..', equipping/using handcuffs.'), 5)
+						end
+						if hasCuffs then
+							for _, ent in entitylib.AllPosition({ Players = true, Part = 'RootPart', Range = 1000 }) do
+								if not AutoArrest.Enabled then break end
+								local plr = ent.Player
+								local tchar = plr and plr.Character
+								if plr and tchar and ent.Humanoid and teamOf(plr) == 'Prisoner' then
+									local inVehicle = ent.Humanoid.Sit
+										or tchar:GetAttribute('InVehicle')
+										or getVehicle(ent)
+									local cuffed = tchar:GetAttribute('HasHandcuffs')
+									if inVehicle then
+										local vehicle = getVehicle(ent)
+										if vehicle then jb:FireServer('Eject', vehicle) end
+									elseif not cuffed then
+										tryArrest(plr)
+									end
 								end
 							end
 						end
-						if not diagDone then
-							diagDone = true
-							notif('AutoArrest', ('Active. Team='..tostring(mine)..', cuffs='..tostring(hasCuffs)..', prisoners='..seen..', fired='..fired), 6)
-						end
 					elseif not diagDone then
 						diagDone = true
-						notif('AutoArrest', ('Idle: need Police team + Handcuffs equipped. Team='..tostring(mine)..', cuffs='..tostring(hasCuffs)), 8, 'alert')
+						notif('AutoArrest', ('Idle: you are not on the Police team. Team='..tostring(mine)), 8, 'alert')
 					end
 					task.wait(0.1)
 				until not AutoArrest.Enabled
