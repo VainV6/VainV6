@@ -604,12 +604,14 @@ run(function()
 end)
 
 run(function()
-	-- NoSpread zeroes the LOCAL gun's BulletSpread (Config.BulletSpread). This is
-	-- the same risk class as Wallbang -- it edits the client-owned bullet config
-	-- the game uses to aim the shot; it does not change movement/position, so the
-	-- position-based anticheat has nothing to flag. Restored on disable.
+	-- NoSpread zeroes the LOCAL gun's BulletSpread AND CamShakeMagnitude (the
+	-- per-gun camera-shake amount that makes your screen jolt on every shot).
+	-- Both live on item.Config and are client-owned -- the game reads them to aim
+	-- the shot / shake your camera; it does not change movement/position, so the
+	-- position-based anticheat has nothing to flag. Originals restored on disable.
 	local NoSpread
-	local originals = {} -- [Config] = original BulletSpread, so we can restore
+	local FIELDS = {'BulletSpread', 'CamShakeMagnitude'}
+	local originals = {} -- [Config] = {Field = originalValue}
 
 	NoSpread = vain.Categories.Combat:CreateModule({
 		Name = 'NoSpread',
@@ -618,24 +620,31 @@ run(function()
 				repeat
 					local item = jb.ItemSystemController:GetLocalEquipped()
 					local cfg = item and item.Config
-					if cfg and type(cfg.BulletSpread) == 'number' then
-						if originals[cfg] == nil then
-							originals[cfg] = cfg.BulletSpread
-						end
-						if cfg.BulletSpread ~= 0 then
-							cfg.BulletSpread = 0
+					if cfg then
+						for _, field in FIELDS do
+							if type(cfg[field]) == 'number' then
+								originals[cfg] = originals[cfg] or {}
+								if originals[cfg][field] == nil then
+									originals[cfg][field] = cfg[field]
+								end
+								if cfg[field] ~= 0 then
+									cfg[field] = 0
+								end
+							end
 						end
 					end
 					task.wait(0.1)
 				until not NoSpread.Enabled
 			else
-				for cfg, val in originals do
-					pcall(function() cfg.BulletSpread = val end)
+				for cfg, fields in originals do
+					for field, val in fields do
+						pcall(function() cfg[field] = val end)
+					end
 				end
 				table.clear(originals)
 			end
 		end,
-		Tooltip = 'Removes bullet spread/recoil on your equipped gun for pinpoint accuracy. Client-side gun config only (no movement), so the anticheat does not flag it.'
+		Tooltip = 'Removes bullet spread AND the camera shake on your equipped gun for pinpoint, jolt-free shots. Client-side gun config only (no movement), so the anticheat does not flag it.'
 	})
 end)
 
@@ -1002,18 +1011,88 @@ end)
 	
 run(function()
 	local NoFall
+
+	-- The old method hard-coded upvalue 19 / constant 9 of FallingController.Init,
+	-- which Jailbreak shifts on updates (hence "Patch point not found"). Instead,
+	-- SEARCH the Init closure's upvalues for the function that ragdolls you and
+	-- swap its 'Sit' constant: a function holding both 'Sit' and a ragdoll/falling
+	-- state constant is the fall handler. Returns (func, constIndex) or nil.
+	local function findFallPatch()
+		local ok, init = pcall(function() return jb.FallingController.Init end)
+		if not ok or type(init) ~= 'function' then return nil end
+		for i = 1, 40 do
+			local okv, up = pcall(debug.getupvalue, init, i)
+			if okv and type(up) == 'function' then
+				local okc, consts = pcall(debug.getconstants, up)
+				if okc and type(consts) == 'table' then
+					local sitIndex, looksLikeFall
+					for ci, c in consts do
+						if c == 'Sit' then sitIndex = ci end
+						if c == 'FallingDown' or c == 'Ragdoll' or c == 'PlatformStand' or c == 'GettingUp' then
+							looksLikeFall = true
+						end
+					end
+					if sitIndex and looksLikeFall then
+						return up, sitIndex
+					end
+				end
+			end
+		end
+		return nil
+	end
+
+	-- Fallback: keep the ragdoll-causing Humanoid states disabled client-side.
+	local stateThread
+	local RAGDOLL_STATES = {
+		Enum.HumanoidStateType.FallingDown,
+		Enum.HumanoidStateType.Ragdoll,
+		Enum.HumanoidStateType.PlatformStand,
+	}
+	local function setRagdollStates(enabled)
+		local char = entitylib.isAlive and entitylib.character
+		local hum = char and char.Humanoid
+		if not hum then return end
+		for _, st in RAGDOLL_STATES do
+			pcall(hum.SetStateEnabled, hum, st, enabled)
+		end
+	end
+
+	local usingConstant = false -- remember which method we enabled with
+
 	NoFall = vain.Categories.Blatant:CreateModule({
 		Name = 'NoFall',
 		Function = function(callback)
-			-- The exact upvalue (19) and constant (9) indices drift when Jailbreak
-			-- updates FallingController; guard so a stale index disables cleanly
-			-- instead of throwing an unhandled error on toggle.
-			local ok = pcall(function()
-				debug.setconstant(debug.getupvalue(jb.FallingController.Init, 19), 9, callback and 'Archivable' or 'Sit')
-			end)
-			if not ok and callback then
-				notif('NoFall', 'Patch point not found (game updated?). Disabling.', 6, 'alert')
-				NoFall:Toggle()
+			if callback then
+				-- Preferred: flip the fall handler's 'Sit' constant so it no-ops.
+				local func, idx = findFallPatch()
+				if func and idx and pcall(debug.setconstant, func, idx, 'Archivable') then
+					usingConstant = true
+					return
+				end
+				-- Fallback: keep the ragdoll-causing states disabled ourselves.
+				usingConstant = false
+				setRagdollStates(false)
+				stateThread = task.spawn(function()
+					repeat
+						setRagdollStates(false)
+						task.wait(0.5)
+					until not NoFall.Enabled
+					setRagdollStates(true)
+				end)
+			else
+				if usingConstant then
+					local func, idx = findFallPatch()
+					if func and idx then
+						pcall(debug.setconstant, func, idx, 'Sit')
+					end
+					usingConstant = false
+				else
+					if stateThread then
+						pcall(task.cancel, stateThread)
+						stateThread = nil
+					end
+					setRagdollStates(true)
+				end
 			end
 		end,
 		Tooltip = 'Disables ragdoll handling & fall damage'
