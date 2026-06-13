@@ -172,6 +172,20 @@ run(function()
 	end
 end)
 
+-- First person when the camera sits (almost) on the character's head.
+local function isFirstPerson()
+	local char = lplr.Character
+	local head = char and char:FindFirstChild('Head')
+	if not head or not gameCamera then return false end
+	return (gameCamera.CFrame.Position - head.Position).Magnitude < 1.5
+end
+
+-- A blocking game GUI (shop, menu, chat) is open when the game has released
+-- the mouse from the locked-center state it uses for normal gameplay.
+local function isGUIOpen()
+	return inputService.MouseBehavior == Enum.MouseBehavior.Default
+end
+
 local function collection(tags, module, customadd, customremove)
 	tags = typeof(tags) ~= 'table' and {tags} or tags
 	local objs, connections = {}, {}
