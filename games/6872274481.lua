@@ -8367,7 +8367,7 @@ run(function()
 
     local function getKitMeta(player)
     	local kit = player:GetAttribute('PlayingAsKits') or player:GetAttribute('PlayingAsKit') or 'none'
-    	return bedwars.BedwarsKitMeta[kit] or bedwars.BedwarsKitMeta.none
+    	return bedwars.BedwarsKitMeta[kit] or bedwars.BedwarsKitMeta.none or {renderImage = ''}
     end
 
     local function getPlayerFromDraft(render, name)
@@ -8600,20 +8600,31 @@ run(function()
     	end
     end
 
+    local function runSetup(DraftApp)
+    	if not DraftApp or not KitDisplay.Enabled then return end
+    	-- 5v5 first; if it found no team columns it hooks PlayerName labels itself.
+    	setup5v5(DraftApp)
+    	setupSquad(DraftApp)
+    end
+
     KitDisplay = vain.Categories.Render:CreateModule({
     	Name = 'Kit Display',
     	Tooltip = 'Enables the Kit Display module',
     	Function = function(call)
     		if call then
-    			-- Don't hang forever if enabled outside the draft phase. Wait for the
-    			-- draft UI in a background thread with a finite timeout, then set up.
-    			task.spawn(function()
-    				local DraftApp = lplr.PlayerGui:WaitForChild('MatchDraftApp', 30)
-    				if DraftApp and KitDisplay.Enabled then
-    					setup5v5(DraftApp)
-    					setupSquad(DraftApp)
+    			-- The draft UI (MatchDraftApp) is created at the start of every kit
+    			-- phase and removed after, so a one-shot wait misses later rounds.
+    			-- Set up on whatever's there now, and again each time it reappears.
+    			local existing = lplr.PlayerGui:FindFirstChild('MatchDraftApp')
+    			if existing then
+    				runSetup(existing)
+    			end
+    			KitDisplay:Clean(lplr.PlayerGui.ChildAdded:Connect(function(child)
+    				if child.Name == 'MatchDraftApp' and KitDisplay.Enabled then
+    					task.wait(0.2)
+    					runSetup(child)
     				end
-    			end)
+    			end))
     		end
     	end,
     	Tooltip = 'Allows you to see the other opponent kits'
