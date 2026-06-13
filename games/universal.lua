@@ -155,6 +155,10 @@ local serverHopFilter -- remembers the sort so retries (TeleportInitFailed, exha
 local serverHopRetries = 0
 local SERVERHOP_MAX_RETRIES = 30 -- bound the full-search restarts so we never loop forever
 local SERVERHOP_FREE_SLOTS = 2 -- require this many open slots so the server doesn't fill during the teleport
+-- Roblox rate-limits the games-list API hard (~1 req / few seconds). Throttle
+-- EVERY fetch (pagination + retries) to this interval so we never trip it.
+local SERVERHOP_MIN_INTERVAL = 4 -- seconds between any two server-list requests
+local serverHopLastFetch = 0
 local function serverHop(pointer, filter)
 	filter = filter or serverHopFilter or 'Descending'
 	serverHopFilter = filter
@@ -168,16 +172,24 @@ local function serverHop(pointer, filter)
 	end
 
 	local suc, httpdata = pcall(function()
-		return cacheExpire < tick()
-				and game:HttpGet(
-					'https://games.roblox.com/v1/games/'
-						.. game.PlaceId
-						.. '/servers/Public?sortOrder='
-						.. (filter == 'Ascending' and 1 or 2)
-						.. '&excludeFullGames=true&limit=100'
-						.. (pointer and '&cursor=' .. pointer or '')
-				)
-			or cache
+		if cacheExpire < tick() then
+			-- throttle: never fire two list requests closer than the min interval,
+			-- which is what was tripping the rate limit during fast pagination
+			local since = tick() - serverHopLastFetch
+			if since < SERVERHOP_MIN_INTERVAL then
+				task.wait(SERVERHOP_MIN_INTERVAL - since)
+			end
+			serverHopLastFetch = tick()
+			return game:HttpGet(
+				'https://games.roblox.com/v1/games/'
+					.. game.PlaceId
+					.. '/servers/Public?sortOrder='
+					.. (filter == 'Ascending' and 1 or 2)
+					.. '&excludeFullGames=true&limit=100'
+					.. (pointer and '&cursor=' .. pointer or '')
+			)
+		end
+		return cache
 	end)
 	-- JSONDecode throws on rate-limit HTML / non-JSON error bodies; pcall it so a
 	-- bad response retries below instead of crashing serverHop ("Can't parse JSON").
@@ -237,8 +249,12 @@ local function serverHop(pointer, filter)
 		serverHopRetries += 1
 		if serverHopRetries <= SERVERHOP_MAX_RETRIES then
 			cacheExpire = tick()
-			notif('Vain', 'Server list unavailable (rate limited?) -- retrying...', 4, 'warning')
-			task.delay(10, function()
+			-- progressive backoff: each consecutive failure waits longer (10s, 15s,
+			-- 20s ... capped at 30s) so a persistent rate-limit clears instead of
+			-- being hammered.
+			local backoff = math.min(10 + (serverHopRetries - 1) * 5, 30)
+			notif('Vain', 'Server list rate limited -- backing off ' .. backoff .. 's...', 4, 'warning')
+			task.delay(backoff, function()
 				serverHop(nil, filter)
 			end)
 		else
