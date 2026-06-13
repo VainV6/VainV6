@@ -1412,46 +1412,45 @@ run(function()
 	-- fires the correct remote itself. Tase aims toward the taser's MousePosition,
 	-- which comes from TransformLocalMousePosition; we hook that to point at the
 	-- nearest criminal so :Tase() locks onto them. No alias to maintain.
-	local tazeHook
 	AutoTaze = vain.Categories.Blatant:CreateModule({
 		Name = 'AutoTaze',
 		Function = function(callback)
 			if callback then
-				-- redirect the taser's aim to the nearest valid criminal
-				tazeHook = jb.TaserController.TransformLocalMousePosition
-				jb.TaserController.TransformLocalMousePosition = function(self, pos)
-					local range = (self.Config and self.Config.Range) or 50
-					local ent = entitylib.EntityPosition({ Players = true, Part = 'RootPart', Range = range })
-					if ent and ent.RootPart and isValidCriminal(ent) then
-						return ent.RootPart.Position
-					end
-					return tazeHook(self, pos)
-				end
-
-				repeat
-					local item = jb.ItemSystemController:GetLocalEquipped()
-					item = item and item.__ClassName == 'Taser' and item or nil
-					if item then
-						-- respect the taser's real cooldown (NextUse attr) -- firing during
-						-- cooldown does nothing, which is why a flat wait dropped shots.
-						local nextUse = item.inventoryItemValue and item.inventoryItemValue:GetAttribute('NextUse')
-						local ready = not (type(nextUse) == 'number' and os.clock() < (nextUse or 0))
-						local range = (item.Config and item.Config.Range) or 50
-						local ent = entitylib.EntityPosition({ Players = true, Part = 'RootPart', Range = range })
-						if ready and ent and isValidCriminal(ent) then
-							-- the game's own Tase: raycasts toward our redirected
-							-- MousePosition, finds the criminal, fires the correct remote.
-							-- Tase ends with BroadcastInputBegan(input) which asserts the
-							-- input is non-nil and reads .UserInputType/.KeyCode -- pass a
-							-- minimal stand-in so it doesn't error after firing.
-							local fakeInput = { UserInputType = Enum.UserInputType.MouseButton1, KeyCode = Enum.KeyCode.Unknown }
-							pcall(function() item:Tase(fakeInput) end)
+					-- We redirect the taser's aim by SHADOWING TransformLocalMousePosition on
+					-- each equipped taser INSTANCE (the method lives on the Basic base via
+					-- metatable; jb.TaserController is the module table and may lack it / be
+					-- nil, which is what errored). Cleared on disable.
+					local shadowed = setmetatable({}, {__mode = 'k'})
+					repeat
+						local item = jb.ItemSystemController:GetLocalEquipped()
+						item = item and item.__ClassName == 'Taser' and item or nil
+						if item then
+							if not shadowed[item] then
+								shadowed[item] = true
+								rawset(item, 'TransformLocalMousePosition', function(self, pos)
+									local range = (self.Config and self.Config.Range) or 50
+									local ent = entitylib.EntityPosition({ Players = true, Part = 'RootPart', Range = range })
+									if ent and ent.RootPart and isValidCriminal(ent) then
+										return ent.RootPart.Position
+									end
+									return pos
+								end)
+							end
+							local nextUse = item.inventoryItemValue and item.inventoryItemValue:GetAttribute('NextUse')
+							local ready = not (type(nextUse) == 'number' and os.clock() < (nextUse or 0))
+							local range = (item.Config and item.Config.Range) or 50
+							local ent = entitylib.EntityPosition({ Players = true, Part = 'RootPart', Range = range })
+							if ready and ent and isValidCriminal(ent) then
+								local fakeInput = { UserInputType = Enum.UserInputType.MouseButton1, KeyCode = Enum.KeyCode.Unknown }
+								pcall(function() item:Tase(fakeInput) end)
+							end
 						end
+						task.wait(0.05)
+					until not AutoTaze.Enabled
+					for taser in shadowed do
+						pcall(function() rawset(taser, 'TransformLocalMousePosition', nil) end)
 					end
-					task.wait(0.05)
-				until not AutoTaze.Enabled
-				jb.TaserController.TransformLocalMousePosition = tazeHook
-			end
+				end
 		end,
 		Tooltip = 'Immobilizes nearby criminals by driving the taser\'s own Tase action (aim auto-locked to the nearest criminal). Build-proof -- no obfuscated remote to maintain.'
 	})
@@ -1878,10 +1877,10 @@ run(function()
 	FlySpeed = VehicleFly:CreateSlider({
 		Name = 'Fly Speed',
 		Min = 20,
-		Max = 400,
-		Default = 120,
+		Max = 2000,
+		Default = 250,
 		Suffix = function(val) return val == 1 and 'stud/s' or 'studs/s' end,
-		Tooltip = 'How fast the car flies. Lower is less likely to trip the position anticheat.'
+		Tooltip = 'How fast the car flies. Lower is less likely to trip the position anticheat; very high values will likely get rolled back.'
 	})
 end)
 
