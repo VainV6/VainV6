@@ -346,6 +346,28 @@ run(function()
 		UpdateMousePosition = 'AimPosition'
 	})
 
+	-- Hardcoded friendly -> real remote-name fallbacks. The dynamic dumpRemotes
+	-- map keys by proto debugname / script name, which drifts every time the game
+	-- reshuffles its code (action remotes now live in anonymous closures keyed by
+	-- collision order). These were decoded statically from the current place file
+	-- and are used whenever the dynamic dump is missing the friendly key, so the
+	-- AutoFeatures keep working across updates that only renamed functions.
+	-- Decoded from Place_606849621.rbxlx (2026-06-13).
+	local REMOTE_FALLBACKS = {
+		Arrest = 'ye6k5tad',
+		Punch = 'v1w5mwz1',
+		Eject = 'c28zzq8w',
+		GetIn = 'eomd9qco',
+		GetOut = 'yslgeqao',
+		Tase = 'fav6jbbv',
+		TaseReplicate = 'dxgaejek',
+	}
+	for friendly, real in REMOTE_FALLBACKS do
+		if not remotes[friendly] then
+			remotes[friendly] = real
+		end
+	end
+
 	local function fireHook(self, id, ...)
 		local rem
 		for i, v in remotes do
@@ -654,37 +676,84 @@ run(function()
 	local Aimbot
 	local Target
 	local Range
+	local AimPart
+	local Priority
 	local Hooked
 	local AimRaycast = RaycastParams.new()
 	AimRaycast.RespectCanCollide = true
+
+	-- Target-priority sort functions. Each entitylib sorting item is
+	-- {Entity = <ent>, Magnitude = <distance>}; the entity exposes .Humanoid,
+	-- .RootPart, .Head, .Character, .Player.
+	local function entHealth(ent)
+		local h = ent and ent.Humanoid
+		return (h and h.Health) or math.huge
+	end
+	-- angle (radians) between the camera look vector and the direction to the entity;
+	-- smaller = closer to your crosshair.
+	local function entAngle(ent)
+		local part = ent[AimPart and AimPart.Value or 'Head'] or ent.RootPart
+		if not part then return math.huge end
+		local dir = (part.Position - gameCamera.CFrame.Position)
+		if dir.Magnitude == 0 then return math.huge end
+		local dot = math.clamp(gameCamera.CFrame.LookVector:Dot(dir.Unit), -1, 1)
+		return math.acos(dot)
+	end
+	local sorts = {
+		Distance = function(a, b) return a.Magnitude < b.Magnitude end,
+		Angle = function(a, b) return entAngle(a.Entity) < entAngle(b.Entity) end,
+		Health = function(a, b) return entHealth(a.Entity) < entHealth(b.Entity) end,
+		-- threat = whoever is both close AND low-health (easy + dangerous kills first)
+		Threat = function(a, b)
+			return (a.Magnitude * entHealth(a.Entity)) < (b.Magnitude * entHealth(b.Entity))
+		end,
+	}
 
 	Aimbot = vain.Categories.Combat:CreateModule({
 		Name = 'Aimbot',
 		Function = function(callback)
 			if callback then
-				-- redirect the trajectory of every shot to the nearest valid target
+				-- redirect the trajectory of every shot to the highest-priority target
 				Hooked = jb.GunController.TransformLocalMousePosition
 				jb.GunController.TransformLocalMousePosition = function(self, pos)
+					local part = AimPart and AimPart.Value or 'Head'
 					local ent = entitylib.EntityPosition({
 						Range = Range.Value,
 						Wallcheck = Target.Walls.Enabled and true or nil,
-						Part = 'RootPart',
+						Part = part,
+						Sort = sorts[Priority and Priority.Value or 'Distance'],
 						Origin = entitylib.isAlive and entitylib.character.RootPart.Position or nil,
 						Players = Target.Players.Enabled,
 						NPCs = Target.NPCs.Enabled
 					})
-					if ent then
+					if ent and ent[part] then
 						local item = jb.ItemSystemController:GetLocalEquipped()
 						if item then
-							AimRaycast.FilterDescendantsInstances = {gameCamera, ent.Character}
-							AimRaycast.CollisionGroup = ent.RootPart.CollisionGroup
+							-- Exclude the target's WHOLE character model (and any vehicle it
+							-- is seated in) from the local-hit raycast. When a player is in a
+							-- car the bullet would otherwise stop on the car body and never
+							-- register on the player -- this is why ~90% of in-vehicle shots
+							-- missed. Filtering the seat/vehicle lets the hit land on the
+							-- occupant.
+							local filter = {gameCamera, ent.Character}
+							local seat = ent.Humanoid and ent.Humanoid.SeatPart
+							if seat then
+								local veh = seat:FindFirstAncestorWhichIsA('Model')
+								if veh then table.insert(filter, veh) end
+							end
+							AimRaycast.FilterDescendantsInstances = filter
+							AimRaycast.CollisionGroup = ent[part].CollisionGroup
 							-- target velocity is zero in the solve: bullets are made hitscan
 							-- below, so there is nothing to lead.
-							local calc = prediction.SolveTrajectory(self.Tip.CFrame.Position, item.Config.BulletSpeed or 1000, math.abs(item.BulletEmitter.GravityVector.Y), ent.RootPart.Position, Vector3.zero, workspace.Gravity, ent.HipHeight, nil, AimRaycast)
+							local calc = prediction.SolveTrajectory(self.Tip.CFrame.Position, item.Config.BulletSpeed or 1000, math.abs(item.BulletEmitter.GravityVector.Y), ent[part].Position, Vector3.zero, workspace.Gravity, ent.HipHeight, nil, AimRaycast)
 							if calc then
 								targetinfo.Targets[ent] = tick() + 1
 								return calc
 							end
+							-- trajectory blocked: still point straight at the part so the
+							-- shot at least travels toward them instead of the cursor
+							targetinfo.Targets[ent] = tick() + 1
+							return ent[part].Position
 						end
 					end
 					return pos
@@ -701,14 +770,24 @@ run(function()
 				jb.GunController.TransformLocalMousePosition = Hooked
 			end
 		end,
-		Tooltip = 'Instantly hits the nearest target in range with zero bullet travel time. No aiming or camera movement -- just shoot. Combines silent trajectory redirect with hitscan.'
+		Tooltip = 'Instantly hits the highest-priority target in range with zero bullet travel time. No aiming or camera movement -- just shoot. Works through car bodies on players in vehicles.'
 	})
 	Target = Aimbot:CreateTargets({Players = true})
+	AimPart = Aimbot:CreateDropdown({
+		Name = 'Aim Part',
+		List = {'Head', 'RootPart'},
+		Tooltip = 'Which body part to aim at. Head is more exposed for players inside vehicles.'
+	})
+	Priority = Aimbot:CreateDropdown({
+		Name = 'Priority',
+		List = {'Distance', 'Angle', 'Health', 'Threat'},
+		Tooltip = 'Who to target first:\nDistance - closest to you\nAngle - closest to your crosshair\nHealth - lowest HP\nThreat - close AND low HP'
+	})
 	Range = Aimbot:CreateSlider({
 		Name = 'Range',
 		Min = 1,
-		Max = 1000,
-		Default = 300,
+		Max = 5000,
+		Default = 1000,
 		Suffix = function(val)
 			return val == 1 and 'stud' or 'studs'
 		end
