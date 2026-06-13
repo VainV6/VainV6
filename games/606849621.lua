@@ -474,8 +474,6 @@ run(function()
 	local Target
 	local Mode
 	local Range
-	local Speed
-	local Silent
 	local CircleColor
 	local CircleTransparency
 	local CircleFilled
@@ -485,17 +483,6 @@ run(function()
 	local ProjectileRaycast = RaycastParams.new()
 	ProjectileRaycast.RespectCanCollide = true
 
-	-- camera-snap aimbot math (same idiom as the universal Aim Assist module):
-	-- convert the yaw/pitch delta between where the camera is looking and the
-	-- target into a relative mouse move, scaled by the user's in-game sensitivity.
-	local moveConst = Vector2.new(1, 0.77) * math.rad(0.5)
-	local function wrapAngle(num)
-		num = num % math.pi
-		num -= num >= (math.pi / 2) and math.pi or 0
-		num += num < -(math.pi / 2) and math.pi or 0
-		return num
-	end
-
 	SilentAim = vain.Categories.Combat:CreateModule({
 		Name = 'SilentAim',
 		Function = function(callback)
@@ -503,14 +490,12 @@ run(function()
 				CircleObject.Visible = callback and Mode.Value == 'Mouse'
 			end
 			if callback then
-				-- Silent hook: silently redirect the bullet trajectory (no camera movement).
-				-- Only installed while the Silent toggle is on; the aimbot loop below handles
-				-- the visible camera-snap path.
+				-- Pure SILENT aim: redirect the bullet trajectory to the target inside
+				-- TransformLocalMousePosition. This never moves your mouse or camera --
+				-- only the shot's aim point is changed. (The old visible camera-snap that
+				-- called mousemoverel has been removed; use the Aimbot module for that.)
 				Hooked = jb.GunController.TransformLocalMousePosition
 				jb.GunController.TransformLocalMousePosition = function(self, pos)
-					if not Silent.Enabled then
-						return Hooked(self, pos)
-					end
 					local ent = entitylib['Entity'..Mode.Value]({
 						Range = Range.Value,
 						Wallcheck = Target.Walls.Enabled and (obj or true) or nil,
@@ -536,49 +521,15 @@ run(function()
 					return pos
 				end
 
-				-- aimbot loop: snap the camera onto the closest valid target each frame
-				SilentAim:Clean(runService.RenderStepped:Connect(function(dt)
+				-- keep the range circle following the mouse + optional hitscan; NO mouse move
+				SilentAim:Clean(runService.RenderStepped:Connect(function()
 					if CircleObject then
 						CircleObject.Position = inputService:GetMouseLocation()
 					end
-
 					if Instant.Enabled then
 						local item = jb.ItemSystemController:GetLocalEquipped()
 						if item and item.BulletEmitter then
-							-- Hitscan: BulletEmitter advances a bullet by (now - LastUpdate); pushing
-							-- LastUpdate back almost a full LifeSpan makes the next step move the
-							-- bullet its ENTIRE travel distance in one frame, so it arrives
-							-- instantly instead of flying at BulletSpeed. The tiny epsilon keeps
-							-- it from being culled as expired before the hit registers.
 							rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.001))
-						end
-					end
-
-					-- when Silent is on, the trajectory hook does the work; skip camera movement
-					if Silent.Enabled then return end
-					if vain.gui.ScaledGui.ClickGui.Visible then return end
-
-					local ent = entitylib['Entity'..Mode.Value]({
-						Range = Range.Value,
-						Wallcheck = Target.Walls.Enabled and (obj or true) or nil,
-						Part = 'RootPart',
-						Origin = Mode.Value == 'Mouse' and gameCamera.CFrame.Position or (entitylib.isAlive and entitylib.character.RootPart.Position or nil),
-						Players = Target.Players.Enabled,
-						NPCs = Target.NPCs.Enabled
-					})
-
-					if ent then
-						targetinfo.Targets[ent] = tick() + 1
-						local facing = gameCamera.CFrame.LookVector
-						local new = (ent.RootPart.Position - gameCamera.CFrame.Position).Unit
-						new = new == new and new or Vector3.zero
-						if new ~= Vector3.zero then
-							local diffYaw = wrapAngle(math.atan2(facing.X, facing.Z) - math.atan2(new.X, new.Z))
-							local diffPitch = math.asin(facing.Y) - math.asin(new.Y)
-							local angle = Vector2.new(diffYaw, diffPitch)
-								// (moveConst * UserSettings():GetService('UserGameSettings').MouseSensitivity)
-							angle *= math.min(Speed.Value * dt, 1)
-							mousemoverel(angle.X, angle.Y)
 						end
 					end
 				end))
@@ -586,7 +537,8 @@ run(function()
 				jb.GunController.TransformLocalMousePosition = Hooked
 			end
 		end,
-		Tooltip = 'Aimbot - snaps your camera onto the nearest target. Enable Silent for an invisible trajectory-only redirect instead.'
+		Tooltip = 'Silent aim - silently redirects your bullets to the nearest target. Never moves your mouse or camera. Use the Aimbot module for a camera/hit lock.'
+
 	})
 	Target = SilentAim:CreateTargets({Players = true})
 	Mode = SilentAim:CreateDropdown({
@@ -612,13 +564,6 @@ run(function()
 		Suffix = function(val)
 			return val == 1 and 'stud' or 'studs'
 		end
-	})
-	Speed = SilentAim:CreateSlider({
-		Name = 'Speed',
-		Min = 1,
-		Max = 30,
-		Default = 30,
-		Tooltip = 'How fast the camera snaps onto the target. 30 = instant lock, lower = smoother/legit-looking. Ignored when Silent is on.'
 	})
 	SilentAim:CreateToggle({
 		Name = 'Range Circle',
@@ -678,7 +623,6 @@ run(function()
 		Visible = false
 	})
 	Instant = SilentAim:CreateToggle({Name = 'Hitscan Bullets', Tooltip = 'Bullets skip their travel time and arrive instantly at the target (no lead needed). Best paired with a target Mode above.'})
-	Silent = SilentAim:CreateToggle({Name = 'Silent', Tooltip = 'Invisible mode: silently redirects bullet trajectories to the target instead of moving your camera. Looks legit on your screen but ignores the Speed slider.'})
 end)
 
 -- Dedicated Aimbot: every bullet you fire is silently redirected onto the nearest
@@ -1103,12 +1047,14 @@ run(function()
 	local ArrestRange
 	local arrestDebounce = {} -- [Player] = tick(), avoid re-firing on the same target every frame
 
-	-- Fire the arrest remote for a player, debounced so we don't spam the same
-	-- target every frame while the server processes it.
+	-- Fire the arrest remote for a player. Lightly rate-limited (every 0.1s) so we
+	-- keep RE-FIRING until the server actually registers the arrest, instead of
+	-- giving up after one packet -- this is what makes it land 100% of the time
+	-- even if the first attempt is dropped or arrives a frame too early.
 	local function tryArrest(plr)
 		if not plr then return end
 		local last = arrestDebounce[plr]
-		if not last or tick() - last > 0.4 then
+		if not last or tick() - last > 0.1 then
 			arrestDebounce[plr] = tick()
 			-- the game fires the arrest remote with the PLAYER INSTANCE
 			-- (Players:FindFirstChild(name) -> Player), not the name string
@@ -1133,15 +1079,20 @@ run(function()
 						-- "Action.Arrest"), so we must NOT match it against 'Arrest' -- that
 						-- was the regression that broke arresting entirely. We key purely on
 						-- the ShouldArrest flag + a PlayerName.
-						for _, spec in jb.CircleAction.Specs do
-							if not AutoArrest.Enabled then break end
-							if spec.ShouldArrest and spec.PlayerName then
-								tryArrest(playersService:FindFirstChild(spec.PlayerName))
+						local specs = jb.CircleAction and jb.CircleAction.Specs
+						if type(specs) == 'table' then
+							for _, spec in specs do
+								if not AutoArrest.Enabled then break end
+								if spec.ShouldArrest and spec.PlayerName then
+									tryArrest(playersService:FindFirstChild(spec.PlayerName))
+								end
 							end
 						end
 
 						-- SECONDARY: eject criminals from vehicles, and (InstaArrest) fire
 						-- optimistically by distance so we don't even wait for the prompt.
+						local item = jb.ItemSystemController:GetLocalEquipped()
+						local hasCuffs = item and item.__ClassName == 'Handcuffs'
 						local insta = not InstaArrest or InstaArrest.Enabled
 						local char = entitylib.character
 						local hum = char and char.Humanoid
@@ -1160,7 +1111,7 @@ run(function()
 								if ent.Humanoid.Sit then
 									local vehicle = getVehicle(ent)
 									if vehicle then jb:FireServer('Eject', vehicle) end
-								elseif insta and not isArrested(ent.Player.Name)
+								elseif insta and hasCuffs and not isArrested(ent.Player.Name)
 									and (localPosition - ent.RootPart.Position).Magnitude < range then
 									tryArrest(ent.Player)
 								end
