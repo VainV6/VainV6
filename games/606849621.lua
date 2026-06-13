@@ -863,23 +863,21 @@ run(function()
 end)
 
 
--- Rapid Fire: turns any semi-auto / burst weapon (e.g. the Plasma Shotgun, which
--- is MagSize 4, FireAuto=false, FireFreq 1.66 -> "hold click, it dumps the mag
--- then reloads") into a continuous full-auto with no reload pause. Three live,
--- client-owned levers on the equipped gun, all restored on disable:
---   * Config.FireAuto = true  -> ShootBegin keeps IsShooting=true while held, so
---     the Heartbeat loop (_attemptShoot when IsShooting) fires every tick.
---   * Config.FireFreq raised   -> shrinks the per-shot cooldown
---     (SetNextShotPossible = now + 1/FireFreq). NOTE the server also checks this
---     (getNextShotPossible uses GetServerTimeNow), so we keep it server-plausible
---     via a slider rather than something absurd that the server would reject.
---   * Top up ammo each frame    -> the gun reloads when AmmoCurrentLocal hits 0
---     (_decrementAmmo -> _startReloading). Pinning AmmoCurrent/AmmoCurrentLocal to
---     MagSize and clearing IsReloading means it never enters the reload pause.
+-- Rapid Fire: makes any semi-auto / burst gun fire continuously with no reload
+-- pause -- just hold click. We deliberately do NOT touch FireFreq: the SERVER
+-- independently rate-limits via the NextShotPossibleTime attribute on its own
+-- clock, so inflating the local fire rate gets every extra shot rejected
+-- ("destroyed by server side"). Instead we only flip the two levers the server
+-- can't see:
+--   * Config.FireAuto = true -> ShootBegin keeps IsShooting=true while held, so
+--     the Heartbeat loop fires every time the gun's own cooldown allows. This
+--     gives continuous fire at the gun's LEGIT max rate, which the server accepts.
+--   * Keep the mag topped + clear IsReloading -> the gun never enters the reload
+--     animation (it reloads when AmmoCurrentLocal hits 0), removing the pause
+--     between volleys. Reloading is purely a local gate, so this is server-safe.
 run(function()
 	local RapidFire
-	local FireRate
-	local cfgOriginals = setmetatable({}, {__mode = 'k'}) -- [Config] = {FireAuto=, FireFreq=}
+	local cfgOriginals = setmetatable({}, {__mode = 'k'}) -- [Config] = original FireAuto
 
 	RapidFire = vain.Categories.Combat:CreateModule({
 		Name = 'Rapid Fire',
@@ -889,18 +887,11 @@ run(function()
 					local item = jb.ItemSystemController:GetLocalEquipped()
 					local cfg = item and item.Config
 					if cfg then
-						local saved = cfgOriginals[cfg]
-						if not saved then
-							saved = {FireAuto = cfg.FireAuto, FireFreq = cfg.FireFreq}
-							cfgOriginals[cfg] = saved
+						if cfgOriginals[cfg] == nil then
+							cfgOriginals[cfg] = {FireAuto = cfg.FireAuto}
 						end
-						-- full-auto: holding click keeps firing
+						-- full-auto: holding click keeps firing (at the gun's native rate)
 						cfg.FireAuto = true
-						-- faster cadence (server-validated, so keep it sane)
-						local base = type(saved.FireFreq) == 'number' and saved.FireFreq or 5
-						local target = (FireRate and FireRate.Value) or 12
-						-- don't ever slow a gun that's already faster than the slider
-						cfg.FireFreq = math.max(base, target)
 						-- never reload: keep the mag full and cancel any reload in progress
 						local iiv = item.inventoryItemValue
 						local mag = type(cfg.MagSize) == 'number' and cfg.MagSize or nil
@@ -920,25 +911,73 @@ run(function()
 					task.wait()
 				until not RapidFire.Enabled
 			else
-				-- restore each touched gun's original FireAuto / FireFreq
 				for cfg, saved in cfgOriginals do
-					pcall(function()
-						cfg.FireAuto = saved.FireAuto
-						cfg.FireFreq = saved.FireFreq
-					end)
+					pcall(function() cfg.FireAuto = saved.FireAuto end)
 				end
 				table.clear(cfgOriginals)
 			end
 		end,
-		Tooltip = 'Forces any semi-auto / burst gun (Plasma Shotgun, Revolver, Sniper...) to fire full-auto with no reload pause -- just hold click. Fire rate is capped to stay server-valid.'
+		Tooltip = 'Hold click to fire any semi-auto / burst gun (Plasma Shotgun, Revolver, Sniper...) continuously with no reload pause. Fires at the gun's native max rate -- the server rate-limits anything faster, so this stays accepted.'
+	})
+end)
+
+-- Plasma One-Shot: stacks a plasma weapon's per-pellet damage into a single
+-- trigger pull. The plasma guns (PlasmaGun/PlasmaPistol/PlasmaShotgun) use a
+-- custom ShootOther that loops Config.BulletsPerShot times and, for EACH pellet
+-- that raycasts onto a humanoid, independently fires the Damage remote at that
+-- humanoid (PlasmaGun.lua ShootOther L142-174). The server applies damage per
+-- remote call, so N pellets landing on one target = N x per-pellet damage. By
+-- inflating Config.BulletsPerShot (and zeroing BulletSpread so every pellet
+-- goes to the same aimed point) one click lands dozens of damage packets at
+-- once -> a one-shot. Pairs naturally with Aimbot (every pellet aimed at the
+-- target). Restores BulletsPerShot/BulletSpread on disable.
+run(function()
+	local PlasmaOneShot
+	local Pellets
+	local plasmaOriginals = setmetatable({}, {__mode = 'k'}) -- [Config] = {BulletsPerShot=, BulletSpread=}
+
+	local PLASMA = {PlasmaGun = true, PlasmaPistol = true, PlasmaShotgun = true}
+
+	PlasmaOneShot = vain.Categories.Combat:CreateModule({
+		Name = 'Plasma One-Shot',
+		Function = function(callback)
+			if callback then
+				repeat
+					local item = jb.ItemSystemController:GetLocalEquipped()
+					local cfg = item and item.Config
+					-- only act on plasma weapons (they use the per-pellet ShootOther path)
+					if item and cfg and PLASMA[item.__ClassName] then
+						if plasmaOriginals[cfg] == nil then
+							plasmaOriginals[cfg] = {
+								BulletsPerShot = cfg.BulletsPerShot,
+								BulletSpread = cfg.BulletSpread,
+							}
+						end
+						-- every pellet -> its own damage packet on the same target
+						cfg.BulletsPerShot = (Pellets and Pellets.Value) or 40
+						-- no spread so all pellets converge on the aimed point
+						cfg.BulletSpread = 0
+					end
+					task.wait()
+				until not PlasmaOneShot.Enabled
+			else
+				for cfg, saved in plasmaOriginals do
+					pcall(function()
+						cfg.BulletsPerShot = saved.BulletsPerShot
+						cfg.BulletSpread = saved.BulletSpread
+					end)
+				end
+				table.clear(plasmaOriginals)
+			end
+		end,
+		Tooltip = 'Plasma weapons only. Multiplies the pellets-per-shot so one trigger pull lands many damage packets on the same target -- enough to one-shot. Aim at the target (use Aimbot) and fire once.'
 	})
-	FireRate = RapidFire:CreateSlider({
-		Name = 'Fire Rate',
+	Pellets = PlasmaOneShot:CreateSlider({
+		Name = 'Pellets',
 		Min = 4,
-		Max = 30,
-		Default = 12,
-		Suffix = function(val) return '/s' end,
-		Tooltip = 'Shots per second. Higher = faster, but too high may be rejected by the server (it validates fire rate). 12 is a safe aggressive default.'
+		Max = 80,
+		Default = 40,
+		Tooltip = 'How many damage packets per shot. Higher = more total damage (more reliable one-shot) but more remote spam; too high may be flagged. 40 is plenty.'
 	})
 end)
 
