@@ -731,11 +731,15 @@ run(function()
 						Players = Target.Players.Enabled,
 						NPCs = Target.NPCs.Enabled
 					})
-					-- Skip dead or already-arrested players (only relevant for player
-					-- targets; NPCs have no Player/arrest state).
-					if ent and ent.Player and not isValidCriminal(ent)
-						and ent.Player.Team == teamsService.Prisoner then
-						return pos
+					-- Skip ONLY dead targets and friends. We deliberately do NOT gate on
+					-- isValidCriminal/team here: the aimbot is a general PvP weapon, so it
+					-- must be able to shoot ANYONE you target -- including a Prisoner who
+					-- isn't committing a crime, a fellow Police officer, or a flying
+					-- hacker. (The old criminal-only gate made the aimbot refuse to fire
+					-- at non-criminal players: "he can hit me but I can't hit him".)
+					if ent and ent.Player then
+						if not isAliveEnt(ent) then return pos end
+						if isFriend(ent.Player) then return pos end
 					end
 					if ent and ent[part] then
 						-- If the target is in a vehicle, aim at the CAR instead of trying to
@@ -858,6 +862,86 @@ run(function()
 	})
 end)
 
+
+-- Rapid Fire: turns any semi-auto / burst weapon (e.g. the Plasma Shotgun, which
+-- is MagSize 4, FireAuto=false, FireFreq 1.66 -> "hold click, it dumps the mag
+-- then reloads") into a continuous full-auto with no reload pause. Three live,
+-- client-owned levers on the equipped gun, all restored on disable:
+--   * Config.FireAuto = true  -> ShootBegin keeps IsShooting=true while held, so
+--     the Heartbeat loop (_attemptShoot when IsShooting) fires every tick.
+--   * Config.FireFreq raised   -> shrinks the per-shot cooldown
+--     (SetNextShotPossible = now + 1/FireFreq). NOTE the server also checks this
+--     (getNextShotPossible uses GetServerTimeNow), so we keep it server-plausible
+--     via a slider rather than something absurd that the server would reject.
+--   * Top up ammo each frame    -> the gun reloads when AmmoCurrentLocal hits 0
+--     (_decrementAmmo -> _startReloading). Pinning AmmoCurrent/AmmoCurrentLocal to
+--     MagSize and clearing IsReloading means it never enters the reload pause.
+run(function()
+	local RapidFire
+	local FireRate
+	local cfgOriginals = setmetatable({}, {__mode = 'k'}) -- [Config] = {FireAuto=, FireFreq=}
+
+	RapidFire = vain.Categories.Combat:CreateModule({
+		Name = 'Rapid Fire',
+		Function = function(callback)
+			if callback then
+				repeat
+					local item = jb.ItemSystemController:GetLocalEquipped()
+					local cfg = item and item.Config
+					if cfg then
+						local saved = cfgOriginals[cfg]
+						if not saved then
+							saved = {FireAuto = cfg.FireAuto, FireFreq = cfg.FireFreq}
+							cfgOriginals[cfg] = saved
+						end
+						-- full-auto: holding click keeps firing
+						cfg.FireAuto = true
+						-- faster cadence (server-validated, so keep it sane)
+						local base = type(saved.FireFreq) == 'number' and saved.FireFreq or 5
+						local target = (FireRate and FireRate.Value) or 12
+						-- don't ever slow a gun that's already faster than the slider
+						cfg.FireFreq = math.max(base, target)
+						-- never reload: keep the mag full and cancel any reload in progress
+						local iiv = item.inventoryItemValue
+						local mag = type(cfg.MagSize) == 'number' and cfg.MagSize or nil
+						if iiv and mag then
+							pcall(function()
+								iiv:SetAttribute('AmmoCurrent', mag)
+								iiv:SetAttribute('AmmoCurrentLocal', mag)
+								if iiv:GetAttribute('IsReloading') then
+									iiv:SetAttribute('IsReloading', false)
+								end
+							end)
+						end
+						if item.IsReloading then
+							pcall(function() item.IsReloading = false end)
+						end
+					end
+					task.wait()
+				until not RapidFire.Enabled
+			else
+				-- restore each touched gun's original FireAuto / FireFreq
+				for cfg, saved in cfgOriginals do
+					pcall(function()
+						cfg.FireAuto = saved.FireAuto
+						cfg.FireFreq = saved.FireFreq
+					end)
+				end
+				table.clear(cfgOriginals)
+			end
+		end,
+		Tooltip = 'Forces any semi-auto / burst gun (Plasma Shotgun, Revolver, Sniper...) to fire full-auto with no reload pause -- just hold click. Fire rate is capped to stay server-valid.'
+	})
+	FireRate = RapidFire:CreateSlider({
+		Name = 'Fire Rate',
+		Min = 4,
+		Max = 30,
+		Default = 12,
+		Suffix = function(val) return '/s' end,
+		Tooltip = 'Shots per second. Higher = faster, but too high may be rejected by the server (it validates fire rate). 12 is a safe aggressive default.'
+	})
+end)
+
 run(function()
 	local Wallbang = {Enabled = false}
 	
@@ -885,8 +969,21 @@ run(function()
 	
 				repeat
 					local item = jb.ItemSystemController:GetLocalEquipped()
-					if item and item.BulletEmitter then
-						item.BulletEmitter.IgnoreList = {workspace}
+					if item then
+						-- Two raycast paths to defeat:
+						--  * Regular Gun: each shot raycasts the BulletEmitter, whose
+						--    IgnoreList is copied from item.IgnoreList in SetupEmitter
+						--    (Gun.lua: u90.BulletEmitter.IgnoreList = assert(u90.IgnoreList)).
+						--  * Plasma weapons (PlasmaPistol/PlasmaGun/PlasmaShotgun): they
+						--    OVERRIDE Shoot with ShootOther, which never touches the
+						--    BulletEmitter -- it raycasts directly against item.IgnoreList
+						--    (PlasmaGun.lua ShootOther: FilterDescendantsInstances = IgnoreList).
+						-- Setting only BulletEmitter.IgnoreList left plasma bullets blocked
+						-- by walls, so we set item.IgnoreList too (covers both paths).
+						item.IgnoreList = {workspace}
+						if item.BulletEmitter then
+							item.BulletEmitter.IgnoreList = {workspace}
+						end
 					end
 					task.wait(0.1)
 				until not Wallbang.Enabled
