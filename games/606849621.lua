@@ -1065,6 +1065,15 @@ run(function()
 	local ArrestRange
 	local arrestDebounce = {} -- [Player] = tick(), avoid re-firing on the same target every frame
 
+	-- The game decides team by player.TeamValue.Value (a string "Police" /
+	-- "Prisoner"), NOT the Roblox Teams service -- gating on lplr.Team was
+	-- comparing against a possibly-nil Team object, so AutoArrest never ran.
+	local function teamOf(plr)
+		local tv = plr and plr:FindFirstChild('TeamValue')
+		if tv then return tv.Value end
+		return plr and plr.Team and plr.Team.Name
+	end
+
 	-- Fire the arrest remote for a player. Lightly rate-limited (every 0.1s) so we
 	-- keep RE-FIRING until the server actually registers the arrest, instead of
 	-- giving up after one packet -- this is what makes it land 100% of the time
@@ -1092,7 +1101,7 @@ run(function()
 				-- and never true for in-car targets) -- that was the unreliability.
 				-- In-vehicle criminals are ejected first, then arrested next pass.
 				repeat
-					if entitylib.isAlive and lplr.Team == teamsService.Police then
+					if entitylib.isAlive and teamOf(lplr) == 'Police' then
 						local item = jb.ItemSystemController:GetLocalEquipped()
 						local hasCuffs = item and item.__ClassName == 'Handcuffs'
 						local char = entitylib.character
@@ -1108,7 +1117,7 @@ run(function()
 							if not AutoArrest.Enabled then break end
 							local plr = ent.Player
 							if myPos and plr and ent.RootPart and ent.Humanoid
-								and plr.Team == teamsService.Prisoner then
+								and teamOf(plr) == 'Prisoner' then
 								local tchar = plr.Character
 								local inVehicle = ent.Humanoid.Sit
 									or (tchar and tchar:GetAttribute('InVehicle'))
