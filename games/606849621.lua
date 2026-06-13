@@ -692,6 +692,8 @@ run(function()
 	local Hooked
 	local AimRaycast = RaycastParams.new()
 	AimRaycast.RespectCanCollide = true
+	local inflatedRoots = {} -- [RootPart] = true, hit radii we enlarged (restore on disable)
+	local HITBOX_RADIUS = 12 -- studs; default is 3. Big enough to catch in-car targets.
 
 	-- Target-priority sort functions. Each entitylib sorting item is
 	-- {Entity = <ent>, Magnitude = <distance>}; the entity exposes .Humanoid,
@@ -797,11 +799,25 @@ run(function()
 				-- and absorbs the shot, which is why in-car targets rarely took damage.
 				-- Setting IgnoreList = {workspace} (same trick Wallbang uses) makes the
 				-- ray pass through the car so the proximity hit on the occupant lands.
+				--
+				-- AND inflate each target's RootPart hit radius. The emitter sizes its
+				-- proximity sphere from RootPart:GetAttribute('HitRadius') (default 3,
+				-- see CombatUtils.getRootPartHitRadius). The proximity check runs BEFORE
+				-- the surface raycast, so a large radius means any shot passing near the
+				-- RootPart registers regardless of the car body -- this is what actually
+				-- makes in-vehicle targets take damage reliably.
 				Aimbot:Clean(runService.RenderStepped:Connect(function()
 					local item = jb.ItemSystemController:GetLocalEquipped()
 					if item and item.BulletEmitter then
 						rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.001))
 						item.BulletEmitter.IgnoreList = {workspace}
+					end
+					for _, ent in entitylib.List do
+						if ent.RootPart and ent.Targetable
+							and ((ent.Player and Target.Players.Enabled) or (ent.NPC and Target.NPCs.Enabled)) then
+							inflatedRoots[ent.RootPart] = true
+							ent.RootPart:SetAttribute('HitRadius', HITBOX_RADIUS)
+						end
 					end
 				end))
 			else
@@ -811,6 +827,11 @@ run(function()
 				if item and item.BulletEmitter then
 					item.BulletEmitter.IgnoreList = {}
 				end
+				-- restore every RootPart hit radius we inflated
+				for root in inflatedRoots do
+					pcall(function() root:SetAttribute('HitRadius', nil) end)
+				end
+				table.clear(inflatedRoots)
 			end
 		end,
 		Tooltip = 'Instantly hits the highest-priority target in range with zero bullet travel time. No aiming or camera movement -- just shoot. Works through car bodies on players in vehicles.'
@@ -1110,20 +1131,42 @@ run(function()
 	local ArrestRange
 	local arrestDebounce = {} -- [Player] = tick(), avoid re-firing on the same target every frame
 
+	-- Fire the arrest remote for a player, debounced so we don't spam the same
+	-- target every frame while the server processes it.
+	local function tryArrest(plr)
+		if not plr then return end
+		local last = arrestDebounce[plr]
+		if not last or tick() - last > 0.4 then
+			arrestDebounce[plr] = tick()
+			-- the game fires the arrest remote with the PLAYER INSTANCE
+			-- (Players:FindFirstChild(name) -> Player), not the name string
+			jb:FireServer('Arrest', plr)
+		end
+	end
+
 	AutoArrest = vain.Categories.Blatant:CreateModule({
 		Name = 'AutoArrest',
 		Function = function(callback)
 			if callback then
 				repeat
-					local item = jb.ItemSystemController:GetLocalEquipped()
-					-- InstaArrest: don't wait for handcuffs to be equipped or for the
-					-- old 0.6s cooldown -- arrest the instant a criminal is in range.
-					local insta = not InstaArrest or InstaArrest.Enabled
-					if entitylib.isAlive and (insta or (item and item.__ClassName == 'Handcuffs')) then
-						-- HumanoidUnloadServerPosition is now a CHILD Value of the Humanoid
-						-- (FindFirstChild), not a direct property -- indexing it directly
-						-- threw "not a valid member" every tick, aborting the arrest loop.
-						-- Fall back to the real RootPart position if it isn't present.
+					if entitylib.isAlive then
+						-- PRIMARY: drive off the game's own arrest prompts. CircleAction.Specs
+						-- holds an 'Arrest' spec per nearby criminal whose .ShouldArrest the
+						-- game flips true the INSTANT the target is genuinely arrestable
+						-- (police + handcuffs + in ArrestDistance). This is the authoritative
+						-- signal the server honours, and reading the live flag (not a state
+						-- transition) means a target ALREADY in range is caught too -- which is
+						-- what the distance-only check kept missing.
+						for _, spec in jb.CircleAction.Specs do
+							if not AutoArrest.Enabled then break end
+							if spec.Name == 'Arrest' and spec.ShouldArrest and spec.PlayerName then
+								tryArrest(playersService:FindFirstChild(spec.PlayerName))
+							end
+						end
+
+						-- SECONDARY: eject criminals from vehicles, and (InstaArrest) fire
+						-- optimistically by distance so we don't even wait for the prompt.
+						local insta = not InstaArrest or InstaArrest.Enabled
 						local char = entitylib.character
 						local hum = char and char.Humanoid
 						local root = char and char.RootPart
@@ -1135,34 +1178,25 @@ run(function()
 							Part = 'RootPart',
 							Range = math.max(50, range)
 						})
-
 						for _, ent in plrs do
 							if not AutoArrest.Enabled then break end
 							if localPosition and ent.Player and ent.RootPart and ent.Humanoid and isIllegal(ent) then
-								local vehicle = ent.Humanoid.Sit and getVehicle(ent) or nil
-								if vehicle then
-									jb:FireServer('Eject', vehicle)
-								elseif not isArrested(ent.Player.Name) and (localPosition - ent.RootPart.Position).Magnitude < range then
-									-- short per-target debounce so we fire once on entry,
-									-- not every 16ms while the server processes the arrest
-									local last = arrestDebounce[ent.Player]
-									if not last or tick() - last > 0.5 then
-										arrestDebounce[ent.Player] = tick()
-										-- the game fires the arrest remote with the PLAYER
-										-- INSTANCE (Players:FindFirstChild(name) -> Player),
-										-- not the name string
-										jb:FireServer('Arrest', ent.Player)
-									end
+								if ent.Humanoid.Sit then
+									local vehicle = getVehicle(ent)
+									if vehicle then jb:FireServer('Eject', vehicle) end
+								elseif insta and not isArrested(ent.Player.Name)
+									and (localPosition - ent.RootPart.Position).Magnitude < range then
+									tryArrest(ent.Player)
 								end
 							end
 						end
 					end
-					task.wait(0.016)
+					task.wait()
 				until not AutoArrest.Enabled
 				table.clear(arrestDebounce)
 			end
 		end,
-		Tooltip = 'Instantly arrests nearby criminals the moment they are in range. Ejects them from vehicles first.'
+		Tooltip = 'Instantly arrests nearby criminals the moment they are in range, reading the game arrest prompts. Ejects them from vehicles first.'
 	})
 	InstaArrest = AutoArrest:CreateToggle({
 		Name = 'Insta Arrest',
