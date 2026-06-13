@@ -79,12 +79,24 @@ end
 local function isArrested(name)
 	-- spec.Name is a localized display string, so match on PlayerName + the
 	-- presence of the ShouldArrest field (the arrest spec) instead of v.Name.
-	for i, v in jb.CircleAction.Specs do
+	local specs = jb.CircleAction and jb.CircleAction.Specs
+	if type(specs) ~= 'table' then return false end
+	for i, v in specs do
 		if v.PlayerName == name and v.ShouldArrest ~= nil then
 			return not v.ShouldArrest
 		end
 	end
 	return false
+end
+
+-- An entity is alive if it has a humanoid with health left. entitylib mirrors
+-- the humanoid health onto ent.Health.
+local function isAliveEnt(ent)
+	if not ent then return false end
+	local h = ent.Health
+	if type(h) == 'number' then return h > 0 end
+	local hum = ent.Humanoid
+	return hum and hum.Health > 0 or false
 end
 
 local function isFriend(plr, recolor)
@@ -112,6 +124,18 @@ local function isIllegal(ent)
 
 		return ent.Illegal
 	end
+	return true
+end
+
+-- A criminal worth acting on for AutoTaze / Aimbot: alive, illegal, and not
+-- already handcuffed/arrested. Skips dead and already-arrested players.
+local function isValidCriminal(ent)
+	if not (ent and ent.Player) then return false end
+	if not isAliveEnt(ent) then return false end
+	if not isIllegal(ent) then return false end
+	if isArrested(ent.Player.Name) then return false end
+	local char = ent.Player.Character
+	if char and char:GetAttribute('HasHandcuffs') then return false end
 	return true
 end
 
@@ -645,6 +669,7 @@ run(function()
 	AimRaycast.RespectCanCollide = true
 	local inflatedRoots = {} -- [RootPart] = true, hit radii we enlarged (restore on disable)
 	local HITBOX_RADIUS = 20 -- studs; default is 3. Big enough to catch in-car targets.
+	local aimingAtCar = false -- set by the trajectory hook when the current target is in a car
 
 	-- Target-priority sort functions. Each entitylib sorting item is
 	-- {Entity = <ent>, Magnitude = <distance>}; the entity exposes .Humanoid,
@@ -706,16 +731,31 @@ run(function()
 						Players = Target.Players.Enabled,
 						NPCs = Target.NPCs.Enabled
 					})
+					-- Skip dead or already-arrested players (only relevant for player
+					-- targets; NPCs have no Player/arrest state).
+					if ent and ent.Player and not isValidCriminal(ent)
+						and ent.Player.Team == teamsService.Prisoner then
+						return pos
+					end
 					if ent and ent[part] then
-						-- Aim STRAIGHT at the target part -- exactly what your manual mouse
-						-- aim hands the gun. Hitscan is forced on below, so the bullet has
-						-- zero travel time: nothing to lead, no gravity drop to compensate.
-						-- The old SolveTrajectory returned a gravity-arc lead point that
-						-- overshot at close range, which is why manual aim hit in-car targets
-						-- but the aimbot missed.
+						-- If the target is in a vehicle, aim at the CAR instead of trying to
+						-- shoot the driver through the body -- so the shots hit/pop the car.
+						local hum = ent.Humanoid
+						if hum and (hum.Sit or (ent.Player and ent.Player.Character and ent.Player.Character:GetAttribute('InVehicle'))) then
+							local vehicle = getVehicle(ent)
+							local vpart = vehicle and (vehicle.PrimaryPart or vehicle:FindFirstChildWhichIsA('BasePart', true))
+							if vpart then
+								aimingAtCar = true
+								targetinfo.Targets[ent] = tick() + 1
+								return vpart.Position
+							end
+						end
+						-- Aim STRAIGHT at the target part (hitscan = no lead/gravity needed).
+						aimingAtCar = false
 						targetinfo.Targets[ent] = tick() + 1
 						return ent[part].Position
 					end
+					aimingAtCar = false
 					return pos
 				end
 
@@ -728,7 +768,11 @@ run(function()
 					local item = jb.ItemSystemController:GetLocalEquipped()
 					if item and item.BulletEmitter then
 						rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.001))
-						item.BulletEmitter.IgnoreList = {workspace}
+						-- Normally ignore world geometry so on-foot shots pass through walls.
+						-- BUT when we're aiming at a car (in-car target), the bullet must be
+						-- able to COLLIDE with the car to damage it -- so don't ignore the
+						-- world in that case.
+						item.BulletEmitter.IgnoreList = aimingAtCar and {} or {workspace}
 					end
 					for _, e in entitylib.List do
 						if e.Targetable
@@ -751,6 +795,7 @@ run(function()
 					end
 				end))
 			else
+				aimingAtCar = false
 				jb.GunController.TransformLocalMousePosition = Hooked
 				local item = jb.ItemSystemController:GetLocalEquipped()
 				if item and item.BulletEmitter then
@@ -1377,7 +1422,7 @@ run(function()
 				jb.TaserController.TransformLocalMousePosition = function(self, pos)
 					local range = (self.Config and self.Config.Range) or 50
 					local ent = entitylib.EntityPosition({ Players = true, Part = 'RootPart', Range = range })
-					if ent and ent.RootPart and isIllegal(ent) and not isArrested(ent.Player.Name) then
+					if ent and ent.RootPart and isValidCriminal(ent) then
 						return ent.RootPart.Position
 					end
 					return tazeHook(self, pos)
@@ -1393,7 +1438,7 @@ run(function()
 						local ready = not (type(nextUse) == 'number' and os.clock() < (nextUse or 0))
 						local range = (item.Config and item.Config.Range) or 50
 						local ent = entitylib.EntityPosition({ Players = true, Part = 'RootPart', Range = range })
-						if ready and ent and isIllegal(ent) and not isArrested(ent.Player.Name) then
+						if ready and ent and isValidCriminal(ent) then
 							-- the game's own Tase: raycasts toward our redirected
 							-- MousePosition, finds the criminal, fires the correct remote.
 							-- Tase ends with BroadcastInputBegan(input) which asserts the
