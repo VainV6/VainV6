@@ -153,30 +153,24 @@ end
 -- Best-effort attack against an enemy entity using the equipped weapon. Returns
 -- true if it managed to fire something. Pure-melee gears usually accept the
 -- target's hitbox/character; we try those shapes, then fall back to Activated.
+-- The gears are classic Kohl's-style tools: an attack is a MouseClick down then
+-- up on the tool's ServerControl, with the aim point in MousePosition. (Verified
+-- from the decompiled gear source: InvokeServer("MouseClick", {Down=..., ...,
+-- MousePosition=Vector3}).) The server resolves the hit, so pointing MousePosition
+-- at the enemy's hitbox is enough.
 local function attackEnemy(ent)
-	local hitbox = ent.Character and (ent.Character:FindFirstChild('EnemyHitBox') or ent.RootPart)
 	local sc, tool = getServerControl()
-	if sc then
-		-- Classic linked-gear conventions, tried in order. pcall each so a wrong
-		-- signature doesn't error the loop.
-		local target = hitbox or ent.RootPart
-		local hum = ent.Humanoid
-		local tries = {
-			function() return sc:InvokeServer(target) end,
-			function() return sc:InvokeServer(hum, target) end,
-			function() return sc:InvokeServer('Damage', target) end,
-			function() return sc:InvokeServer('Hit', target) end,
-		}
-		for _, fn in tries do
-			local ok = pcall(fn)
-			if ok then return true end
-		end
+	if not sc then
+		if tool then return pcall(function() tool:Activate() end) end
+		return false
 	end
-	if tool then
-		local ok = pcall(function() tool:Activate() end)
-		if ok then return true end
-	end
-	return false
+	local hitbox = ent.Character and (ent.Character:FindFirstChild('EnemyHitBox') or ent.RootPart)
+	local aim = hitbox and hitbox.Position or ent.RootPart.Position
+	local ok = pcall(function()
+		sc:InvokeServer('MouseClick', {Down = true, MousePosition = aim})
+		sc:InvokeServer('MouseClick', {Down = false, HeldTime = 0, MousePosition = aim})
+	end)
+	return ok
 end
 
 local function aliveLocal()
@@ -513,23 +507,29 @@ run(function()
 		return (calc or part.Position), ent
 	end
 
-	-- Rewrite the aim argument(s) of a fire call to our predicted point. The bow's
-	-- ServerControl is invoked with a Vector3 (mouse hit) or a CFrame (look) -- we
-	-- don't know which slot, so we swap the FIRST positional Vector3/CFrame we see
-	-- with the lead point, leaving everything else untouched.
+	-- The gears fire with InvokeServer("MouseClick", {Down=false, HeldTime=...,
+	-- MousePosition=Vector3}). We only need to overwrite that MousePosition with
+	-- our computed lead point (verified from the decompiled bow source). As a
+	-- fallback we also swap any loose Vector3/CFrame arg, in case a gear differs.
 	local function rewriteArgs(aim, ...)
 		local args = {...}
-		for i, v in args do
+		local n = select('#', ...)
+		local changed = false
+		for i = 1, n do
+			local v = args[i]
 			local t = typeof(v)
-			if t == 'Vector3' then
+			if t == 'table' and v.MousePosition ~= nil then
+				v.MousePosition = aim
+				changed = true
+			elseif not changed and t == 'Vector3' then
 				args[i] = aim
-				return table.unpack(args, 1, select('#', ...))
-			elseif t == 'CFrame' then
+				changed = true
+			elseif not changed and t == 'CFrame' then
 				args[i] = CFrame.lookAt(v.Position, aim)
-				return table.unpack(args, 1, select('#', ...))
+				changed = true
 			end
 		end
-		return ...
+		return table.unpack(args, 1, n)
 	end
 
 	-- Is `self` the ServerControl RemoteFunction of the tool we have equipped?
