@@ -627,6 +627,46 @@ run(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
+--  AUTO ABILITY  (spam a class ability key via the gear KeyPress action)
+-- ══════════════════════════════════════════════════════════════════════════════
+run(function()
+	-- Verified from the gear source: abilities fire via
+	--   ServerControl:InvokeServer("KeyPress", {Down = bool, Key = <key>})
+	-- so we replay a down+up KeyPress for the chosen ability key on a cycle.
+	local AutoAbility
+	local AbilityKey, Delay
+
+	local KEYS = {
+		Q = Enum.KeyCode.Q, E = Enum.KeyCode.E, R = Enum.KeyCode.R, F = Enum.KeyCode.F,
+		Z = Enum.KeyCode.Z, X = Enum.KeyCode.X, C = Enum.KeyCode.C, V = Enum.KeyCode.V,
+	}
+
+	AutoAbility = vain.Categories.Combat:CreateModule({
+		Name = 'Auto Ability',
+		Function = function(callback)
+			if callback then
+				task.spawn(function()
+					repeat
+						local sc = getServerControl()
+						local key = AbilityKey and KEYS[AbilityKey.Value] or Enum.KeyCode.Q
+						if sc and aliveLocal() then
+							pcall(function()
+								sc:InvokeServer('KeyPress', {Down = true, Key = key})
+								sc:InvokeServer('KeyPress', {Down = false, Key = key})
+							end)
+						end
+						task.wait(Delay and Delay.Value or 1)
+					until not AutoAbility.Enabled
+				end)
+			end
+		end,
+		Tooltip = 'Repeatedly triggers your equipped weapon ability key (fires the gear KeyPress action). Pick the key your class ability is bound to.'
+	})
+	AbilityKey = AutoAbility:CreateDropdown({Name = 'Ability Key', List = {'Q', 'E', 'R', 'F', 'Z', 'X', 'C', 'V'}, Default = 'Q'})
+	Delay = AutoAbility:CreateSlider({Name = 'Delay', Min = 0.1, Max = 10, Default = 1, Decimal = 10, Suffix = 's'})
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
 --  AUTO DASH  (spam dash off cooldown -- movement help for kiting)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
