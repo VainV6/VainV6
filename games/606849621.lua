@@ -1944,8 +1944,10 @@ run(function()
 	local VehicleFly
 	local FlySpeed
 	local flyConn
+	local flyVelConn
 	local anchored = {} -- [part] = previous Anchored state, to restore
 	local flyDriveSaved = setmetatable({}, {__mode = 'k'}) -- [chassis] = original LaunchSpeedMult
+	local flyTractionSaved = setmetatable({}, {__mode = 'k'}) -- [chassis] = original Traction
 
 	local function chassis()
 		local vc = jb.VehicleController
@@ -1974,6 +1976,7 @@ run(function()
 
 	local function stopFly()
 		if flyConn then flyConn:Disconnect() flyConn = nil end
+		if flyVelConn then flyVelConn:Disconnect() flyVelConn = nil end
 
 		-- COMMIT THE POSITION before we let go. CFrame fly teleports the car via
 		-- PivotTo while anchored; the server's position anticheat never trusts those
@@ -2012,11 +2015,15 @@ run(function()
 			end
 		end
 
-		-- restore any chassis drive we neutralized for velocity fly
+		-- restore any chassis drive / traction we neutralized for velocity fly
 		for c, was in flyDriveSaved do
 			pcall(function() c.LaunchSpeedMult = was end)
 		end
 		table.clear(flyDriveSaved)
+		for c, was in flyTractionSaved do
+			pcall(function() c.Traction = was end)
+		end
+		table.clear(flyTractionSaved)
 	end
 
 	-- CFrame fly: anchor the assembly and step the model's CFrame. Snappy but
@@ -2064,6 +2071,14 @@ run(function()
 			if flyDriveSaved[c] == nil then flyDriveSaved[c] = c.LaunchSpeedMult end
 			c.LaunchSpeedMult = 0
 		end
+		-- Also drop ground friction. Near the ground the wheels grip and the chassis
+		-- bleeds horizontal velocity (vertical lifts you off, so it's unaffected --
+		-- the other reason sideways felt slow). Zeroing Traction removes that drag;
+		-- skidding is irrelevant because we hard-set the velocity every Heartbeat.
+		if type(c.Traction) == 'number' then
+			if flyTractionSaved[c] == nil then flyTractionSaved[c] = c.Traction end
+			c.Traction = 0
+		end
 		local speed = (FlySpeed and FlySpeed.Value) or 120
 		local dir = inputDir()
 		-- set the whole assembly's velocity; if no input, hover (zero velocity) so
@@ -2077,10 +2092,21 @@ run(function()
 		Name = 'Vehicle Fly',
 		Function = function(callback)
 			if callback then
+				-- CFrame mode anchors + PivotTo, so it runs on RenderStepped (timing
+				-- vs physics doesn't matter when anchored). Velocity mode must run on
+				-- HEARTBEAT (which fires AFTER the AlexChassis physics step) -- if we
+				-- set AssemblyLinearVelocity on RenderStepped (before physics), the
+				-- chassis's wheel friction/drive step runs afterward and DAMPS our
+				-- horizontal velocity, while the airborne vertical axis is untouched ->
+				-- horizontal felt extremely slow. Setting it on Heartbeat makes our
+				-- velocity the last word each frame, so all axes hit full speed.
 				flyConn = runService.RenderStepped:Connect(function(dt)
 					if (FlyMode and FlyMode.Value) == 'CFrame' then
 						flyCFrame(dt)
-					else
+					end
+				end)
+				flyVelConn = runService.Heartbeat:Connect(function()
+					if (FlyMode and FlyMode.Value) ~= 'CFrame' then
 						flyVelocity()
 					end
 				end)
