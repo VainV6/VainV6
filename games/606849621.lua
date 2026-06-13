@@ -944,11 +944,40 @@ end)
 
 run(function()
 	local Wallbang = {Enabled = false}
-	
+	local WB_HITBOX = 18 -- studs; default RootPart hit radius is 3
+	local wbInflated = {} -- [RootPart] = true, radii we enlarged (restore on disable)
+	local wbConn -- RenderStepped connection for hitbox inflation
+
 	Wallbang = vain.Categories.Combat:CreateModule({
 		Name = 'Wallbang',
 		Function = function(callback)
 			if callback then
+				-- INFLATE TARGET HITBOXES every frame. This is what actually makes
+				-- through-wall shots LAND reliably: the BulletEmitter checks a proximity
+				-- sphere around each player's RootPart (sized by its 'HitRadius' attr,
+				-- default 3) BEFORE the surface raycast, and a hit there ignores walls
+				-- entirely. With the default radius of 3 you have to be aiming nearly
+				-- dead-on, so most through-wall shots slip past the sphere and then get
+				-- swallowed by the {workspace} IgnoreList -> "barely hitting through
+				-- walls". A big radius makes any roughly-aimed shot register. (The
+				-- Aimbot does the same; Wallbang now does it standalone too.)
+				wbConn = runService.RenderStepped:Connect(function()
+					for _, e in entitylib.List do
+						if e.Targetable and (e.Player or e.NPC) then
+							local parts = {e.RootPart}
+							local char = e.Character
+							local hrp = char and char:FindFirstChild('HumanoidRootPart')
+							if hrp then parts[#parts + 1] = hrp end
+							for _, part in parts do
+								if part then
+									wbInflated[part] = true
+									part:SetAttribute('HitRadius', WB_HITBOX)
+								end
+							end
+						end
+					end
+				end)
+
 				local hook
 				hook = hookfunction(jb.GunController.BulletEmitterOnLocalHitPlayer, function(...)
 					-- Guard the metadata arg: its position/type can shift between game
@@ -989,9 +1018,14 @@ run(function()
 				until not Wallbang.Enabled
 			else
 				restorefunction(jb.GunController.BulletEmitterOnLocalHitPlayer)
+				if wbConn then wbConn:Disconnect() wbConn = nil end
+				for root in wbInflated do
+					pcall(function() root:SetAttribute('HitRadius', nil) end)
+				end
+				table.clear(wbInflated)
 			end
 		end,
-		Tooltip = 'Modifies bullets to always do headshot damage & shooting through most walls.'
+		Tooltip = 'Shoot through most walls + always headshot damage. Inflates target hitboxes so through-wall shots actually land (default aim has to be near-perfect otherwise).'
 	})
 end)
 
