@@ -11,6 +11,7 @@ local mainapi = {
 	Loaded = false,
 	Libraries = {},
 	Modules = {},
+	FavouritesCategory = false,
 	Place = game.PlaceId,
 	Profile = 'default',
 	Profiles = {},
@@ -3743,7 +3744,8 @@ function mainapi:CreateCategory(categorysettings)
 			Index = getTableSize(mainapi.Modules),
 			ExtraText = modulesettings.ExtraText,
 			Name = modulesettings.Name,
-			Category = categorysettings.Name
+			Category = categorysettings.Name,
+			HomeChildren = children -- the category frame this module normally lives in
 		}
 
 		local hovered = false
@@ -3903,12 +3905,25 @@ function mainapi:CreateCategory(categorysettings)
 			end
 		end
 
+		-- Move the module between its home category and the Favourites category,
+		-- depending on whether Favourites-category mode is on and it's favourited.
+		function moduleapi:RelocateFavourite()
+			local favCat = mainapi.Categories.Favourites
+			local toFav = mainapi.FavouritesCategory and self.Favourite and favCat and favCat.Children
+			local target = toFav and favCat.Children or self.HomeChildren
+			if target and modulebutton.Parent ~= target then
+				modulebutton.Parent = target
+				modulechildren.Parent = target
+			end
+		end
+
 		function moduleapi:SetFavourite(state, skipsort)
 			self.Favourite = state and true or false
 			favicon.ImageColor3 = self.Favourite and uipallet.Text or color.Dark(uipallet.Text, 0.43)
 			fav.BackgroundTransparency = self.Favourite and 0.85 or 0.92
 			-- favourited modules keep their star visible even when not hovered
 			fav.Visible = self.Favourite or hovered or modulechildren.Visible
+			self:RelocateFavourite()
 			if not skipsort then
 				mainapi:SortModules()
 			end
@@ -4123,6 +4138,7 @@ function mainapi:CreateCategory(categorysettings)
 	})
 
 	categoryapi.Object = window
+	categoryapi.Children = children
 	self.Categories[categorysettings.Name] = categoryapi
 
 	return categoryapi
@@ -5832,17 +5848,25 @@ function mainapi:LoadOptions(object, savedoptions)
 end
 
 function mainapi:SortModules()
+	local favMode = self.FavouritesCategory
+	-- Group modules by the category they currently LIVE in: in Favourites mode a
+	-- favourited module lives in 'Favourites', otherwise in its home category.
 	local sorting = {}
 	for _, v in self.Modules do
-		sorting[v.Category] = sorting[v.Category] or {}
-		table.insert(sorting[v.Category], v.Name)
+		local cat = (favMode and v.Favourite) and 'Favourites' or v.Category
+		sorting[cat] = sorting[cat] or {}
+		table.insert(sorting[cat], v.Name)
 	end
 
-	for _, sort in sorting do
-		-- Favourited modules float to the top of the category, then alphabetical within each group.
+	for cat, sort in sorting do
 		table.sort(sort, function(a, b)
-			local fa, fb = self.Modules[a].Favourite, self.Modules[b].Favourite
-			if fa ~= fb then return fa end
+			-- Pin mode: favourites float to the top of their own category, then
+			-- alphabetical. Favourites-category mode: plain alphabetical everywhere
+			-- (favourites already moved into their own category).
+			if not favMode and cat ~= 'Favourites' then
+				local fa, fb = self.Modules[a].Favourite, self.Modules[b].Favourite
+				if fa ~= fb then return fa end
+			end
 			return a < b
 		end)
 		for i, v in sort do
@@ -5851,6 +5875,20 @@ function mainapi:SortModules()
 			self.Modules[v].Children.LayoutOrder = i
 		end
 	end
+end
+
+-- Toggle Favourites-category mode: relocate every module to its correct frame,
+-- show/hide the Favourites category button, then re-sort.
+function mainapi:SetFavouritesCategory(state)
+	self.FavouritesCategory = state and true or false
+	for _, v in self.Modules do
+		if v.RelocateFavourite then v:RelocateFavourite() end
+	end
+	local favCat = self.Categories.Favourites
+	if favCat and favCat.Button and favCat.Button.Object then
+		favCat.Button.Object.Visible = self.FavouritesCategory
+	end
+	self:SortModules()
 end
 
 function mainapi:Remove(obj)
@@ -6126,6 +6164,18 @@ if game.GameId == 2619619496 then
 		Icon = getcustomasset('vain/assets/new/friendstab.png'),
 		Size = UDim2.fromOffset(15, 15)
 	})
+end
+
+-- Favourites category: only used when the 'Favourites category' setting is on,
+-- in which case favourited modules are re-parented here instead of pinning to
+-- the top of their own category. The button is hidden until that mode is active.
+mainapi:CreateCategory({
+	Name = 'Favourites',
+	Icon = getcustomasset('vain/assets/new/pin.png'),
+	Size = UDim2.fromOffset(14, 14)
+})
+if mainapi.Categories.Favourites and mainapi.Categories.Favourites.Button then
+	mainapi.Categories.Favourites.Button.Object.Visible = false
 end
 
 mainapi.Categories.Main:CreateDivider('misc')
@@ -6905,6 +6955,14 @@ guipane:CreateToggle({
 		for _, v in mainapi.Modules do
 			v.Object.Text = '            '..(callback and v.Name:gsub(' ', '') or v.Name)
 		end
+	end
+})
+guipane:CreateToggle({
+	Name = 'Favourites category',
+	Default = false,
+	Tooltip = 'Moves favourited modules into a separate Favourites category instead of pinning them to the top of their own category',
+	Function = function(callback)
+		mainapi:SetFavouritesCategory(callback)
 	end
 })
 guipane:CreateToggle({
