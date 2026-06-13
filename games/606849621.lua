@@ -420,8 +420,8 @@ run(function()
 	local Target
 	local Mode
 	local Range
-	local HitChance
-	local HeadshotChance
+	local Speed
+	local Silent
 	local CircleColor
 	local CircleTransparency
 	local CircleFilled
@@ -430,7 +430,18 @@ run(function()
 	local Hooked
 	local ProjectileRaycast = RaycastParams.new()
 	ProjectileRaycast.RespectCanCollide = true
-	
+
+	-- camera-snap aimbot math (same idiom as the universal Aim Assist module):
+	-- convert the yaw/pitch delta between where the camera is looking and the
+	-- target into a relative mouse move, scaled by the user's in-game sensitivity.
+	local moveConst = Vector2.new(1, 0.77) * math.rad(0.5)
+	local function wrapAngle(num)
+		num = num % math.pi
+		num -= num >= (math.pi / 2) and math.pi or 0
+		num += num < -(math.pi / 2) and math.pi or 0
+		return num
+	end
+
 	SilentAim = vain.Categories.Combat:CreateModule({
 		Name = 'SilentAim',
 		Function = function(callback)
@@ -438,8 +449,14 @@ run(function()
 				CircleObject.Visible = callback and Mode.Value == 'Mouse'
 			end
 			if callback then
+				-- Silent hook: silently redirect the bullet trajectory (no camera movement).
+				-- Only installed while the Silent toggle is on; the aimbot loop below handles
+				-- the visible camera-snap path.
 				Hooked = jb.GunController.TransformLocalMousePosition
 				jb.GunController.TransformLocalMousePosition = function(self, pos)
+					if not Silent.Enabled then
+						return Hooked(self, pos)
+					end
 					local ent = entitylib['Entity'..Mode.Value]({
 						Range = Range.Value,
 						Wallcheck = Target.Walls.Enabled and (obj or true) or nil,
@@ -448,7 +465,7 @@ run(function()
 						Players = Target.Players.Enabled,
 						NPCs = Target.NPCs.Enabled
 					})
-	
+
 					if ent then
 						local item = jb.ItemSystemController:GetLocalEquipped()
 						if item and ((self.Tip.CFrame.Position - ent.RootPart.Position).Magnitude / (item.Config.BulletSpeed or 1000)) < item.BulletEmitter.LifeSpan then
@@ -461,33 +478,61 @@ run(function()
 							end
 						end
 					end
-	
+
 					return pos
 				end
-	
-				repeat
-					if CircleObject then 
-						CircleObject.Position = inputService:GetMouseLocation() 
+
+				-- aimbot loop: snap the camera onto the closest valid target each frame
+				SilentAim:Clean(runService.RenderStepped:Connect(function(dt)
+					if CircleObject then
+						CircleObject.Position = inputService:GetMouseLocation()
 					end
-	
-					if Instant.Enabled then 
+
+					if Instant.Enabled then
 						local item = jb.ItemSystemController:GetLocalEquipped()
 						if item and item.BulletEmitter then
 							-- Hitscan: BulletEmitter advances a bullet by (now - LastUpdate); pushing
-								-- LastUpdate back almost a full LifeSpan makes the next step move the
-								-- bullet its ENTIRE travel distance in one frame, so it arrives
-								-- instantly instead of flying at BulletSpeed. The tiny epsilon keeps
-								-- it from being culled as expired before the hit registers.
-								rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.001))
+							-- LastUpdate back almost a full LifeSpan makes the next step move the
+							-- bullet its ENTIRE travel distance in one frame, so it arrives
+							-- instantly instead of flying at BulletSpeed. The tiny epsilon keeps
+							-- it from being culled as expired before the hit registers.
+							rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.001))
 						end
 					end
-					task.wait()
-				until not SilentAim.Enabled
+
+					-- when Silent is on, the trajectory hook does the work; skip camera movement
+					if Silent.Enabled then return end
+					if vain.gui.ScaledGui.ClickGui.Visible then return end
+
+					local ent = entitylib['Entity'..Mode.Value]({
+						Range = Range.Value,
+						Wallcheck = Target.Walls.Enabled and (obj or true) or nil,
+						Part = 'RootPart',
+						Origin = Mode.Value == 'Mouse' and gameCamera.CFrame.Position or (entitylib.isAlive and entitylib.character.RootPart.Position or nil),
+						Players = Target.Players.Enabled,
+						NPCs = Target.NPCs.Enabled
+					})
+
+					if ent then
+						targetinfo.Targets[ent] = tick() + 1
+						local facing = gameCamera.CFrame.LookVector
+						local new = (ent.RootPart.Position - gameCamera.CFrame.Position).Unit
+						new = new == new and new or Vector3.zero
+						if new ~= Vector3.zero then
+							local diffYaw = wrapAngle(math.atan2(facing.X, facing.Z) - math.atan2(new.X, new.Z))
+							local diffPitch = math.asin(facing.Y) - math.asin(new.Y)
+							local angle = Vector2.new(diffYaw, diffPitch)
+								// (moveConst * UserSettings():GetService('UserGameSettings').MouseSensitivity)
+							angle *= math.min(Speed.Value * dt, 1)
+							mousemoverel(angle.X, angle.Y)
+						end
+					end
+				end))
 			else
 				jb.GunController.TransformLocalMousePosition = Hooked
 			end
 		end,
-		Tooltip = 'Silently adjusts your aim towards the enemy'
+		Tooltip = 'Aimbot - snaps your camera onto the nearest target. Enable Silent for an invisible trajectory-only redirect instead.'
 	})
 	Target = SilentAim:CreateTargets({Players = true})
 	Mode = SilentAim:CreateDropdown({
@@ -510,9 +555,16 @@ run(function()
 				CircleObject.Radius = val
 			end
 		end,
-		Suffix = function(val) 
-			return val == 1 and 'stud' or 'studs' 
+		Suffix = function(val)
+			return val == 1 and 'stud' or 'studs'
 		end
+	})
+	Speed = SilentAim:CreateSlider({
+		Name = 'Speed',
+		Min = 1,
+		Max = 30,
+		Default = 30,
+		Tooltip = 'How fast the camera snaps onto the target. 30 = instant lock, lower = smoother/legit-looking. Ignored when Silent is on.'
 	})
 	SilentAim:CreateToggle({
 		Name = 'Range Circle',
@@ -572,6 +624,7 @@ run(function()
 		Visible = false
 	})
 	Instant = SilentAim:CreateToggle({Name = 'Hitscan Bullets', Tooltip = 'Bullets skip their travel time and arrive instantly at the target (no lead needed). Best paired with a target Mode above.'})
+	Silent = SilentAim:CreateToggle({Name = 'Silent', Tooltip = 'Invisible mode: silently redirects bullet trajectories to the target instead of moving your camera. Looks legit on your screen but ignores the Speed slider.'})
 end)
 	
 run(function()
