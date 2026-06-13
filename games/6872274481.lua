@@ -8485,12 +8485,30 @@ run(function()
     		tweenService:Create(roact, TweenInfo.new(0.2, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Position = UDim2.fromScale(1.05, 0.4)}):Play()
 
     		local function update()
-    			kitImage = getKitMeta(player)
-    			roact.Image = kitImage.renderImage
+    			roact.Image = getKitMeta(player).renderImage
     		end
 
-    		KitDisplay:Clean(player:GetAttributeChangedSignal('PlayingAsKits'):Connect(update))
-    		KitDisplay:Clean(player:GetAttributeChangedSignal('PlayingAsKit'):Connect(update))
+    		-- Re-bind the kit listener to whichever player the card currently shows.
+    		-- Draft cards are reused as the list reorders, so a card can switch to a
+    		-- new player; without this the kit image stays stuck on the old player.
+    		local kitConn
+    		local function bindKit()
+    			if kitConn then kitConn:Disconnect() end
+    			kitConn = player:GetAttributeChangedSignal('PlayingAsKits'):Connect(update)
+    			KitDisplay:Clean(kitConn)
+    			update()
+    		end
+    		bindKit()
+
+    		if render then
+    			KitDisplay:Clean(render:GetPropertyChangedSignal('Image'):Connect(function()
+    				local newplayer = getPlayerFromDraft(render.Image, getPlayerName(v))
+    				if newplayer and newplayer ~= player then
+    					player = newplayer
+    					bindKit()
+    				end
+    			end))
+    		end
     	end
     end
 
@@ -8518,22 +8536,27 @@ run(function()
 
     		Roact.Image = kitImage.renderImage
 
-    		KitDisplay:Clean(render:GetPropertyChangedSignal('Image'):Connect(function()
-    			local newplayer = getPlayerFromDraft(render.Image, '')
-    			if newplayer then
-    				player = newplayer
-    				kitImage = getKitMeta(player)
-    				Roact.Image = kitImage.renderImage
-    			end
-    		end))
-
     		local function update()
-    			kitImage = getKitMeta(player)
-    			Roact.Image = kitImage.renderImage
+    			Roact.Image = getKitMeta(player).renderImage
     		end
 
-    		KitDisplay:Clean(player:GetAttributeChangedSignal('PlayingAsKits'):Connect(update))
-    		KitDisplay:Clean(player:GetAttributeChangedSignal('PlayingAsKit'):Connect(update))
+    		-- Keep the kit listener bound to whichever player this card now shows.
+    		local kitConn
+    		local function bindKit()
+    			if kitConn then kitConn:Disconnect() end
+    			kitConn = player:GetAttributeChangedSignal('PlayingAsKits'):Connect(update)
+    			KitDisplay:Clean(kitConn)
+    			update()
+    		end
+    		bindKit()
+
+    		KitDisplay:Clean(render:GetPropertyChangedSignal('Image'):Connect(function()
+    			local newplayer = getPlayerFromDraft(render.Image, '')
+    			if newplayer and newplayer ~= player then
+    				player = newplayer
+    				bindKit()
+    			end
+    		end))
     	end
     end
 
