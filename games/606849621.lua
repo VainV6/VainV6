@@ -917,7 +917,7 @@ run(function()
 				table.clear(cfgOriginals)
 			end
 		end,
-		Tooltip = 'Hold click to fire any semi-auto / burst gun (Plasma Shotgun, Revolver, Sniper...) continuously with no reload pause. Fires at the gun's native max rate -- the server rate-limits anything faster, so this stays accepted.'
+		Tooltip = 'Hold click to fire any semi-auto / burst gun (Plasma Shotgun, Revolver, Sniper...) continuously with no reload pause. Fires at the native max rate -- the server rate-limits anything faster, so this stays accepted.'
 	})
 end)
 
