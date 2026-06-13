@@ -602,7 +602,173 @@ run(function()
 		Tooltip = 'Modifies bullets to always do headshot damage & shooting through most walls.'
 	})
 end)
-	
+
+run(function()
+	-- NoSpread zeroes the LOCAL gun's BulletSpread (Config.BulletSpread). This is
+	-- the same risk class as Wallbang -- it edits the client-owned bullet config
+	-- the game uses to aim the shot; it does not change movement/position, so the
+	-- position-based anticheat has nothing to flag. Restored on disable.
+	local NoSpread
+	local originals = {} -- [Config] = original BulletSpread, so we can restore
+
+	NoSpread = vain.Categories.Combat:CreateModule({
+		Name = 'NoSpread',
+		Function = function(callback)
+			if callback then
+				repeat
+					local item = jb.ItemSystemController:GetLocalEquipped()
+					local cfg = item and item.Config
+					if cfg and type(cfg.BulletSpread) == 'number' then
+						if originals[cfg] == nil then
+							originals[cfg] = cfg.BulletSpread
+						end
+						if cfg.BulletSpread ~= 0 then
+							cfg.BulletSpread = 0
+						end
+					end
+					task.wait(0.1)
+				until not NoSpread.Enabled
+			else
+				for cfg, val in originals do
+					pcall(function() cfg.BulletSpread = val end)
+				end
+				table.clear(originals)
+			end
+		end,
+		Tooltip = 'Removes bullet spread/recoil on your equipped gun for pinpoint accuracy. Client-side gun config only (no movement), so the anticheat does not flag it.'
+	})
+end)
+
+run(function()
+	-- Bounty ESP: highlight players that appear on the Most Wanted board and show
+	-- their bounty above their head. This is purely client-side rendering (a
+	-- Highlight + BillboardGui in your own PlayerGui/character) -- it reads the
+	-- existing in-world board and never touches movement or fires a remote, so
+	-- the anticheat has nothing to detect.
+	local BountyESP
+	local MinBounty
+	local highlights = {} -- [Player] = {Highlight, BillboardGui}
+
+	-- Parse the Most Wanted board into a name -> bounty-number map.
+	local function readBoard()
+		local map = {}
+		local board = workspace:FindFirstChild('MostWanted')
+		board = board and board:FindFirstChild('Board', true)
+		if not board then return map end
+		for _, v in board:GetChildren() do
+			if v:IsA('Frame') then
+				local plrname = v:FindFirstChild('PlayerName', true)
+				local bounty = v:FindFirstChild('Bounty', true)
+				if plrname and bounty then
+					local num = tonumber((bounty.Text:gsub('[^%d]', ''))) or 0
+					map[plrname.Text] = num
+				end
+			end
+		end
+		return map
+	end
+
+	local function clear(plr)
+		local h = highlights[plr]
+		if h then
+			pcall(function() h.Highlight:Destroy() end)
+			pcall(function() h.Billboard:Destroy() end)
+			highlights[plr] = nil
+		end
+	end
+
+	local function clearAll()
+		for plr in highlights do clear(plr) end
+	end
+
+	local function format(num)
+		return '$' .. tostring(num):reverse():gsub('(%d%d%d)', '%1,'):reverse():gsub('^,', '')
+	end
+
+	local function update()
+		local board = readBoard()
+		local min = MinBounty and MinBounty.Value or 0
+
+		-- remove highlights for players no longer qualifying
+		for plr in highlights do
+			local b = board[plr.Name]
+			if not b or b < min or not plr.Character then
+				clear(plr)
+			end
+		end
+
+		for _, ent in entitylib.List do
+			local plr = ent.Player
+			local b = plr and board[plr.Name]
+			if plr and b and b >= min and ent.Character then
+				local data = highlights[plr]
+				if not data then
+					local hl = Instance.new('Highlight')
+					hl.Name = 'VainBounty'
+					hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+					hl.FillColor = Color3.fromRGB(255, 170, 0)
+					hl.OutlineColor = Color3.fromRGB(255, 200, 60)
+					hl.FillTransparency = 0.6
+					hl.Adornee = ent.Character
+					hl.Parent = ent.Character
+
+					local bb = Instance.new('BillboardGui')
+					bb.Name = 'VainBountyTag'
+					bb.Size = UDim2.fromOffset(120, 18)
+					bb.StudsOffset = Vector3.new(0, 3.2, 0)
+					bb.AlwaysOnTop = true
+					bb.Adornee = ent.Character:FindFirstChild('Head') or ent.Character.PrimaryPart
+					bb.Parent = ent.Character
+					local label = Instance.new('TextLabel')
+					label.Size = UDim2.fromScale(1, 1)
+					label.BackgroundTransparency = 1
+					label.Font = Enum.Font.GothamBold
+					label.TextSize = 14
+					label.TextColor3 = Color3.fromRGB(255, 200, 60)
+					label.TextStrokeTransparency = 0.4
+					label.Parent = bb
+
+					data = {Highlight = hl, Billboard = bb, Label = label}
+					highlights[plr] = data
+				end
+				if data.Label then data.Label.Text = format(b) end
+				if data.Billboard and (not data.Billboard.Adornee or data.Billboard.Adornee.Parent == nil) then
+					data.Billboard.Adornee = ent.Character:FindFirstChild('Head') or ent.Character.PrimaryPart
+				end
+				if data.Highlight and data.Highlight.Adornee ~= ent.Character then
+					data.Highlight.Adornee = ent.Character
+					data.Highlight.Parent = ent.Character
+				end
+			end
+		end
+	end
+
+	BountyESP = vain.Categories.Render:CreateModule({
+		Name = 'BountyESP',
+		Function = function(callback)
+			if callback then
+				task.spawn(function()
+					repeat
+						update()
+						task.wait(0.5)
+					until not BountyESP.Enabled
+					clearAll()
+				end)
+			else
+				clearAll()
+			end
+		end,
+		Tooltip = 'Highlights Most Wanted players and shows their bounty. Client-side render only -- undetectable by the anticheat.'
+	})
+	MinBounty = BountyESP:CreateSlider({
+		Name = 'Min Bounty',
+		Min = 0,
+		Max = 50000,
+		Default = 0,
+		Suffix = '$'
+	})
+end)
+
 run(function()
 	local AutoArrest = {Enabled = false}
 	
@@ -724,7 +890,58 @@ run(function()
 	HandCheck = AutoPop:CreateToggle({Name = 'Hand Check'})
 	TeamCheck = AutoPop:CreateToggle({Name = 'Team Check'})
 end)
-	
+
+run(function()
+	-- AutoRob: when you're standing in a robbable zone, fire the SAME StartRob
+	-- remote the game fires when you press the robbery prompt -- nothing more.
+	-- It does not move you or teleport, and the server validates that you're
+	-- actually in the zone, so the position-based anticheat has nothing to flag.
+	-- Robberies then auto-progress while you stand there (pair with InstantAction).
+	local AutoRob
+	local lastFire = {} -- [robberyObject] = tick(), debounce so we don't spam
+
+	-- Is this tagged robbery object currently robbable (not already in progress)?
+	local function robbable(obj)
+		-- RobberyState / InProgress live as an attribute or value on the object.
+		local inProgress = obj:GetAttribute('InProgress')
+		if inProgress == nil then
+			local v = obj:FindFirstChild('InProgress')
+			inProgress = v and v.Value
+		end
+		return not inProgress
+	end
+
+	AutoRob = vain.Categories.Blatant:CreateModule({
+		Name = 'AutoRob',
+		Function = function(callback)
+			if callback then
+				repeat
+					if entitylib.isAlive then
+						-- use the server-trusted position the anticheat itself
+						-- tracks, so our range check matches what it sees
+						local hum = entitylib.character.Humanoid
+						local serverPos = hum and hum:FindFirstChild('HumanoidUnloadServerPosition')
+						local myPos = (serverPos and serverPos.Value) or entitylib.character.RootPart.Position
+
+						for _, obj in collectionService:GetTagged('Robbery') do
+							if not AutoRob.Enabled then break end
+							local part = obj:IsA('BasePart') and obj or obj.PrimaryPart or obj:FindFirstChildWhichIsA('BasePart', true)
+							if part and (part.Position - myPos).Magnitude <= 25 and robbable(obj) then
+								if (tick() - (lastFire[obj] or 0)) > 1.5 then
+									lastFire[obj] = tick()
+									jb:FireServer('StartRob', obj)
+								end
+							end
+						end
+					end
+					task.wait(0.25)
+				until not AutoRob.Enabled
+			end
+		end,
+		Tooltip = 'Automatically starts the robbery you are standing in (fires the same StartRob the game does). Pair with InstantAction. Anticheat-safe -- no movement.'
+	})
+end)
+
 run(function()
 	local Punch = {Enabled = false}
 	
