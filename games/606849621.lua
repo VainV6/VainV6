@@ -1062,54 +1062,42 @@ run(function()
 		Name = 'AutoArrest',
 		Function = function(callback)
 			if callback then
+				-- Fire the arrest remote directly on the SAME conditions the server
+				-- validates (decoded from the game): you are Police with Handcuffs
+				-- equipped; the target is a Prisoner with a Humanoid, is NOT already
+				-- handcuffed, is NOT in a vehicle, and is within ArrestDistance. We do
+				-- NOT depend on the game's CircleAction spec (octree-distance throttled,
+				-- and never true for in-car targets) -- that was the unreliability.
+				-- In-vehicle criminals are ejected first, then arrested next pass.
 				repeat
-					if entitylib.isAlive then
-						-- PRIMARY: drive off the game's own arrest prompts. CircleAction.Specs
-						-- holds a spec per nearby criminal whose .ShouldArrest the game flips
-						-- true the INSTANT the target is genuinely arrestable (police +
-						-- handcuffs + in ArrestDistance). That flag is the authoritative
-						-- signal the server honours, and reading it live (not a transition)
-						-- catches a target that is ALREADY in range.
-						--
-						-- NOTE: spec.Name is a LOCALIZED display string (FormatByKey
-						-- "Action.Arrest"), so we must NOT match it against 'Arrest' -- that
-						-- was the regression that broke arresting entirely. We key purely on
-						-- the ShouldArrest flag + a PlayerName.
-						local specs = jb.CircleAction and jb.CircleAction.Specs
-						if type(specs) == 'table' then
-							for _, spec in specs do
-								if not AutoArrest.Enabled then break end
-								if spec.ShouldArrest and spec.PlayerName then
-									tryArrest(playersService:FindFirstChild(spec.PlayerName))
-								end
-							end
-						end
-
-						-- SECONDARY: eject criminals from vehicles, and (InstaArrest) fire
-						-- optimistically by distance so we don't even wait for the prompt.
+					if entitylib.isAlive and lplr.Team == teamsService.Police then
 						local item = jb.ItemSystemController:GetLocalEquipped()
 						local hasCuffs = item and item.__ClassName == 'Handcuffs'
-						local insta = not InstaArrest or InstaArrest.Enabled
 						local char = entitylib.character
-						local hum = char and char.Humanoid
 						local root = char and char.RootPart
-						local serverPos = hum and hum:FindFirstChild('HumanoidUnloadServerPosition')
-						local localPosition = (serverPos and serverPos.Value) or (root and root.Position)
+						local myPos = root and root.Position
 						local range = (ArrestRange and ArrestRange.Value) or 18.4
 						local plrs = entitylib.AllPosition({
 							Players = true,
 							Part = 'RootPart',
-							Range = math.max(50, range)
+							Range = math.max(60, range + 10)
 						})
 						for _, ent in plrs do
 							if not AutoArrest.Enabled then break end
-							if localPosition and ent.Player and ent.RootPart and ent.Humanoid and isIllegal(ent) then
-								if ent.Humanoid.Sit then
+							local plr = ent.Player
+							if myPos and plr and ent.RootPart and ent.Humanoid
+								and plr.Team == teamsService.Prisoner then
+								local tchar = plr.Character
+								local inVehicle = ent.Humanoid.Sit
+									or (tchar and tchar:GetAttribute('InVehicle'))
+									or getVehicle(ent)
+								local cuffed = tchar and tchar:GetAttribute('HasHandcuffs')
+								if inVehicle then
 									local vehicle = getVehicle(ent)
 									if vehicle then jb:FireServer('Eject', vehicle) end
-								elseif insta and hasCuffs and not isArrested(ent.Player.Name)
-									and (localPosition - ent.RootPart.Position).Magnitude < range then
-									tryArrest(ent.Player)
+								elseif hasCuffs and not cuffed
+									and (myPos - ent.RootPart.Position).Magnitude <= range then
+									tryArrest(plr)
 								end
 							end
 						end
