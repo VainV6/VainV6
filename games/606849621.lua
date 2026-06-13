@@ -1974,10 +1974,44 @@ run(function()
 
 	local function stopFly()
 		if flyConn then flyConn:Disconnect() flyConn = nil end
+
+		-- COMMIT THE POSITION before we let go. CFrame fly teleports the car via
+		-- PivotTo while anchored; the server's position anticheat never trusts those
+		-- jumps, so the moment you exit it rolls your CHARACTER back to the last spot
+		-- it believed (HumanoidUnloadServerPosition). The car being anchored is the
+		-- problem: an anchored assembly reports no physics, so the server keeps its
+		-- old trusted position. Fix: un-anchor and hold the car at its CURRENT pivot
+		-- with real (zero) velocity for a short window, so the AlexChassis reports
+		-- the new resting position to the server continuously -- the server adopts it
+		-- as legitimate, and exiting no longer rolls you back.
+		local hadAnchored = next(anchored) ~= nil
 		for part, was in anchored do
 			pcall(function() part.Anchored = was end)
 		end
 		table.clear(anchored)
+
+		if hadAnchored then
+			local c = chassis()
+			local model = c and c.Model
+			local engine = model and model:FindFirstChild('Engine')
+			if engine then
+				local pivot = model:GetPivot()
+				-- pin the car in place (kill all motion) for ~0.4s of physics so the
+				-- server registers the new position as a stable, driven-to location.
+				task.spawn(function()
+					local t0 = os.clock()
+					while os.clock() - t0 < 0.4 do
+						pcall(function()
+							model:PivotTo(pivot)
+							engine.AssemblyLinearVelocity = Vector3.zero
+							engine.AssemblyAngularVelocity = Vector3.zero
+						end)
+						runService.Heartbeat:Wait()
+					end
+				end)
+			end
+		end
+
 		-- restore any chassis drive we neutralized for velocity fly
 		for c, was in flyDriveSaved do
 			pcall(function() c.LaunchSpeedMult = was end)
@@ -2059,7 +2093,7 @@ run(function()
 	FlyMode = VehicleFly:CreateDropdown({
 		Name = 'Mode',
 		List = { 'Velocity', 'CFrame' },
-		Tooltip = 'Velocity - smooth, continuous movement (lower risk of position rollback)\nCFrame - instant/snappy control (higher risk)'
+		Tooltip = 'Velocity - smooth, continuous movement (lowest risk of position rollback)\nCFrame - instant/snappy control. On disable it now holds the car in place briefly so the server adopts your new position, so exiting no longer teleports you back. For best results: stop flying (toggle off / land) BEFORE you press Space to get out.'
 	})
 	FlySpeed = VehicleFly:CreateSlider({
 		Name = 'Fly Speed',
