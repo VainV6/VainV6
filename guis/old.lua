@@ -816,8 +816,9 @@ components = {
 			end
 		end
 		
-		function optionapi:Change(list)
+		function optionapi:Change(list, icons)
 			optionsettings.List = list or {}
+			if icons ~= nil then optionsettings.Icons = icons end
 			if not table.find(optionsettings.List, self.Value) then
 				self:SetValue(self.Value)
 			end
@@ -865,6 +866,21 @@ components = {
 					dropdownoption.TextTruncate = Enum.TextTruncate.AtEnd
 					dropdownoption.FontFace = uipallet.Font
 					dropdownoption.Parent = dropdownchildren
+					-- optional per-option icon: if optionsettings.Icons[v] is set, show it
+					-- on the left and left-align the label. No icon = unchanged.
+					local iconId = optionsettings.Icons and optionsettings.Icons[v]
+					if iconId then
+						dropdownoption.Text = '   '..v
+						dropdownoption.TextXAlignment = Enum.TextXAlignment.Left
+						local opticon = Instance.new('ImageLabel')
+						opticon.Name = 'Icon'
+						opticon.Size = UDim2.fromOffset(16, 16)
+						opticon.Position = UDim2.fromOffset(2, 1)
+						opticon.BackgroundTransparency = 1
+						opticon.Image = tostring(iconId)
+						opticon.ScaleType = Enum.ScaleType.Fit
+						opticon.Parent = dropdownoption
+					end
 					dropdownoption.MouseEnter:Connect(function()
 						dropdownoption.BackgroundColor3 = color.Dark(dropdown.BackgroundColor3, 0.02)
 					end)
