@@ -1089,93 +1089,57 @@ run(function()
 		end
 	end
 
-	-- AutoArrest needs Handcuffs EQUIPPED (the diagnostic showed cuffs=false was
-	-- the blocker -- you can't arrest with another item out). Equip them for the
-	-- user via the game's own inventory system instead of requiring it manually.
-	local lastEquipTry = 0
-	local function ensureHandcuffs()
-		local equipped = jb.ItemSystemController:GetLocalEquipped()
-		if equipped and equipped.__ClassName == 'Handcuffs' then return true end
-		-- throttle so we don't spam equip every frame
-		if tick() - lastEquipTry < 0.5 then return false end
-		lastEquipTry = tick()
-		local inv = jb.InventoryItemSystem
-		if not inv or not inv.getInventoryItemsFor then return false end
-		local ok, items = pcall(inv.getInventoryItemsFor, lplr)
-		if not ok or type(items) ~= 'table' then return false end
-		for _, it in items do
-			local name = it.obj and it.obj.Name
-			if name == 'Handcuffs' then
-				pcall(function()
-					if inv.toggleEquip then
-						inv.toggleEquip(it)
-					elseif it.AttemptSetEquipped then
-						it:AttemptSetEquipped(true)
-					end
-				end)
-				return false -- equip is async; report not-yet-equipped this pass
-			end
-		end
-		return false
+	-- AutoArrest only acts while YOU have Handcuffs equipped -- it never forces
+	-- them out or switches your item. The moment cuffs are out it scans for
+	-- nearby criminals and arrests any in range (ejecting them from cars first).
+	local function cuffsEquipped()
+		local eq = jb.ItemSystemController:GetLocalEquipped()
+		return eq and eq.__ClassName == 'Handcuffs' or false
 	end
 
 	AutoArrest = vain.Categories.Blatant:CreateModule({
 		Name = 'AutoArrest',
 		Function = function(callback)
 			if callback then
-				-- One-time diagnostic so we can SEE why an arrest does/doesn't fire instead
-				-- of guessing: reports my team, whether handcuffs are equipped, and how many
-				-- nearby prisoners were seen on the first pass.
-				local diagDone = false
-				-- The game's ShouldArrest test (decoded) is purely: target is a Prisoner with
-				-- a Humanoid, NOT already handcuffed, and NOT in a vehicle. There is NO client
-				-- distance gate (distance is server-side). We mirror exactly that -- earlier a
-				-- too-strict distance/team gate was silently rejecting valid arrests. Handcuffs
-				-- equipped + Police team are the only local prerequisites (u803/u756).
+				-- The game's ShouldArrest test (decoded from u756/u803): target is a
+				-- Prisoner with a Humanoid, NOT already handcuffed, NOT in a vehicle.
+				-- We do NOT auto-equip -- you control when by holding the handcuffs;
+				-- whenever they're out, in-range criminals are arrested automatically.
 				repeat
-					local mine = teamOf(lplr)
-					if entitylib.isAlive and mine == 'Police' then
-						-- auto-equip handcuffs (the diagnostic showed cuffs=false was the
-						-- blocker). hasCuffs is true only once they are actually out.
-						local hasCuffs = ensureHandcuffs()
-						if not diagDone then
-							diagDone = true
-							notif('AutoArrest', ('Active. Team='..tostring(mine)..', equipping/using handcuffs.'), 5)
-						end
-						if hasCuffs then
-							for _, ent in entitylib.AllPosition({ Players = true, Part = 'RootPart', Range = 1000 }) do
+					if entitylib.isAlive and teamOf(lplr) == 'Police' and cuffsEquipped() then
+						local char = entitylib.character
+						local root = char and char.RootPart
+						local myPos = root and root.Position
+						local range = (ArrestRange and ArrestRange.Value) or 18.4
+						if myPos then
+							for _, ent in entitylib.AllPosition({ Players = true, Part = 'RootPart', Range = math.max(60, range + 10) }) do
 								if not AutoArrest.Enabled then break end
 								local plr = ent.Player
 								local tchar = plr and plr.Character
-								if plr and tchar and ent.Humanoid and teamOf(plr) == 'Prisoner' then
-									local inVehicle = ent.Humanoid.Sit
-										or tchar:GetAttribute('InVehicle')
-										or getVehicle(ent)
-									local cuffed = tchar:GetAttribute('HasHandcuffs')
+								if plr and tchar and ent.RootPart and ent.Humanoid and teamOf(plr) == 'Prisoner'
+									and not tchar:GetAttribute('HasHandcuffs') then
+									local inVehicle = ent.Humanoid.Sit or tchar:GetAttribute('InVehicle') or getVehicle(ent)
 									if inVehicle then
 										local vehicle = getVehicle(ent)
 										if vehicle then jb:FireServer('Eject', vehicle) end
-									elseif not cuffed then
+									elseif (myPos - ent.RootPart.Position).Magnitude <= range then
 										tryArrest(plr)
 									end
 								end
 							end
 						end
-					elseif not diagDone then
-						diagDone = true
-						notif('AutoArrest', ('Idle: you are not on the Police team. Team='..tostring(mine)), 8, 'alert')
 					end
 					task.wait(0.1)
 				until not AutoArrest.Enabled
 				table.clear(arrestDebounce)
 			end
 		end,
-		Tooltip = 'Instantly arrests nearby criminals the moment they are in range, reading the game arrest prompts. Ejects them from vehicles first.'
+		Tooltip = 'While you have Handcuffs equipped, instantly arrests any criminal that comes within range. Ejects criminals from vehicles first. Does not auto-equip -- you decide when by holding the cuffs.'
 	})
 	InstaArrest = AutoArrest:CreateToggle({
 		Name = 'Insta Arrest',
 		Default = true,
-		Tooltip = 'Arrest immediately without needing handcuffs equipped or waiting between arrests.'
+		Tooltip = 'Arrest the moment a criminal enters range (no cooldown between arrests).'
 	})
 	ArrestRange = AutoArrest:CreateSlider({
 		Name = 'Arrest Range',
