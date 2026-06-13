@@ -1194,7 +1194,7 @@ run(function()
 	OldHit = bedwars.BlockBreaker.hitBlock
 
 	bedwars.BlockBreaker.hitBlock = function(...)
-        store.lastHit = tick()
+        pcall(function() store.lastHit = tick() end)
         return OldHit(...)
     end
 	Client.Get = function(self, remoteName)
@@ -1233,15 +1233,22 @@ run(function()
 	end
 
 	bedwars.BlockController.isBlockBreakable = function(self, breakTable, plr)
-		local obj = bedwars.BlockController:getStore():getBlockAt(breakTable.blockPosition)
-
-		if obj and obj.Name == 'bed' then
-			for _, plr in playersService:GetPlayers() do
-				if obj:GetAttribute('Team'..(plr:GetAttribute('Team') or 0)..'NoBreak') and not select(2, whitelist:get(plr)) then
-					return false
+		-- Only our bed-protection logic is custom; if anything in it throws,
+		-- fall through to the original so a hook error can't make every block
+		-- look unbreakable (i.e. silently disable mining on inject).
+		local ok, deny = pcall(function()
+			local obj = bedwars.BlockController:getStore():getBlockAt(breakTable.blockPosition)
+			if obj and obj.Name == 'bed' then
+				for _, other in playersService:GetPlayers() do
+					if obj:GetAttribute('Team'..(other:GetAttribute('Team') or 0)..'NoBreak') and not select(2, whitelist:get(other)) then
+						return true
+					end
 				end
 			end
-		end
+			return false
+		end)
+
+		if ok and deny then return false end
 
 		return OldBreak(self, breakTable, plr)
 	end
