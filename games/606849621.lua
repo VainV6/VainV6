@@ -361,6 +361,10 @@ run(function()
 		GetOut = 'yslgeqao',
 		Tase = 'fav6jbbv',
 		TaseReplicate = 'dxgaejek',
+		-- vehicle/tire damage: Gun fires FireServer(<this>, vehicleModel, weaponClass)
+		-- when a bullet hits a part under workspace.Vehicles (Gun.lua ~L483). AutoPop
+		-- calls jb:FireServer('PopTires', car, 'Sniper') with the same arg shape.
+		PopTires = 'eygwrvei',
 	}
 	for friendly, real in REMOTE_FALLBACKS do
 		if not remotes[friendly] then
@@ -453,9 +457,16 @@ run(function()
 	end)
 end)
 
-for _, v in {'Reach', 'TriggerBot', 'Disabler', 'AntiFall', 'HitBoxes', 'Killaura', 'MurderMystery'} do
-	vain:Remove(v)
-end
+-- Remove universal modules that don't apply to / are superseded in Jailbreak.
+-- Guarded: some mainapi builds lack :Remove, and a module may already be gone --
+-- a bare crash here aborted the rest of this file (SilentAim etc. never loaded).
+run(function()
+	for _, v in {'Reach', 'TriggerBot', 'Disabler', 'AntiFall', 'HitBoxes', 'Killaura', 'MurderMystery'} do
+		if vain.Modules[v] and type(vain.Remove) == 'function' then
+			pcall(vain.Remove, vain, v)
+		end
+	end
+end)
 run(function()
 	local SilentAim
 	local Target
@@ -1082,14 +1093,16 @@ run(function()
 					-- InstaArrest: don't wait for handcuffs to be equipped or for the
 					-- old 0.6s cooldown -- arrest the instant a criminal is in range.
 					local insta = not InstaArrest or InstaArrest.Enabled
-					if insta or (item and item.__ClassName == 'Handcuffs') then
+					if entitylib.isAlive and (insta or (item and item.__ClassName == 'Handcuffs')) then
 						-- HumanoidUnloadServerPosition is now a CHILD Value of the Humanoid
 						-- (FindFirstChild), not a direct property -- indexing it directly
 						-- threw "not a valid member" every tick, aborting the arrest loop.
 						-- Fall back to the real RootPart position if it isn't present.
-						local hum = entitylib.character.Humanoid
+						local char = entitylib.character
+						local hum = char and char.Humanoid
+						local root = char and char.RootPart
 						local serverPos = hum and hum:FindFirstChild('HumanoidUnloadServerPosition')
-						local localPosition = (serverPos and serverPos.Value) or entitylib.character.RootPart.Position
+						local localPosition = (serverPos and serverPos.Value) or (root and root.Position)
 						local range = (ArrestRange and ArrestRange.Value) or 18.4
 						local plrs = entitylib.AllPosition({
 							Players = true,
@@ -1099,7 +1112,7 @@ run(function()
 
 						for _, ent in plrs do
 							if not AutoArrest.Enabled then break end
-							if ent.Player and isIllegal(ent) then
+							if localPosition and ent.Player and ent.RootPart and ent.Humanoid and isIllegal(ent) then
 								local vehicle = ent.Humanoid.Sit and getVehicle(ent) or nil
 								if vehicle then
 									jb:FireServer('Eject', vehicle)
