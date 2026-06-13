@@ -355,18 +355,22 @@ run(function()
 	-- and are used whenever the dynamic dump is missing the friendly key, so the
 	-- AutoFeatures keep working across updates that only renamed functions.
 	-- Decoded from Place_606849621.rbxlx (2026-06-13).
+	-- IMPORTANT: these obfuscated aliases are RE-RANDOMIZED EVERY GAME BUILD.
+	-- They must be re-decoded from the current place file on each Jailbreak
+	-- update or the action modules silently no-op (server ignores a dead alias).
+	-- Decoded from build "13 Jun @ 12:07 PM EDT @4e0945f":
+	--   Arrest=u137, Punch=attemptPunch closure, Eject=u820/ShouldEject,
+	--   GetIn=u829, GetOut=exit event, Tase/TaseReplicate from Game.Item.Taser,
+	--   PopTires from Game.Item.Gun vehicle-hit (FireServer(<this>, car, class)).
 	local REMOTE_FALLBACKS = {
-		Arrest = 'ye6k5tad',
-		Punch = 'v1w5mwz1',
-		Eject = 'c28zzq8w',
-		GetIn = 'eomd9qco',
-		GetOut = 'yslgeqao',
-		Tase = 'fav6jbbv',
-		TaseReplicate = 'dxgaejek',
-		-- vehicle/tire damage: Gun fires FireServer(<this>, vehicleModel, weaponClass)
-		-- when a bullet hits a part under workspace.Vehicles (Gun.lua ~L483). AutoPop
-		-- calls jb:FireServer('PopTires', car, 'Sniper') with the same arg shape.
-		PopTires = 'eygwrvei',
+		Arrest = 'xajzr1t8',
+		Punch = 'jv58z10g',
+		Eject = 'egi9qmpo',
+		GetIn = 'ttwwg5ep',
+		GetOut = 'ywd3edo6',
+		Tase = 'm938v2jf',
+		TaseReplicate = 'b5tcnkgw',
+		PopTires = 's1qvuyxz',
 	}
 	for friendly, real in REMOTE_FALLBACKS do
 		if not remotes[friendly] then
