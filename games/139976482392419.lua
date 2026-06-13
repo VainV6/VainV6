@@ -40,8 +40,10 @@ local prediction = vain.Libraries.prediction
 local targetinfo = vain.Libraries.targetinfo
 local sessioninfo = vain.Libraries.sessioninfo
 
-local function notif(...)
-	return vain:CreateNotification(...)
+-- CreateNotification(title, text, duration, type) - the GUI needs a numeric
+-- duration (it builds a TweenInfo from it), so default one if not supplied.
+local function notif(title, text, duration, kind)
+	return vain:CreateNotification(title, text, duration or 4, kind)
 end
 
 -- ── Anti Hit bridge ───────────────────────────────────────────────────────────
@@ -110,6 +112,31 @@ end
 local function isEnemyModel(model)
 	if typeof(model) ~= 'Instance' or not model:IsA('Model') then return false end
 	return model:FindFirstChild('EnemyHitBox') ~= nil or model:FindFirstChildOfClass('Humanoid') ~= nil
+end
+
+-- Bosses are NOT in workspace.Enemies - during a boss fight the game clones a
+-- "<Name>BossFight" folder into workspace, and the boss character inside is a
+-- Model with a Humanoid and a "Boss" child (its root is BeveledCube or
+-- HumanoidRootPart). That's why Killaura/AutoFarm/Freeze ignored bosses: they
+-- were never registered as entities. (Confirmed from the decompiled TargetService:
+-- FindCurrentBossFight scans workspace for the *BossFight folder, and the boss
+-- model is identified by its Boss child + Humanoid.)
+local function isBossModel(model)
+	if typeof(model) ~= 'Instance' or not model:IsA('Model') then return false end
+	if not model:FindFirstChildOfClass('Humanoid') then return false end
+	return model:FindFirstChild('Boss') ~= nil
+		or model:GetAttribute('Boss') == true
+		or model:FindFirstChild('BeveledCube') ~= nil
+end
+
+-- find the live boss character model inside a *BossFight folder
+local function bossCharacterIn(folder)
+	if not folder then return nil end
+	if isBossModel(folder) then return folder end
+	for _, d in folder:GetDescendants() do
+		if d:IsA('Model') and isBossModel(d) then return d end
+	end
+	return nil
 end
 
 local function enemyName(model)
@@ -184,22 +211,50 @@ local function itemPrompt(model)
 	return model:FindFirstChildWhichIsA('ProximityPrompt', true)
 end
 
--- best-effort image asset id for an item model, for the picker icons. Shop items
--- are gear Tools, so the Tool's TextureId is the icon. Fall back to any ImageLabel
--- in the item's BillboardGui, then a Decal.
+-- best-effort image asset id for an item model, for the picker icons. Gears are
+-- Tools (Tool.TextureId is the icon); accessories may not carry a flat image, in
+-- which case we return nil and the option just renders text-only.
 local function itemIcon(model)
+	-- a Tool (gear) or a Tool nested inside the model
 	local tool = model:IsA('Tool') and model or model:FindFirstChildWhichIsA('Tool', true)
 	if tool and tool.TextureId and tool.TextureId ~= '' then
 		return tool.TextureId
 	end
+	-- an explicit icon attribute some items set
+	local attr = model:GetAttribute('Icon') or model:GetAttribute('Image') or model:GetAttribute('TextureId')
+	if type(attr) == 'string' and attr ~= '' then return attr end
+	-- any image-bearing GUI element
 	for _, d in model:GetDescendants() do
-		if d:IsA('ImageLabel') and d.Image ~= '' then return d.Image end
-		if d:IsA('ImageButton') and d.Image ~= '' then return d.Image end
+		if (d:IsA('ImageLabel') or d:IsA('ImageButton')) and d.Image ~= '' then return d.Image end
 	end
+	-- a mesh texture or decal on the handle
 	for _, d in model:GetDescendants() do
+		if (d:IsA('SpecialMesh') or d:IsA('MeshPart')) and d.TextureId and d.TextureId ~= '' then return d.TextureId end
 		if d:IsA('Decal') and d.Texture ~= '' then return d.Texture end
 	end
 	return nil
+end
+
+-- The full item catalog lives in ReplicatedStorage (Gears / Accessories /
+-- Sacrifices), separate from what's currently stocked in the shop. Listing the
+-- catalog lets the picker show every buyable item, not just this round's offers.
+local CATALOG_FOLDERS = {
+	Gears = 'Gears',
+	Accessories = 'Accessories',
+	Sacrifices = 'Sacrifices',
+}
+-- iterate every catalog item, calling fn(model, category)
+local function forEachCatalogItem(fn)
+	for category, folderName in CATALOG_FOLDERS do
+		local folder = replicatedStorage:FindFirstChild(folderName)
+		if folder then
+			for _, item in folder:GetChildren() do
+				if item:IsA('Tool') or item:IsA('Accessory') or item:IsA('Model') then
+					fn(item, category)
+				end
+			end
+		end
+	end
 end
 
 -- iterate buyable items, calling fn(model, category, prompt) for each
@@ -267,9 +322,44 @@ run(function()
 
 	-- bind the current folder and re-bind if it's replaced (world/map swap)
 	bindFolder(enemiesFolder())
+
+	-- ── Boss fights ────────────────────────────────────────────────────────────
+	-- Bosses spawn in a "<Name>BossFight" folder cloned into workspace, not under
+	-- Enemies. Register the boss character inside so all combat modules see it.
+	local function registerBoss(fightFolder)
+		task.spawn(function()
+			-- the boss model may stream in a moment after the fight folder appears
+			for _ = 1, 50 do
+				local boss = bossCharacterIn(fightFolder)
+				if boss then
+					if not entitylib.getEntity(boss) then
+						boss:SetAttribute('VainBoss', true)
+						entitylib.addEntity(boss, nil)
+					end
+					-- clean up when the fight folder is removed
+					vain:Clean(fightFolder.AncestryChanged:Connect(function(_, parent)
+						if not parent then entitylib.removeEntity(boss) end
+					end))
+					return
+				end
+				task.wait(0.2)
+			end
+		end)
+	end
+
+	local function isBossFightFolder(inst)
+		return inst and inst:IsA('Folder') and inst.Name:find('BossFight')
+	end
+
+	for _, child in workspace:GetChildren() do
+		if isBossFightFolder(child) then registerBoss(child) end
+	end
+
 	vain:Clean(workspace.ChildAdded:Connect(function(child)
 		if child.Name == 'Enemies' then
 			bindFolder(child)
+		elseif isBossFightFolder(child) then
+			registerBoss(child)
 		end
 	end))
 end)
@@ -1171,14 +1261,15 @@ run(function()
 
 	local catToggle = {}   -- filled after toggles exist
 
-	-- Build a de-duplicated, sorted list of the item names currently on the
-	-- shop shelves and push it into the Item Picker dropdown. The shop is only
-	-- populated between rounds, so this needs to be (re)run while in the shop.
+	-- Build a de-duplicated, sorted list of EVERY catalog item (from
+	-- ReplicatedStorage), with icons, and push it into the Item Picker. This shows
+	-- all buyable items regardless of what's stocked in the current shop; Auto Buy
+	-- then purchases whitelisted items whenever they appear in the shop.
 	local function refreshPicker(announce)
 		if not ItemPicker then return end
 		local seen, names, icons = {}, {}, {}
-		forEachShopItem(function(item)
-			local nm = itemName(item)
+		forEachCatalogItem(function(item)
+			local nm = item.Name
 			if nm and nm ~= '' and not seen[nm] then
 				seen[nm] = true
 				table.insert(names, nm)
@@ -1188,11 +1279,11 @@ run(function()
 		end)
 		table.sort(names)
 		if #names == 0 then
-			ItemPicker:Change({'(enter the shop, then Refresh)'}, {})
-			if announce then notif('Auto Buy', 'No shop items found - open the shop first.') end
+			ItemPicker:Change({'(item catalog not found)'}, {})
+			if announce then notif('Auto Buy', 'Could not find the item catalog in ReplicatedStorage.') end
 		else
 			ItemPicker:Change(names, icons)   -- second arg = per-item icon map
-			if announce then notif('Auto Buy', ('Found %d shop items.'):format(#names)) end
+			if announce then notif('Auto Buy', ('Loaded %d items.'):format(#names)) end
 		end
 	end
 
@@ -1272,20 +1363,20 @@ run(function()
 		Function = function(callback)
 			if callback then
 				lastInShop = inShop()
-				-- buy once immediately if we're already in the shop
+				-- populate the full item catalog now (it's always available), and
+				-- buy immediately if we're already in the shop
+				task.spawn(refreshPicker)
 				if lastInShop then task.spawn(runBuy) end
-					if lastInShop then task.spawn(refreshPicker) end
-					AutoBuy:Clean(runService.Heartbeat:Connect(function()
-						local now = inShop()
-						if now and not lastInShop then
-							task.spawn(refreshPicker)   -- repopulate the picker with this shop's items
-							task.spawn(runBuy)          -- just entered the shop
-						end
-						lastInShop = now
-					end))
+				AutoBuy:Clean(runService.Heartbeat:Connect(function()
+					local now = inShop()
+					if now and not lastInShop then
+						task.spawn(runBuy)   -- just entered the shop, buy what's stocked
+					end
+					lastInShop = now
+				end))
 			end
 		end,
-		Tooltip = 'Automatically buys shop items that pass your filters as soon as you enter the shop. Set a name whitelist for exact picks, or use the category toggles to buy broadly.'
+		Tooltip = 'Buys whitelisted/enabled-category items whenever they appear in the shop. The Item Picker lists every item in the game - tick the ones you want and Auto Buy grabs them as soon as they are stocked and affordable.'
 	})
 
 	BuyGears = AutoBuy:CreateToggle({Name = 'Buy Gears', Default = true, Tooltip = 'Buy items from the Gears shelf.'})
@@ -1300,7 +1391,7 @@ run(function()
 	})
 	ItemPicker = AutoBuy:CreateDropdown({
 		Name = 'Item Picker',
-		List = {'(enter the shop, then Refresh)'},
+		List = {'(loading items...)'},
 		Function = function(name, mouse)
 			-- only react to actual clicks, and skip the placeholder entry
 			if not mouse or not name or name:sub(1, 1) == '(' then return end
@@ -1310,14 +1401,14 @@ run(function()
 				notif('Auto Buy', (present and 'Added "%s" to whitelist.' or 'Removed "%s" from whitelist.'):format(name))
 			end
 		end,
-		Tooltip = 'Pick a real shop item by name to toggle it in the whitelist (no typing needed). Populates when you enter the shop; hit Refresh Items if it looks empty.'
+		Tooltip = 'Every item in the game, with its icon. Click one to toggle it in the whitelist - Auto Buy will grab it whenever it shows up in the shop. No need to be in the shop.'
 	})
 	AutoBuy:CreateButton({
 		Name = 'Refresh Items',
 		Function = function()
 			refreshPicker(true)
 		end,
-		Tooltip = 'Re-scan the current shop and repopulate the Item Picker. Do this while the shop is open.'
+		Tooltip = 'Reload the full item catalog into the Item Picker.'
 	})
 	MaxPrice = AutoBuy:CreateSlider({
 		Name = 'Max Price',
