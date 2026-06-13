@@ -382,16 +382,28 @@ run(function()
 	local arrests = sessioninfo:AddItem('Arrested')
 	local moneymade = sessioninfo:AddItem('Money Made', 0, toMoney, true)
 	local bounty = sessioninfo:AddItem('Bounty List', '', function()
-		local text, tab = '', workspace.MostWanted:FindFirstChild('Board', true)
-		tab = tab and tab:GetChildren() or {}
+		-- Bounties live in ReplicatedStorage.BountyData.Value as a JSON array of
+		-- {UserId, Bounty}; the old workspace MostWanted.Board UI no longer exists.
+		local text = ''
+		local list
+		local ok, svc = pcall(function() return require(replicatedStorage.Bounty.BountyBoardService) end)
+		if ok and type(svc) == 'table' and type(svc.Bounties) == 'table' then
+			list = svc.Bounties
+		else
+			local data = replicatedStorage:FindFirstChild('BountyData')
+			if data then
+				local good, decoded = pcall(function()
+					return cloneref(game:GetService('HttpService')):JSONDecode(data.Value)
+				end)
+				if good and type(decoded) == 'table' then list = decoded end
+			end
+		end
 
-		for i, v in tab do
-			if v:IsA('Frame') then
-				local plrname = v:FindFirstChild('PlayerName', true)
-				local bounty = v:FindFirstChild('Bounty', true)
-				if plrname and bounty then
-					text = text..'\n'..(plrname.Text..': '..bounty.Text:gsub(' Bounty', ''))
-				end
+		for _, entry in (type(list) == 'table' and list or {}) do
+			if type(entry) == 'table' and entry.UserId then
+				local plr = playersService:GetPlayerByUserId(entry.UserId)
+				local name = plr and (plr.DisplayName or plr.Name) or ('User '..tostring(entry.UserId))
+				text = text..'\n'..(name..': '..tostring(entry.Bounty))
 			end
 		end
 
@@ -633,7 +645,76 @@ run(function()
 	Instant = SilentAim:CreateToggle({Name = 'Hitscan Bullets', Tooltip = 'Bullets skip their travel time and arrive instantly at the target (no lead needed). Best paired with a target Mode above.'})
 	Silent = SilentAim:CreateToggle({Name = 'Silent', Tooltip = 'Invisible mode: silently redirects bullet trajectories to the target instead of moving your camera. Looks legit on your screen but ignores the Speed slider.'})
 end)
-	
+
+-- Dedicated Aimbot: every bullet you fire is silently redirected onto the nearest
+-- target in range AND made hitscan (zero travel time), so it lands the instant you
+-- shoot with no aiming, leading, or camera movement. This is the one-click "lock
+-- everything" preset; SilentAim above is the configurable version.
+run(function()
+	local Aimbot
+	local Target
+	local Range
+	local Hooked
+	local AimRaycast = RaycastParams.new()
+	AimRaycast.RespectCanCollide = true
+
+	Aimbot = vain.Categories.Combat:CreateModule({
+		Name = 'Aimbot',
+		Function = function(callback)
+			if callback then
+				-- redirect the trajectory of every shot to the nearest valid target
+				Hooked = jb.GunController.TransformLocalMousePosition
+				jb.GunController.TransformLocalMousePosition = function(self, pos)
+					local ent = entitylib.EntityPosition({
+						Range = Range.Value,
+						Wallcheck = Target.Walls.Enabled and true or nil,
+						Part = 'RootPart',
+						Origin = entitylib.isAlive and entitylib.character.RootPart.Position or nil,
+						Players = Target.Players.Enabled,
+						NPCs = Target.NPCs.Enabled
+					})
+					if ent then
+						local item = jb.ItemSystemController:GetLocalEquipped()
+						if item then
+							AimRaycast.FilterDescendantsInstances = {gameCamera, ent.Character}
+							AimRaycast.CollisionGroup = ent.RootPart.CollisionGroup
+							-- target velocity is zero in the solve: bullets are made hitscan
+							-- below, so there is nothing to lead.
+							local calc = prediction.SolveTrajectory(self.Tip.CFrame.Position, item.Config.BulletSpeed or 1000, math.abs(item.BulletEmitter.GravityVector.Y), ent.RootPart.Position, Vector3.zero, workspace.Gravity, ent.HipHeight, nil, AimRaycast)
+							if calc then
+								targetinfo.Targets[ent] = tick() + 1
+								return calc
+							end
+						end
+					end
+					return pos
+				end
+
+				-- force every bullet to be hitscan so it arrives the instant it is fired
+				Aimbot:Clean(runService.RenderStepped:Connect(function()
+					local item = jb.ItemSystemController:GetLocalEquipped()
+					if item and item.BulletEmitter then
+						rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.001))
+					end
+				end))
+			else
+				jb.GunController.TransformLocalMousePosition = Hooked
+			end
+		end,
+		Tooltip = 'Instantly hits the nearest target in range with zero bullet travel time. No aiming or camera movement -- just shoot. Combines silent trajectory redirect with hitscan.'
+	})
+	Target = Aimbot:CreateTargets({Players = true})
+	Range = Aimbot:CreateSlider({
+		Name = 'Range',
+		Min = 1,
+		Max = 1000,
+		Default = 300,
+		Suffix = function(val)
+			return val == 1 and 'stud' or 'studs'
+		end
+	})
+end)
+
 run(function()
 	local Wallbang = {Enabled = false}
 	
@@ -735,20 +816,32 @@ run(function()
 	local MinBounty
 	local highlights = {} -- [Player] = {Highlight, BillboardGui}
 
-	-- Parse the Most Wanted board into a name -> bounty-number map.
+	-- Read the live Most Wanted list. The game no longer scrapes a workspace UI
+	-- board; bounties are a JSON array in ReplicatedStorage.BountyData.Value,
+	-- decoded by Bounty.BountyBoardService into .Bounties = {{UserId, Bounty}, ...}.
+	-- We read that service directly and return a UserId -> bounty-number map.
+	local bountyService = select(2, pcall(function()
+		return require(replicatedStorage.Bounty.BountyBoardService)
+	end))
+	local httpService = cloneref(game:GetService('HttpService'))
 	local function readBoard()
 		local map = {}
-		local board = workspace:FindFirstChild('MostWanted')
-		board = board and board:FindFirstChild('Board', true)
-		if not board then return map end
-		for _, v in board:GetChildren() do
-			if v:IsA('Frame') then
-				local plrname = v:FindFirstChild('PlayerName', true)
-				local bounty = v:FindFirstChild('Bounty', true)
-				if plrname and bounty then
-					local num = tonumber((bounty.Text:gsub('[^%d]', ''))) or 0
-					map[plrname.Text] = num
-				end
+		local list
+		if type(bountyService) == 'table' and type(bountyService.Bounties) == 'table' then
+			list = bountyService.Bounties
+		else
+			-- fallback: decode the raw BountyData JSON ourselves
+			local data = replicatedStorage:FindFirstChild('BountyData')
+			if data then
+				local ok, decoded = pcall(function() return httpService:JSONDecode(data.Value) end)
+				if ok and type(decoded) == 'table' then list = decoded end
+			end
+		end
+		if type(list) ~= 'table' then return map end
+		for _, entry in list do
+			if type(entry) == 'table' and entry.UserId then
+				local num = tonumber((tostring(entry.Bounty):gsub('[^%d]', ''))) or 0
+				map[entry.UserId] = num
 			end
 		end
 		return map
@@ -777,7 +870,7 @@ run(function()
 
 		-- remove highlights for players no longer qualifying
 		for plr in highlights do
-			local b = board[plr.Name]
+			local b = board[plr.UserId]
 			if not b or b < min or not plr.Character then
 				clear(plr)
 			end
@@ -785,7 +878,7 @@ run(function()
 
 		for _, ent in entitylib.List do
 			local plr = ent.Player
-			local b = plr and board[plr.Name]
+			local b = plr and board[plr.UserId]
 			if plr and b and b >= min and ent.Character then
 				local data = highlights[plr]
 				if not data then
