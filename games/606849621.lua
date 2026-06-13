@@ -702,14 +702,14 @@ run(function()
 						NPCs = Target.NPCs.Enabled
 					})
 					if ent and ent[part] then
-						local item = jb.ItemSystemController:GetLocalEquipped()
-						if item then
-							AimRaycast.FilterDescendantsInstances = {gameCamera, ent.Character}
-							AimRaycast.CollisionGroup = ent[part].CollisionGroup
-							local calc = prediction.SolveTrajectory(self.Tip.CFrame.Position, item.Config.BulletSpeed or 1000, math.abs(item.BulletEmitter.GravityVector.Y), ent[part].Position, Vector3.zero, workspace.Gravity, ent.HipHeight, nil, AimRaycast)
-							targetinfo.Targets[ent] = tick() + 1
-							return calc or ent[part].Position
-						end
+						-- Aim STRAIGHT at the target part -- exactly what your manual mouse
+						-- aim hands the gun. Hitscan is forced on below, so the bullet has
+						-- zero travel time: nothing to lead, no gravity drop to compensate.
+						-- The old SolveTrajectory returned a gravity-arc lead point that
+						-- overshot at close range, which is why manual aim hit in-car targets
+						-- but the aimbot missed.
+						targetinfo.Targets[ent] = tick() + 1
+						return ent[part].Position
 					end
 					return pos
 				end
