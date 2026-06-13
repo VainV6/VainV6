@@ -639,7 +639,7 @@ run(function()
 	local AimRaycast = RaycastParams.new()
 	AimRaycast.RespectCanCollide = true
 	local inflatedRoots = {} -- [RootPart] = true, hit radii we enlarged (restore on disable)
-	local HITBOX_RADIUS = 12 -- studs; default is 3. Big enough to catch in-car targets.
+	local HITBOX_RADIUS = 20 -- studs; default is 3. Big enough to catch in-car targets.
 
 	-- Target-priority sort functions. Each entitylib sorting item is
 	-- {Entity = <ent>, Magnitude = <distance>}; the entity exposes .Humanoid,
@@ -726,10 +726,22 @@ run(function()
 						item.BulletEmitter.IgnoreList = {workspace}
 					end
 					for _, e in entitylib.List do
-						if e.RootPart and e.Targetable
+						if e.Targetable
 							and ((e.Player and Target.Players.Enabled) or (e.NPC and Target.NPCs.Enabled)) then
-							inflatedRoots[e.RootPart] = true
-							e.RootPart:SetAttribute('HitRadius', HITBOX_RADIUS)
+							-- Inflate the hit radius on BOTH the entitylib RootPart and the
+							-- character's literal HumanoidRootPart -- the BulletEmitter reads
+							-- the tagged character's .RootPart (the HumanoidRootPart), so we
+							-- must enlarge that exact instance for in-car hits to register.
+							local parts = {e.RootPart}
+							local char = e.Character
+							local hrp = char and char:FindFirstChild('HumanoidRootPart')
+							if hrp then parts[#parts + 1] = hrp end
+							for _, part in parts do
+								if part then
+									inflatedRoots[part] = true
+									part:SetAttribute('HitRadius', HITBOX_RADIUS)
+								end
+							end
 						end
 					end
 				end))
