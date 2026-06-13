@@ -1767,7 +1767,7 @@ run(function()
 end)
 
 run(function()
-	-- Vehicle Fly: WASD + Space/Shift, camera-relative. Two modes:
+	-- Vehicle Fly: WASD + E/Q (up/down), camera-relative. Two modes:
 	--   Velocity (default, lower risk) - drive the car's AssemblyLinearVelocity each
 	--     frame; movement stays continuous so the position anticheat rarely rolls it.
 	--   CFrame (higher risk) - anchor the assembly and step its CFrame; snappier but
@@ -1785,7 +1785,9 @@ run(function()
 		return nil
 	end
 
-	-- WASD/Space/Shift -> a camera-relative movement direction
+	-- WASD + E/Q -> a camera-relative movement direction. We use E (up) and Q
+	-- (down) for vertical because Space is bound to the car's jump/exit-vehicle
+	-- action -- pressing Space for "up" would eject you from the car instead.
 	local function inputDir()
 		local d = Vector3.zero
 		local cf = gameCamera.CFrame
@@ -1793,8 +1795,8 @@ run(function()
 		if inputService:IsKeyDown(Enum.KeyCode.S) then d -= cf.LookVector end
 		if inputService:IsKeyDown(Enum.KeyCode.A) then d -= cf.RightVector end
 		if inputService:IsKeyDown(Enum.KeyCode.D) then d += cf.RightVector end
-		if inputService:IsKeyDown(Enum.KeyCode.Space) then d += Vector3.yAxis end
-		if inputService:IsKeyDown(Enum.KeyCode.LeftShift) then d -= Vector3.yAxis end
+		if inputService:IsKeyDown(Enum.KeyCode.E) then d += Vector3.yAxis end
+		if inputService:IsKeyDown(Enum.KeyCode.Q) then d -= Vector3.yAxis end
 		return d.Magnitude > 0 and d.Unit or Vector3.zero
 	end
 
@@ -1866,7 +1868,7 @@ run(function()
 				stopFly()
 			end
 		end,
-		Tooltip = 'Fly your car with WASD + Space/Shift (camera-relative). Velocity mode is smooth and lower-risk; CFrame mode is snappier but jumps position so the anticheat may roll you back. Use lower speeds.'
+		Tooltip = 'Fly your car with WASD + E (up) / Q (down), camera-relative. (Space is the car jump/exit, so E/Q are used instead.) Velocity mode is smooth and lower-risk; CFrame is snappier but jumps position so the anticheat may roll you back. Use lower speeds.'
 	})
 	FlyMode = VehicleFly:CreateDropdown({
 		Name = 'Mode',
