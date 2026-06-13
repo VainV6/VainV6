@@ -5504,16 +5504,21 @@ function mainapi:CreateNotification(title, text, duration, type)
 		textParams.Size = 14
 		if typeof(uipallet.Font) == 'Font' then textParams.Font = uipallet.Font end
 
-		-- Measure single-line width, cap at 400px
+		-- Measure single-line width. Cap generously (460) so long one-line
+		-- messages (e.g. the welcome line) aren't squeezed to the wrap boundary,
+		-- which made them measure as 2 lines while rendering as 1 — leaving a big
+		-- empty strip under the text.
 		textParams.Width = math.huge
 		local singleLine = textService:GetTextBoundsAsync(textParams)
-		local notifWidth = math.min(math.max(singleLine.X + 80, 266), 400)
+		local notifWidth = math.min(math.max(singleLine.X + 80, 266), 460)
 
-		-- Measure text height with wrapping at actual render width
+		-- Measure wrapped height at the EXACT width the label renders at (-56),
+		-- so measurement and render agree on the line count.
 		textParams.Width = notifWidth - 56
 		local wrappedSize = textService:GetTextBoundsAsync(textParams)
 		local textHeight = wrappedSize.Y
-		local notifHeight = math.max(75, 44 + textHeight + 14)
+		-- Body sits at y=44; ~12px bottom padding so the box hugs the content.
+		local notifHeight = math.max(62, 44 + textHeight + 12)
 
 		-- Insert into stack before computing Y so concurrent notifications stack correctly
 		local entry = {notification = nil, height = notifHeight}
