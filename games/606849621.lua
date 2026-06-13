@@ -837,6 +837,32 @@ run(function()
 	})
 end)
 
+-- Standalone Hitscan: makes EVERY bullet you fire arrive instantly with zero
+-- travel time, independent of aiming. The BulletEmitter advances each bullet by
+-- (now - LastUpdate) * BulletSpeed every frame (see Game.ItemSystem.BulletEmitter
+-- :Update). RenderStepped runs before the gun's Heartbeat Update, so pushing
+-- LastUpdate back almost a full LifeSpan each frame makes the very next step move
+-- the bullet its ENTIRE max travel distance at once -- it lands the moment it is
+-- fired instead of flying at BulletSpeed. Pure local timing change, no remote.
+run(function()
+	local Hitscan
+
+	Hitscan = vain.Categories.Combat:CreateModule({
+		Name = 'Hitscan',
+		Function = function(callback)
+			if callback then
+				Hitscan:Clean(runService.RenderStepped:Connect(function()
+					local item = jb.ItemSystemController:GetLocalEquipped()
+					if item and item.BulletEmitter then
+						rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.001))
+					end
+				end))
+			end
+		end,
+		Tooltip = 'Your bullets hit instantly with zero travel time -- no leading or waiting for the projectile. Works with any gun, with or without aimbot.'
+	})
+end)
+
 run(function()
 	local Wallbang = {Enabled = false}
 	
