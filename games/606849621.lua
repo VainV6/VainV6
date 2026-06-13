@@ -1083,7 +1083,13 @@ run(function()
 					-- old 0.6s cooldown -- arrest the instant a criminal is in range.
 					local insta = not InstaArrest or InstaArrest.Enabled
 					if insta or (item and item.__ClassName == 'Handcuffs') then
-						local localPosition = entitylib.character.Humanoid.HumanoidUnloadServerPosition.Value
+						-- HumanoidUnloadServerPosition is now a CHILD Value of the Humanoid
+						-- (FindFirstChild), not a direct property -- indexing it directly
+						-- threw "not a valid member" every tick, aborting the arrest loop.
+						-- Fall back to the real RootPart position if it isn't present.
+						local hum = entitylib.character.Humanoid
+						local serverPos = hum and hum:FindFirstChild('HumanoidUnloadServerPosition')
+						local localPosition = (serverPos and serverPos.Value) or entitylib.character.RootPart.Position
 						local range = (ArrestRange and ArrestRange.Value) or 18.4
 						local plrs = entitylib.AllPosition({
 							Players = true,
