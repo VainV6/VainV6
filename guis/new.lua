@@ -1049,8 +1049,9 @@ components = {
 			end
 		end
 		
-		function optionapi:Change(list)
+		function optionapi:Change(list, icons)
 			optionsettings.List = list or {}
+			if icons ~= nil then optionsettings.Icons = icons end
 			if not table.find(optionsettings.List, self.Value) then
 				self:SetValue(self.Value)
 			end
@@ -1095,6 +1096,20 @@ components = {
 					dropdownoption.TextTruncate = Enum.TextTruncate.AtEnd
 					dropdownoption.FontFace = uipallet.Font
 					dropdownoption.Parent = dropdownchildren
+					-- optional per-option icon: if optionsettings.Icons[v] is set we
+					-- show it in the left gutter and indent the text. No icon = unchanged.
+					local iconId = optionsettings.Icons and optionsettings.Icons[v]
+					if iconId then
+						dropdownoption.Text = '                  '..v
+						local opticon = Instance.new('ImageLabel')
+						opticon.Name = 'Icon'
+						opticon.Size = UDim2.fromOffset(18, 18)
+						opticon.Position = UDim2.fromOffset(8, 4)
+						opticon.BackgroundTransparency = 1
+						opticon.Image = tostring(iconId)
+						opticon.ScaleType = Enum.ScaleType.Fit
+						opticon.Parent = dropdownoption
+					end
 					local itemTip = optionsettings.ItemTooltips and optionsettings.ItemTooltips[v]
 					if itemTip then
 						addTooltip(dropdownoption, itemTip)

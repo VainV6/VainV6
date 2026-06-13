@@ -184,6 +184,24 @@ local function itemPrompt(model)
 	return model:FindFirstChildWhichIsA('ProximityPrompt', true)
 end
 
+-- best-effort image asset id for an item model, for the picker icons. Shop items
+-- are gear Tools, so the Tool's TextureId is the icon. Fall back to any ImageLabel
+-- in the item's BillboardGui, then a Decal.
+local function itemIcon(model)
+	local tool = model:IsA('Tool') and model or model:FindFirstChildWhichIsA('Tool', true)
+	if tool and tool.TextureId and tool.TextureId ~= '' then
+		return tool.TextureId
+	end
+	for _, d in model:GetDescendants() do
+		if d:IsA('ImageLabel') and d.Image ~= '' then return d.Image end
+		if d:IsA('ImageButton') and d.Image ~= '' then return d.Image end
+	end
+	for _, d in model:GetDescendants() do
+		if d:IsA('Decal') and d.Texture ~= '' then return d.Texture end
+	end
+	return nil
+end
+
 -- iterate buyable items, calling fn(model, category, prompt) for each
 local function forEachShopItem(fn)
 	local shop = shopFolder()
@@ -279,16 +297,29 @@ end
 -- from the decompiled gear source: InvokeServer("MouseClick", {Down=..., ...,
 -- MousePosition=Vector3}).) The server resolves the hit, so pointing MousePosition
 -- at the enemy's hitbox is enough.
+-- Kill attribution: when we swing at an enemy we stamp its model so the kill feed
+-- can tell "we killed it" from enemies that died to something else. Keyed by the
+-- enemy Character model, value = tick() of the last swing.
+local lastAttacked = setmetatable({}, {__mode = 'k'})
+local function markAttacked(ent)
+	local key = ent and (ent.Character or ent.Model)
+	if key then lastAttacked[key] = tick() end
+end
+
 local function attackEnemy(ent)
 	local sc, tool = getServerControl()
 	if not sc then
-		if tool then return pcall(function() tool:Activate() end) end
+		if tool then
+			markAttacked(ent)
+			return pcall(function() tool:Activate() end)
+		end
 		return false
 	end
 	local hitbox = ent.Character and (ent.Character:FindFirstChild('EnemyHitBox') or ent.RootPart)
 	local aim = hitbox and hitbox.Position or ent.RootPart.Position
 	-- If Anti Hit is desyncing us, resolve the swing from our real position so the
 	-- server sees us in range; otherwise the hit whiffs like everything else.
+	markAttacked(ent)
 	local ok = withRealPosition(function()
 		sc:InvokeServer('MouseClick', {Down = true, MousePosition = aim})
 		sc:InvokeServer('MouseClick', {Down = false, HeldTime = 0, MousePosition = aim})
@@ -1145,20 +1176,22 @@ run(function()
 	-- populated between rounds, so this needs to be (re)run while in the shop.
 	local function refreshPicker(announce)
 		if not ItemPicker then return end
-		local seen, names = {}, {}
+		local seen, names, icons = {}, {}, {}
 		forEachShopItem(function(item)
 			local nm = itemName(item)
 			if nm and nm ~= '' and not seen[nm] then
 				seen[nm] = true
 				table.insert(names, nm)
+				local ic = itemIcon(item)
+				if ic then icons[nm] = ic end
 			end
 		end)
 		table.sort(names)
 		if #names == 0 then
-			ItemPicker:Change({'(enter the shop, then Refresh)'})
+			ItemPicker:Change({'(enter the shop, then Refresh)'}, {})
 			if announce then notif('Auto Buy', 'No shop items found - open the shop first.') end
 		else
-			ItemPicker:Change(names)
+			ItemPicker:Change(names, icons)   -- second arg = per-item icon map
 			if announce then notif('Auto Buy', ('Found %d shop items.'):format(#names)) end
 		end
 	end
@@ -1330,28 +1363,29 @@ run(function()
 	local ReadyDelay
 	local lastInShop = false
 
-	-- locate the ready ClickDetector anywhere under the spawn zone / workspace
-	local function findReadyClick()
-		local zone = workspace:FindFirstChild('SpawnZone2', true) or workspace
-		local label = zone:FindFirstChild('PlayersReady', true)
-		if label then
-			local cd = label:FindFirstChildWhichIsA('ClickDetector', true)
-			if cd then return cd end
-			-- ClickDetector might sit on a sibling part of the label's model
-			local model = label:FindFirstAncestorWhichIsA('Model')
-			if model then
-				local cd2 = model:FindFirstChildWhichIsA('ClickDetector', true)
-				if cd2 then return cd2 end
-			end
+	-- Readying up is NOT a clickable part - the "PlayersReady" instance is just a
+	-- TextLabel. The real ready signal is the client firing RemoteEventStart with
+	-- no arguments (confirmed from the decompiled shop UI: it does
+	-- RemoteEventStart:FireServer() and waits on its OnClientEvent). So we fire
+	-- that remote directly.
+	local readyRemote
+	local function findReadyRemote()
+		if readyRemote and readyRemote.Parent then return readyRemote end
+		-- it lives under ReplicatedStorage; fall back to a workspace-wide search
+		local r = replicatedStorage:FindFirstChild('RemoteEventStart', true)
+			or game:FindFirstChild('RemoteEventStart', true)
+		if r and r:IsA('RemoteEvent') then
+			readyRemote = r
+			return r
 		end
 		return nil
 	end
 
 	local function pressReady()
-		local cd = findReadyClick()
-		if cd then
-			pcall(function() fireclickdetector(cd) end)
-			return true
+		local r = findReadyRemote()
+		if r then
+			local ok = pcall(function() r:FireServer() end)
+			return ok
 		end
 		return false
 	end
@@ -1360,24 +1394,41 @@ run(function()
 		Name = 'Auto Ready',
 		Function = function(callback)
 			if callback then
-				lastInShop = false
+				lastInShop = inShop()
+				local readiedThisShop = false
+				local enteredAt = lastInShop and tick() or 0
+
+				-- fire the ready remote (optionally after the delay), once per shop visit
+				local function doReady()
+					if readiedThisShop then return end
+					readiedThisShop = true
+					local d = ReadyDelay and ReadyDelay.Value or 0
+					local function fire()
+						if AutoReady.Enabled and inShop() then pressReady() end
+					end
+					if d > 0 then task.delay(d, fire) else fire() end
+				end
+
+				-- if we're already in the shop when enabled, ready up now
+				if lastInShop then doReady() end
+
 				AutoReady:Clean(runService.Heartbeat:Connect(function()
 					local now = inShop()
 					if now and not lastInShop then
-						local d = ReadyDelay and ReadyDelay.Value or 0
-						if d > 0 then
-							task.delay(d, function()
-								if AutoReady.Enabled and inShop() then pressReady() end
-							end)
-						else
-							pressReady()
-						end
+						readiedThisShop = false   -- new shop visit
+						enteredAt = tick()
+						doReady()
+					elseif now and not readiedThisShop then
+						-- safety retry if the first fire was missed on entry
+						if tick() - enteredAt > 1 then doReady() end
+					elseif not now then
+						readiedThisShop = false
 					end
 					lastInShop = now
 				end))
 			end
 		end,
-		Tooltip = 'Automatically presses the Ready button when you enter the shop to start the next round. Pairs with Auto Buy (raise the delay to let buys finish first).'
+		Tooltip = 'Automatically readies up when you enter the shop to start the next round (fires the RemoteEventStart signal). Pairs with Auto Buy - raise the delay to let buys finish first.'
 	})
 
 	ReadyDelay = AutoReady:CreateSlider({
@@ -1387,6 +1438,192 @@ run(function()
 		Default = 0,
 		Suffix = 's',
 		Tooltip = 'Seconds to wait in the shop before readying up. Raise this if you want Auto Buy / manual shopping to finish first.'
+	})
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
+--  KILL FEED  (on-screen feed when you kill an NPC)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- Shows a small stacked feed in the corner each time an enemy you damaged dies.
+-- We attribute the kill via the lastAttacked stamp set in attackEnemy: if the
+-- enemy died (or was removed at <=0 HP) shortly after we swung at it, it's ours.
+run(function()
+	local KillFeed
+	local OnlyMine, ShowBosses, FeedTime
+	local gui, holder
+	local total = 0
+
+	local function ensureGui()
+		if gui and gui.Parent then return end
+		gui = Instance.new('ScreenGui')
+		gui.Name = 'VainKillFeed'
+		gui.ResetOnSpawn = false
+		gui.IgnoreGuiInset = true
+		gui.DisplayOrder = 9999
+		gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+		local parent = (gethui and gethui()) or (cloneref(game:GetService('CoreGui')))
+		gui.Parent = parent
+
+		holder = Instance.new('Frame')
+		holder.Name = 'Holder'
+		holder.BackgroundTransparency = 1
+		holder.AnchorPoint = Vector2.new(1, 0.5)
+		holder.Position = UDim2.new(1, -16, 0.42, 0)
+		holder.Size = UDim2.fromOffset(300, 400)
+		holder.Parent = gui
+		local layout = Instance.new('UIListLayout')
+		layout.SortOrder = Enum.SortOrder.LayoutOrder
+		layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
+		layout.VerticalAlignment = Enum.VerticalAlignment.Center
+		layout.Padding = UDim.new(0, 4)
+		layout.Parent = holder
+	end
+
+	-- pull a vape GUI accent color if one is exposed, else a default
+	local function accent()
+		local ok, c = pcall(function() return vain.GUIColor and Color3.fromHSV(vain.GUIColor.Hue, vain.GUIColor.Sat, vain.GUIColor.Value) end)
+		if ok and typeof(c) == 'Color3' then return c end
+		return Color3.fromRGB(120, 220, 160)
+	end
+
+	-- RichText is on, so escape any markup characters in the enemy name
+	local function escapeRich(s)
+		s = tostring(s)
+		s = s:gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;')
+		return s
+	end
+
+	local function pushEntry(name, boss)
+		ensureGui()
+		total += 1
+		name = escapeRich(name)
+
+		local row = Instance.new('Frame')
+		row.Name = 'Kill'
+		row.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+		row.BackgroundTransparency = 0.25
+		row.BorderSizePixel = 0
+		row.Size = UDim2.fromOffset(10, 26)
+		row.AutomaticSize = Enum.AutomaticSize.X
+		row.LayoutOrder = -total   -- newest on top
+		row.Parent = holder
+		local corner = Instance.new('UICorner')
+		corner.CornerRadius = UDim.new(0, 6)
+		corner.Parent = row
+		local stroke = Instance.new('UIStroke')
+		stroke.Color = boss and Color3.fromRGB(255, 70, 70) or accent()
+		stroke.Transparency = 0.2
+		stroke.Thickness = 1
+		stroke.Parent = row
+		local pad = Instance.new('UIPadding')
+		pad.PaddingLeft = UDim.new(0, 10)
+		pad.PaddingRight = UDim.new(0, 10)
+		pad.Parent = row
+
+		local label = Instance.new('TextLabel')
+		label.BackgroundTransparency = 1
+		label.AutomaticSize = Enum.AutomaticSize.X
+		label.Size = UDim2.fromOffset(0, 26)
+		label.Font = Enum.Font.GothamMedium
+		label.TextSize = 14
+		label.TextColor3 = Color3.fromRGB(235, 235, 240)
+		label.TextXAlignment = Enum.TextXAlignment.Right
+		label.RichText = true
+		local tint = boss and 'rgb(255,90,90)' or 'rgb(150,235,180)'
+		label.Text = ('<font color="rgb(180,180,190)">Killed</font>  <font color="%s"><b>%s</b></font>%s')
+			:format(tint, name, boss and '  <font color="rgb(255,140,60)">[BOSS]</font>' or '')
+		label.Parent = row
+
+		-- fade in
+		row.BackgroundTransparency = 1
+		label.TextTransparency = 1
+		stroke.Transparency = 1
+		tweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.25}):Play()
+		tweenService:Create(label, TweenInfo.new(0.15), {TextTransparency = 0}):Play()
+		tweenService:Create(stroke, TweenInfo.new(0.15), {Transparency = 0.2}):Play()
+
+		-- schedule fade out + cleanup
+		local life = (FeedTime and FeedTime.Value) or 4
+		task.delay(life, function()
+			if not row.Parent then return end
+			tweenService:Create(row, TweenInfo.new(0.4), {BackgroundTransparency = 1}):Play()
+			tweenService:Create(label, TweenInfo.new(0.4), {TextTransparency = 1}):Play()
+			tweenService:Create(stroke, TweenInfo.new(0.4), {Transparency = 1}):Play()
+			task.wait(0.45)
+			pcall(function() row:Destroy() end)
+		end)
+	end
+
+	local function isBossEnt(ent)
+		return ent.Character and (ent.Character:FindFirstChild('Boss', true) ~= nil
+			or ent.Character:GetAttribute('Boss') == true)
+	end
+
+	local function onEnemyDead(ent)
+		if not KillFeed.Enabled then return end
+		if not (ent.NPC and ent.Character) then return end
+		local boss = isBossEnt(ent)
+		if ShowBosses and ShowBosses.Enabled and not boss then return end
+		if OnlyMine and OnlyMine.Enabled then
+			local t = lastAttacked[ent.Character]
+			if not t or (tick() - t) > 4 then return end   -- not a recent kill of ours
+		end
+		pushEntry(ent.Character.Name, boss)
+	end
+
+	KillFeed = vain.Categories.Render:CreateModule({
+		Name = 'Kill Feed',
+		Function = function(callback)
+			if callback then
+				total = 0
+				local counted = setmetatable({}, {__mode = 'k'})   -- guard one feed per enemy
+				local function fire(ent)
+					if ent.Character and counted[ent.Character] then return end
+					if ent.Character then counted[ent.Character] = true end
+					onEnemyDead(ent)
+				end
+				-- enemy removed from the folder at <=0 HP = a kill
+				KillFeed:Clean(entitylib.Events.EntityRemoved:Connect(function(ent)
+					if ent.Humanoid and ent.Humanoid.Health <= 0 then
+						fire(ent)
+					end
+				end))
+				-- also catch deaths where the model lingers a moment before removal
+				local function hookDeath(ent)
+					if ent.NPC and ent.Humanoid then
+						local conn
+						conn = ent.Humanoid.Died:Connect(function()
+							fire(ent)
+							if conn then conn:Disconnect() end
+						end)
+					end
+				end
+				KillFeed:Clean(entitylib.Events.EntityAdded:Connect(hookDeath))
+				for _, ent in entitylib.List do hookDeath(ent) end
+			else
+				if gui then pcall(function() gui:Destroy() end) end
+				gui, holder = nil, nil
+			end
+		end,
+		Tooltip = 'Shows an on-screen feed each time you kill an NPC. Toggle "Only My Kills" to filter out enemies that died to allies or environment.'
+	})
+
+	OnlyMine = KillFeed:CreateToggle({
+		Name = 'Only My Kills',
+		Default = true,
+		Tooltip = 'Only show enemies you damaged within the last few seconds (filters ally/AoE/environment kills).'
+	})
+	ShowBosses = KillFeed:CreateToggle({
+		Name = 'Bosses Only',
+		Tooltip = 'Only feed boss kills.'
+	})
+	FeedTime = KillFeed:CreateSlider({
+		Name = 'Display Time',
+		Min = 1,
+		Max = 15,
+		Default = 4,
+		Suffix = 's',
+		Tooltip = 'How long each kill entry stays on screen.'
 	})
 end)
 
