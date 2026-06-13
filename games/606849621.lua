@@ -359,13 +359,14 @@ run(function()
 	-- They must be re-decoded from the current place file on each Jailbreak
 	-- update or the action modules silently no-op (server ignores a dead alias).
 	-- Decoded from build "13 Jun @ 12:07 PM EDT @4e0945f":
-	--   Arrest=u137, Punch=attemptPunch closure, Eject=u820/ShouldEject,
-	--   GetIn=u829, GetOut=exit event, Tase/TaseReplicate from Game.Item.Taser,
-	--   PopTires from Game.Item.Gun vehicle-hit (FireServer(<this>, car, class)).
+	--   Arrest=u137, Punch=attemptPunch closure, Eject=u147 (vehicle spec
+	--   ShouldEject -> u147(spec.Part.Parent); egi9qmpo was the BREAKOUT remote,
+	--   not eject), GetIn=u829, GetOut=exit event, Tase/TaseReplicate from
+	--   Game.Item.Taser, PopTires from Game.Item.Gun vehicle-hit.
 	local REMOTE_FALLBACKS = {
 		Arrest = 'xajzr1t8',
 		Punch = 'jv58z10g',
-		Eject = 'egi9qmpo',
+		Eject = 'jhkx8ol1',
 		GetIn = 'ttwwg5ep',
 		GetOut = 'ywd3edo6',
 		Tase = 'm938v2jf',
@@ -1100,13 +1101,37 @@ run(function()
 		return false
 	end
 
+	-- Build-proof eject (same idea): the vehicle CircleAction spec has
+	-- spec.ShouldEject and a Callback that fires the real eject (u799 ->
+	-- u147(spec.Part.Parent)). Call that callback for the spec whose Part is the
+	-- given vehicle. Falls back to the Eject remote alias with the vehicle model.
+	local function tryEject(vehicle)
+		if not vehicle then return end
+		local specs = jb.CircleAction and jb.CircleAction.Specs
+		if type(specs) == 'table' then
+			for _, spec in specs do
+				if spec.ShouldEject and type(spec.Callback) == 'function'
+					and spec.Part and spec.Part:IsDescendantOf(vehicle) then
+					if pcall(function() spec:Callback(true) end) then return end
+				end
+			end
+		end
+		-- fallback: the game ejects with spec.Part.Parent (the vehicle model)
+		jb:FireServer('Eject', vehicle)
+	end
+
 	local function tryArrest(plr)
 		if not plr then return end
 		local last = arrestDebounce[plr]
-		if not last or tick() - last > 0.1 then
+		-- small per-target debounce only (avoid hammering the SAME target every
+		-- frame while the server processes it); a new target in range is arrested
+		-- immediately on the very next frame.
+		if not last or tick() - last > 0.25 then
 			arrestDebounce[plr] = tick()
-			-- prefer the game's own arrest callback (alias-proof); fall back to the
-			-- decoded remote alias if no live spec exists for this player yet.
+			-- Fire the alias immediately so a target that just entered range is
+			-- arrested without waiting for the game's spec to update. ALSO call the
+			-- game's own spec callback when it's ready (alias-proof) -- whichever
+			-- lands first wins; the server ignores the duplicate.
 			if not callSpecArrest(plr.Name) then
 				jb:FireServer('Arrest', plr)
 			end
@@ -1142,10 +1167,9 @@ run(function()
 								local tchar = plr and plr.Character
 								if plr and tchar and ent.RootPart and ent.Humanoid and teamOf(plr) == 'Prisoner'
 									and not tchar:GetAttribute('HasHandcuffs') then
-									local inVehicle = ent.Humanoid.Sit or tchar:GetAttribute('InVehicle') or getVehicle(ent)
-									if inVehicle then
-										local vehicle = getVehicle(ent)
-										if vehicle then jb:FireServer('Eject', vehicle) end
+									local vehicle = (ent.Humanoid.Sit or tchar:GetAttribute('InVehicle')) and getVehicle(ent) or nil
+									if vehicle then
+										tryEject(vehicle)
 									elseif (myPos - ent.RootPart.Position).Magnitude <= range then
 										tryArrest(plr)
 									end
@@ -1153,7 +1177,9 @@ run(function()
 							end
 						end
 					end
-					task.wait(0.1)
+					-- run every frame so a criminal entering range is caught instantly
+					-- (the per-target debounce in tryArrest prevents server spam)
+					task.wait()
 				until not AutoArrest.Enabled
 				table.clear(arrestDebounce)
 			end
