@@ -6379,6 +6379,7 @@ run(function()
 	local OtherProjectiles
 	local Blacklist
 	local SortMethod
+	local HitChance
 	local AeroPAChargePercent
 	local RandomHeadPercent
 	local RandomTorsoPercent
@@ -6757,9 +6758,23 @@ run(function()
 							    customDrawDuration = 0.05
 						end
 
+						local aimDir = CFrame.new(newlook.Position, calc).LookVector
+						-- Hit Chance: on a failed roll, deflect the aim by a small random
+						-- angle. Rotating the direction (not offsetting a point) makes the
+						-- linear miss grow with distance to the target automatically.
+						if HitChance and HitChance.Value < 100 and math.random(1, 100) > HitChance.Value then
+							local maxMissDeg = 4 * (1 - HitChance.Value / 100)
+							local missAngle = math.rad((math.random() * 0.5 + 0.5) * maxMissDeg)
+							local up = math.abs(aimDir.Y) < 0.99 and Vector3.yAxis or Vector3.xAxis
+							local perp = aimDir:Cross(up).Unit
+							local spin = math.random() * math.pi * 2
+							local axis = (perp * math.cos(spin) + aimDir:Cross(perp).Unit * math.sin(spin)).Unit
+							aimDir = CFrame.fromAxisAngle(axis, missAngle) * aimDir
+						end
+
 						wasHovering = false
 						return {
-							initialVelocity = CFrame.new(newlook.Position, calc).LookVector * projSpeed,
+							initialVelocity = aimDir * projSpeed,
 							positionFrom = offsetpos,
 							deltaT = lifetime,
 							gravitationalAcceleration = gravity,
@@ -6835,6 +6850,15 @@ run(function()
 		Min = 1,
 		Max = 1000,
 		Default = 1000
+	})
+
+	HitChance = ProjectileAimbot:CreateSlider({
+		Name = 'Hit Chance',
+		Min = 0,
+		Max = 100,
+		Default = 100,
+		Suffix = '%',
+		Tooltip = 'Chance for each shot to actually hit. Failed shots are deflected by a small angle that scales with distance, so they look like natural misses.'
 	})
 
 	PAFOVCircle = ProjectileAimbot:CreateToggle({
