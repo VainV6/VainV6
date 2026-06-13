@@ -1300,27 +1300,38 @@ run(function()
 			if callback then
 				repeat
 					local item = jb.ItemSystemController:GetLocalEquipped()
-					item = item and item.__ClassName == 'Taser' or nil
-					if not AutoTazeHandCheck.Enabled or item then
-						local ent = entitylib.EntityPosition({
-							Players = true,
-							Part = 'RootPart',
-							Range = 50
-						})
-	
-						if ent and isIllegal(ent) and not isArrested(ent.Player.Name) then
-							if item then 
-								jb:FireServer('TaseReplicate', ent.Head.Position) 
+					item = item and item.__ClassName == 'Taser' and item or nil
+					if item then
+						-- Respect the taser's real cooldown: the game stores the next
+						-- usable time as a NextUse attribute on the item and refuses to
+						-- tase before it. Firing during cooldown does nothing (a miss),
+						-- which is why the flat 10s wait dropped shots. Use the gun's own
+						-- range too, not a guessed 50.
+						local nextUse = item.inventoryItemValue and item.inventoryItemValue:GetAttribute('NextUse')
+						local ready = not (type(nextUse) == 'number' and os.clock() < nextUse)
+						local range = (item.Config and item.Config.Range) or 50
+						if ready then
+							local ent = entitylib.EntityPosition({
+								Players = true,
+								Part = 'RootPart',
+								Range = range
+							})
+							if ent and ent.RootPart and ent.Humanoid and isIllegal(ent) and not isArrested(ent.Player.Name) then
+								-- Match the args the game's own Tase sends: the target's
+								-- PrimaryPart (RootPart) and a hit position ON that part --
+								-- NOT the head. The server validates the hit part/position,
+								-- so sending the head got hits rejected.
+								local pos = ent.RootPart.Position
+								jb:FireServer('TaseReplicate', pos)
+								jb:FireServer('Tase', ent.Humanoid, ent.RootPart, pos)
 							end
-							jb:FireServer('Tase', ent.Humanoid, ent.Head, ent.Head.Position)
-							task.wait(10)
 						end
 					end
-					task.wait(0.016)
+					task.wait(0.05)
 				until not AutoTaze.Enabled
 			end
 		end,
-		Tooltip = 'Immobilizes entities around you'
+		Tooltip = 'Immobilizes nearby criminals with the taser. Respects the taser cooldown and range and sends the hit data the game does, so the server accepts it.'
 	})
 	AutoTazeHandCheck = AutoTaze:CreateToggle({Name = 'Hand Check'})
 end)
