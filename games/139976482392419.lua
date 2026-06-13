@@ -266,7 +266,9 @@ local function forEachCatalogItem(fn)
 	end
 end
 
--- iterate buyable items, calling fn(model, category, prompt) for each
+-- iterate buyable items, calling fn(item, category, prompt) for each. Any child
+-- holding a ProximityPrompt is buyable - don't restrict by class, since shop items
+-- can be Models, Tools, Accessories or bare parts depending on the item.
 local function forEachShopItem(fn)
 	local shop = shopFolder()
 	if not shop then return end
@@ -274,10 +276,8 @@ local function forEachShopItem(fn)
 		local folder = shop:FindFirstChild(folderName)
 		if folder then
 			for _, item in folder:GetChildren() do
-				if item:IsA('Model') or item:IsA('Folder') then
-					local prompt = itemPrompt(item)
-					if prompt then fn(item, category, prompt) end
-				end
+				local prompt = itemPrompt(item)
+				if prompt then fn(item, category, prompt) end
 			end
 		end
 	end
@@ -1297,14 +1297,33 @@ run(function()
 	end
 
 	-- build a lowercase lookup from the whitelist entries
+	-- normalize a name for matching: lowercase, strip everything but a-z0-9 so
+	-- "Bear Trap", "BearTrap" and "bear-trap" all compare equal
+	local function norm(s)
+		return tostring(s):lower():gsub('[^%a%d]', '')
+	end
+
 	local function whitelistSet()
 		local set, any = {}, false
 		local list = Whitelist and Whitelist.ListEnabled or {}
 		for _, word in list do
-			local w = tostring(word):gsub('^%s+', ''):gsub('%s+$', ''):lower()
+			local w = norm(word)
 			if w ~= '' then set[w] = true any = true end
 		end
 		return set, any
+	end
+
+	-- every identity string the shop item might expose, normalized
+	local function itemNames(item)
+		local out = {}
+		local function add(s) if s and s ~= '' then out[#out + 1] = norm(s) end end
+		add(item.Name)
+		add(itemName(item))
+		local tool = item:FindFirstChildWhichIsA('Tool', true)
+		if tool then add(tool.Name) end
+		local attr = item:GetAttribute('ItemName')
+		if type(attr) == 'string' then add(attr) end
+		return out
 	end
 
 	local function wanted(item, category)
@@ -1313,15 +1332,19 @@ run(function()
 		-- category gate
 		local tog = catToggle[category]
 		if tog and not tog.Enabled then return false end
-		-- name whitelist (if any entries, item must match one)
+		-- name whitelist (if any entries, the item must match one). Compare each
+		-- whitelist entry against every identity the item exposes, both ways
+		-- (substring), so partial picks and display/instance name differences match.
 		local set, hasList = whitelistSet()
 		if hasList then
-			local nm = itemName(item):lower()
-			local hit = false
-			for w in set do
-				if nm:find(w, 1, true) then hit = true break end
+			for _, nm in itemNames(item) do
+				for w in set do
+					if nm == w or nm:find(w, 1, true) or w:find(nm, 1, true) then
+						return true
+					end
+				end
 			end
-			if not hit then return false end
+			return false
 		end
 		return true
 	end
@@ -1452,6 +1475,25 @@ run(function()
 		Decimal = 100,
 		Suffix = 's',
 		Tooltip = 'Delay between purchases (give the server time to register each buy).'
+	})
+	AutoBuy:CreateButton({
+		Name = 'List Shop Items',
+		Function = function()
+			if not inShop() then
+				notif('Auto Buy', 'Open the shop first, then press this.')
+				return
+			end
+			local found = {}
+			forEachShopItem(function(item, category)
+				found[#found + 1] = ('%s [%s] %dt'):format(item.Name, category, itemPrice(item))
+			end)
+			if #found == 0 then
+				notif('Auto Buy', 'No buyable shop items detected.')
+			else
+				notif('Auto Buy', table.concat(found, '\n'), 12)
+			end
+		end,
+		Tooltip = 'While in the shop, list the exact name/category/price of each stocked item, so you can match the whitelist to what the shop really calls them.'
 	})
 end)
 
