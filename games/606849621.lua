@@ -121,6 +121,18 @@ local function notif(...)
 	return vain:CreateNotification(...)
 end
 
+-- universal.lua loads BEFORE this file and creates a generic 'Silent Aim'
+-- module that duplicates the richer Jailbreak-specific 'SilentAim' (no space)
+-- defined below. Since this file loads second, vain.Modules already holds the
+-- universal copy -- remove it so only the Jailbreak version remains.
+run(function()
+	for _, dupeName in {'Silent Aim'} do
+		if vain.Modules[dupeName] then
+			vain:Remove(dupeName)
+		end
+	end
+end)
+
 run(function()
 	entitylib.getUpdateConnections = function(ent)
 		local hum = ent.Humanoid
@@ -292,7 +304,16 @@ run(function()
 		repeat task.wait() until (jb.VehicleController.toggleLocalLocked and jb.VehicleController.NitroShopVisible) or vain.Loaded == nil
 		if vain.Loaded == nil then return end
 	end
-	local remotetable = debug.getupvalue(jb.VehicleController.toggleLocalLocked, 2)
+	-- remotetable holds the shared FireServer used by most action modules. Its
+	-- upvalue index can drift on Jailbreak updates; if it can't be resolved,
+	-- bail out of setup (with a notification) instead of erroring the whole block
+	-- and silently killing every FireServer-based module.
+	local remotetable = select(2, pcall(debug.getupvalue, jb.VehicleController.toggleLocalLocked, 2))
+	if type(remotetable) ~= 'table' or not remotetable.FireServer then
+		notif('Vain', 'Jailbreak: could not resolve the remote table (game updated?). Action modules disabled.', 10, 'alert')
+		jb.FireServer = function() end
+		return
+	end
 	local fireserver, hook = remotetable.FireServer
 
 	remotes = dumpRemotes({
@@ -334,12 +355,6 @@ run(function()
 
 		if InfNitro.Enabled and rem == 'UseNitro' then return end
 		if LazerGodmode.Enabled and rem == 'SelfDamage' then return end
-		if rem ~= 'LookAngle' and rem ~= 'AimPosition' then
-			local called = getfenv(3)
-			called = called and called.script
-			if called and (not rem) then print(id, 'called with', called:GetFullName()) end
-			print(id, rem or id, ...)
-		end
 
 		return hook(self, id, ...)
 	end
@@ -457,7 +472,12 @@ run(function()
 					if Instant.Enabled then 
 						local item = jb.ItemSystemController:GetLocalEquipped()
 						if item and item.BulletEmitter then
-							rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.1))
+							-- Hitscan: BulletEmitter advances a bullet by (now - LastUpdate); pushing
+								-- LastUpdate back almost a full LifeSpan makes the next step move the
+								-- bullet its ENTIRE travel distance in one frame, so it arrives
+								-- instantly instead of flying at BulletSpeed. The tiny epsilon keeps
+								-- it from being culled as expired before the hit registers.
+								rawset(item.BulletEmitter, 'LastUpdate', tick() - (item.BulletEmitter.LifeSpan - 0.001))
 						end
 					end
 					task.wait()
@@ -550,7 +570,7 @@ run(function()
 		Darker = true, 
 		Visible = false
 	})
-	Instant = SilentAim:CreateToggle({Name = 'Hitscan Bullets'})
+	Instant = SilentAim:CreateToggle({Name = 'Hitscan Bullets', Tooltip = 'Bullets skip their travel time and arrive instantly at the target (no lead needed). Best paired with a target Mode above.'})
 end)
 	
 run(function()
@@ -764,10 +784,20 @@ run(function()
 end)
 	
 run(function()
-	vain.Categories.Blatant:CreateModule({
+	local NoFall
+	NoFall = vain.Categories.Blatant:CreateModule({
 		Name = 'NoFall',
 		Function = function(callback)
-			debug.setconstant(debug.getupvalue(jb.FallingController.Init, 19), 9, callback and 'Archivable' or 'Sit')
+			-- The exact upvalue (19) and constant (9) indices drift when Jailbreak
+			-- updates FallingController; guard so a stale index disables cleanly
+			-- instead of throwing an unhandled error on toggle.
+			local ok = pcall(function()
+				debug.setconstant(debug.getupvalue(jb.FallingController.Init, 19), 9, callback and 'Archivable' or 'Sit')
+			end)
+			if not ok and callback then
+				notif('NoFall', 'Patch point not found (game updated?). Disabling.', 6, 'alert')
+				NoFall:Toggle()
+			end
 		end,
 		Tooltip = 'Disables ragdoll handling & fall damage'
 	})
@@ -775,22 +805,36 @@ end)
 	
 run(function()
 	local InfiniteNitro
-	local nitrotable = debug.getupvalue(jb.VehicleController.NitroShopVisible, 1)
+	-- Resolve the nitro state table defensively: this debug.getupvalue index can
+	-- drift when Jailbreak updates VehicleController, which previously made the
+	-- whole module error on load. If it can't be found, disable cleanly with a
+	-- notification instead of crashing.
+	local nitrotable = select(2, pcall(debug.getupvalue, jb.VehicleController.NitroShopVisible, 1))
 	local oldnitro
-	
+
 	InfiniteNitro = vain.Categories.Utility:CreateModule({
 		Name = 'InfiniteNitro',
 		Function = function(callback)
+			if type(nitrotable) ~= 'table' then
+				if callback then
+					notif('InfiniteNitro', 'Could not find the nitro table (game updated?). Disabling.', 6, 'alert')
+					InfiniteNitro:Toggle()
+				end
+				return
+			end
+			-- Mirror state onto InfNitro so fireHook also blocks the UseNitro
+			-- remote (stops the server draining boost), not just the local refill.
+			InfNitro.Enabled = callback and true or false
 			if callback then
 				oldnitro = nitrotable.Nitro
-				jb.VehicleController.updateSpdBarRatio(1)
+				pcall(jb.VehicleController.updateSpdBarRatio, 1)
 				repeat
 					nitrotable.Nitro = 250
 					task.wait(0.1)
 				until not InfiniteNitro.Enabled
 			else
 				nitrotable.Nitro = oldnitro
-				jb.VehicleController.updateSpdBarRatio(oldnitro / 250)
+				pcall(jb.VehicleController.updateSpdBarRatio, (oldnitro or 250) / 250)
 			end
 		end,
 		Tooltip = 'Infinite boost for the local car'
@@ -798,25 +842,36 @@ run(function()
 end)
 	
 run(function()
-	vain.Categories.Utility:CreateModule({
+	local InstantAction
+	InstantAction = vain.Categories.Utility:CreateModule({
 		Name = 'InstantAction',
 		Function = function(callback)
-			debug.setconstant(jb.CircleAction.Press, 3, callback and 'Timeda' or 'Timed')
+			-- Constant index 3 of CircleAction.Press drifts on updates; guard it.
+			local ok = pcall(debug.setconstant, jb.CircleAction.Press, 3, callback and 'Timeda' or 'Timed')
+			if not ok and callback then
+				notif('InstantAction', 'Patch point not found (game updated?). Disabling.', 6, 'alert')
+				InstantAction:Toggle()
+			end
 		end,
 		Tooltip = 'Allows you to instantly complete ProximityPrompt actions'
 	})
 end)
 	
 run(function()
-	vain.Categories.Utility:CreateModule({
+	local KeySpoofer
+	KeySpoofer = vain.Categories.Utility:CreateModule({
 		Name = 'KeySpoofer',
 		Function = function(callback)
 			if callback then
-				hookfunction(jb.PlayerUtils.hasKey, function() 
-					return true 
+				local ok = pcall(hookfunction, jb.PlayerUtils.hasKey, function()
+					return true
 				end)
+				if not ok then
+					notif('KeySpoofer', 'Could not hook hasKey (game updated?). Disabling.', 6, 'alert')
+					KeySpoofer:Toggle()
+				end
 			else
-				restorefunction(jb.PlayerUtils.hasKey)
+				pcall(restorefunction, jb.PlayerUtils.hasKey)
 			end
 		end,
 		Tooltip = 'Enables most doors to be walked through'
