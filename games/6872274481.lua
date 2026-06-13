@@ -6380,6 +6380,7 @@ run(function()
 	local Blacklist
 	local SortMethod
 	local HitChance
+	local PingCompensation
 	local AeroPAChargePercent
 	local RandomHeadPercent
 	local RandomTorsoPercent
@@ -6713,7 +6714,12 @@ run(function()
 						end
 					end
 
-					local targetVelocity = targetBodyPart.Velocity
+					-- AssemblyLinearVelocity is the live physics velocity; the legacy
+					-- .Velocity field is less reliable for moving targets.
+					local targetVelocity = targetBodyPart.AssemblyLinearVelocity
+					if targetVelocity == nil or targetVelocity.Magnitude < 0.01 then
+						targetVelocity = targetBodyPart.Velocity
+					end
 					if CustomPrediction and CustomPrediction.Enabled then
 						local hMult = (HorizontalMultiplier and HorizontalMultiplier.Value or 100) / 100
 						local vMult = (VerticalMultiplier and VerticalMultiplier.Value or 100) / 100
@@ -6723,16 +6729,30 @@ run(function()
 							targetVelocity.Z * hMult
 						)
 					end
+
+					-- Latency compensation: the solver predicts where the target will be
+					-- after the projectile's flight time, but NOT the network delay
+					-- between us aiming and the shot registering server-side. Shift the
+					-- aim point forward by the round-trip ping so the lead is correct.
+					local targetPos = targetBodyPart.Position
+					if projmeta.projectile ~= 'telepearl' then
+						local pingFactor = (PingCompensation and PingCompensation.Value or 100) / 100
+						local ping = (lplr:GetNetworkPing() or 0) * 2 * pingFactor
+						if ping > 0 then
+							targetPos = targetPos + targetVelocity * ping
+						end
+					end
+
 					local bowRelX = bedwars.BowConstantsTable.RelX or 0
 					local bowRelY = bedwars.BowConstantsTable.RelY or 0
 					local bowRelZ = bedwars.BowConstantsTable.RelZ or 0
-					local newlook = CFrame.new(offsetpos, targetBodyPart.Position) *
+					local newlook = CFrame.new(offsetpos, targetPos) *
 						CFrame.new(projmeta.projectile == 'owl_projectile' and Vector3.zero or
 							Vector3.new(bowRelX, bowRelY, bowRelZ))
 
 					local calc = prediction.SolveTrajectory(
 						newlook.p, projSpeed, gravity,
-						targetBodyPart.Position,
+						targetPos,
 						projmeta.projectile == 'telepearl' and Vector3.zero or targetVelocity,
 						playerGravity, plr.HipHeight, plr.Jumping and 42.6 or nil, rayCheck
 					)
@@ -6859,6 +6879,15 @@ run(function()
 		Default = 100,
 		Suffix = '%',
 		Tooltip = 'Chance for each shot to actually hit. Failed shots are deflected by a small angle that scales with distance, so they look like natural misses.'
+	})
+
+	PingCompensation = ProjectileAimbot:CreateSlider({
+		Name = 'Ping Compensation',
+		Min = 0,
+		Max = 200,
+		Default = 100,
+		Suffix = '%',
+		Tooltip = 'Leads the aim by your ping to fix shots landing behind moving targets. 100% = full round-trip; lower it if you over-lead, raise it if you still hit behind.'
 	})
 
 	PAFOVCircle = ProjectileAimbot:CreateToggle({
