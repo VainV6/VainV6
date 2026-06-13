@@ -1824,12 +1824,11 @@ run(function()
 		end
 		local speed = (FlySpeed and FlySpeed.Value) or 120
 		local dir = inputDir()
-		local pivot = engine.AssemblyRootPart or engine
-		local look = gameCamera.CFrame.LookVector
-		local flat = Vector3.new(look.X, 0, look.Z)
-		flat = flat.Magnitude > 0 and flat.Unit or pivot.CFrame.LookVector
-		local pos = pivot.Position + dir * speed * dt
-		model:PivotTo(CFrame.lookAt(pos, pos + flat))
+		-- TRANSLATE only -- keep the car's current orientation. Re-facing the car to
+		-- the camera every frame fought your strafe input (sideways felt slow/weak);
+		-- now A/D move you sideways at full speed just like W/E/Q.
+		local current = model:GetPivot()
+		model:PivotTo(current + dir * speed * dt)
 	end
 
 	-- Velocity fly: DON'T anchor -- drive the assembly's velocity toward the input
