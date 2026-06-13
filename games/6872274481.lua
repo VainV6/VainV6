@@ -6490,7 +6490,6 @@ run(function()
 	local Blacklist
 	local SortMethod
 	local HitChance
-	local PingCompensation
 	local AeroPAChargePercent
 	local RandomHeadPercent
 	local RandomTorsoPercent
@@ -6840,18 +6839,7 @@ run(function()
 						)
 					end
 
-					-- Latency compensation: the solver predicts where the target will be
-					-- after the projectile's flight time, but NOT the network delay
-					-- between us aiming and the shot registering server-side. Shift the
-					-- aim point forward by the round-trip ping so the lead is correct.
 					local targetPos = targetBodyPart.Position
-					if projmeta.projectile ~= 'telepearl' then
-						local pingFactor = (PingCompensation and PingCompensation.Value or 100) / 100
-						local ping = (lplr:GetNetworkPing() or 0) * 2 * pingFactor
-						if ping > 0 then
-							targetPos = targetPos + targetVelocity * ping
-						end
-					end
 
 					local bowRelX = bedwars.BowConstantsTable.RelX or 0
 					local bowRelY = bedwars.BowConstantsTable.RelY or 0
@@ -6989,15 +6977,6 @@ run(function()
 		Default = 100,
 		Suffix = '%',
 		Tooltip = 'Chance for each shot to actually hit. Failed shots are deflected by a small angle that scales with distance, so they look like natural misses.'
-	})
-
-	PingCompensation = ProjectileAimbot:CreateSlider({
-		Name = 'Ping Compensation',
-		Min = 0,
-		Max = 200,
-		Default = 100,
-		Suffix = '%',
-		Tooltip = 'Leads the aim by your ping to fix shots landing behind moving targets. 100% = full round-trip; lower it if you over-lead, raise it if you still hit behind.'
 	})
 
 	PAFOVCircle = ProjectileAimbot:CreateToggle({
