@@ -70,6 +70,16 @@ local function withRealPosition(fn)
 	return res
 end
 
+-- ── Round state ───────────────────────────────────────────────────────────────
+-- ReplicatedStorage.IsInShop is a BoolValue the whole game uses to gate combat:
+-- false while a wave/round is active, true while you're safe in the between-round
+-- shop. "In a round" therefore means IsInShop is present and false.
+local function inRound()
+	local flag = replicatedStorage:FindFirstChild('IsInShop')
+	if not flag then return false end -- not loaded into a run yet -> treat as safe
+	return flag.Value == false
+end
+
 local function isFriend(plr, recolor)
 	if plr and vain.Categories.Friends.Options['Use friends'].Enabled then
 		local friend = table.find(vain.Categories.Friends.ListEnabled, plr.Name) and true
@@ -807,10 +817,15 @@ run(function()
 					end
 				end)
 
-				-- after physics, push out to the far point so the server sees us there
+				-- after physics, push out to the far point so the server sees us there.
+				-- Only desync while a round is active -- in the shop enemies can't hurt
+				-- you, so staying synced there avoids needless desync (and lets you
+				-- shop/move normally). When the round ends mid-offset, the next Stepped
+				-- has already pulled us back, so we simply stop pushing out.
 				heartConn = runService.Heartbeat:Connect(function()
 					local root = rootPart()
 					if not root or offsetActive then return end
+					if not inRound() then return end
 					root.CFrame = root.CFrame + offsetCF()
 					offsetActive = true
 				end)
@@ -829,7 +844,7 @@ run(function()
 				setActive(false)
 			end
 		end,
-		Tooltip = 'Desyncs your replicated position so enemies cannot reach/hit you, while you keep playing and attacking normally. If you get rubber-banded or flagged, lower the distance.'
+		Tooltip = 'Desyncs your replicated position so enemies cannot reach/hit you, while you keep playing and attacking normally. Only active during a round (auto-pauses in the shop). If you get rubber-banded or flagged, lower the distance.'
 	})
 
 	Distance = AntiHit:CreateSlider({
