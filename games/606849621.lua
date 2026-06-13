@@ -918,7 +918,7 @@ run(function()
 			end
 		end,
 		Tooltip = 'Hold click to fire any semi-auto / burst gun (Plasma Shotgun, Revolver, Sniper...) continuously with no reload pause. Fires at the gun's native max rate -- the server rate-limits anything faster, so this stays accepted.'
-	})
+	})
 end)
 
 -- Plasma One-Shot: stacks a plasma weapon's per-pellet damage into a single
@@ -1945,6 +1945,7 @@ run(function()
 	local FlySpeed
 	local flyConn
 	local anchored = {} -- [part] = previous Anchored state, to restore
+	local flyDriveSaved = setmetatable({}, {__mode = 'k'}) -- [chassis] = original LaunchSpeedMult
 
 	local function chassis()
 		local vc = jb.VehicleController
@@ -1977,6 +1978,11 @@ run(function()
 			pcall(function() part.Anchored = was end)
 		end
 		table.clear(anchored)
+		-- restore any chassis drive we neutralized for velocity fly
+		for c, was in flyDriveSaved do
+			pcall(function() c.LaunchSpeedMult = was end)
+		end
+		table.clear(flyDriveSaved)
 	end
 
 	-- CFrame fly: anchor the assembly and step the model's CFrame. Snappy but
@@ -2014,11 +2020,23 @@ run(function()
 		local model = c and c.Model
 		local engine = model and model:FindFirstChild('Engine')
 		if not engine then return end
+		-- Neutralize the chassis DRIVE FORCE while flying. Without this, the
+		-- AlexChassis keeps applying its horizontal wheel/drive force every physics
+		-- step, which fights (damps) the horizontal velocity we set -- while the
+		-- vertical (E/Q) axis has no such counter-force, so up/down felt much faster
+		-- than WASD. Zeroing LaunchSpeedMult removes the drive force so ALL axes hit
+		-- the full fly speed equally. Restored in stopFly.
+		if type(c.LaunchSpeedMult) == 'number' then
+			if flyDriveSaved[c] == nil then flyDriveSaved[c] = c.LaunchSpeedMult end
+			c.LaunchSpeedMult = 0
+		end
 		local speed = (FlySpeed and FlySpeed.Value) or 120
 		local dir = inputDir()
 		-- set the whole assembly's velocity; if no input, hover (zero velocity) so
-		-- gravity doesn't pull the car down.
+		-- gravity doesn't pull the car down. Also kill spin so the car doesn't
+		-- tumble (angular velocity is otherwise untouched by the drive removal).
 		engine.AssemblyLinearVelocity = dir * speed
+		engine.AssemblyAngularVelocity = Vector3.zero
 	end
 
 	VehicleFly = vain.Categories.Utility:CreateModule({
