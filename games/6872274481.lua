@@ -1580,6 +1580,9 @@ local AimAssist
 	local ShakeToggle
 	local ShakeAmount
 	local WorkWithProjectiles
+	local MinDistance
+	local HealthCheck
+	local HealthThreshold
 
 	local lockedTarget = nil
 	local lastValidTarget = nil
@@ -1743,6 +1746,24 @@ local AimAssist
 						end
 						if not isInAngle(ent) then
 							if PriorityMode and PriorityMode.Enabled then lockedTarget = nil end
+							return
+						end
+					end
+
+					-- Min Distance: don't assist on targets closer than this (avoids
+					-- snapping at point-blank where you don't need help).
+					if MinDistance and MinDistance.Value > 0 and ent.RootPart and entitylib.character.RootPart then
+						if (ent.RootPart.Position - entitylib.character.RootPart.Position).Magnitude < MinDistance.Value then
+							return
+						end
+					end
+
+					-- Target Health filter: only assist when the target is at or below
+					-- the chosen health, e.g. for finishing low enemies.
+					if HealthCheck and HealthCheck.Enabled then
+						local hum = ent.Character and ent.Character:FindFirstChildOfClass('Humanoid')
+						local hp = hum and hum.Health or (ent.Humanoid and ent.Humanoid.Health) or 0
+						if hp > (HealthThreshold and HealthThreshold.Value or 100) then
 							return
 						end
 					end
@@ -1934,6 +1955,38 @@ local AimAssist
 		Name = 'Work With Projectiles',
 		Default = false,
 		Tooltip = 'Also activates when holding bows or crossbows'
+	})
+
+	MinDistance = AimAssist:CreateSlider({
+		Name = 'Min Distance',
+		Tooltip = 'Don\'t assist on targets closer than this (0 = no minimum)',
+		Min = 0,
+		Max = 50,
+		Default = 0,
+		Suffix = function(val)
+			return val <= 1 and 'stud' or 'studs'
+		end
+	})
+
+	HealthCheck = AimAssist:CreateToggle({
+		Name = 'Target HP Check',
+		Default = false,
+		Tooltip = 'Only assist when the target is at or below the chosen health',
+		Function = function(callback)
+			if HealthThreshold and HealthThreshold.Object then
+				HealthThreshold.Object.Visible = callback
+			end
+		end
+	})
+
+	HealthThreshold = AimAssist:CreateSlider({
+		Name = 'Target Health',
+		Tooltip = 'Maximum target health to assist on',
+		Min = 1,
+		Max = 100,
+		Default = 100,
+		Darker = true,
+		Visible = false
 	})
 
 	task.defer(function()
