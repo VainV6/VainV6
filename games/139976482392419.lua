@@ -370,21 +370,8 @@ run(function()
 		return best
 	end
 
-	-- Loot drops (Tix / coins / orbs / item pickups) spawn into the workspace
-	-- after a kill. Templates don't name the live container, so we detect them
-	-- heuristically: a BasePart (or model with a part) whose name looks like a
-	-- pickup. The game has a Tix magnet, so teleporting ONTO a drop collects it.
-	local function looksLikeDrop(obj)
-		local n = obj.Name
-		if n:match('[Tt]ix') or n:match('[Dd]rop') or n:match('[Oo]rb')
-			or n:match('[Pp]ickup') or n:match('[Cc]oin') or n:match('[Gg]old')
-			or n:match('[Ll]oot') then
-			-- ignore our own ESP/UI and enemy config flags
-			return obj:IsA('BasePart') or (obj:IsA('Model') and obj:FindFirstChildWhichIsA('BasePart', true) ~= nil)
-		end
-		return false
-	end
-
+	-- Loot drops are inserted into the workspace.Tixes folder. The game has a Tix
+	-- magnet, so teleporting ONTO a drop collects it.
 	local function dropPart(obj)
 		return obj:IsA('BasePart') and obj or obj:FindFirstChildWhichIsA('BasePart', true)
 	end
@@ -392,16 +379,16 @@ run(function()
 	-- Collect every nearby drop by teleporting onto each in turn.
 	local function sweepDrops()
 		if not (CollectDrops and CollectDrops.Enabled) or not aliveLocal() then return end
+		local folder = workspace:FindFirstChild('Tixes')
+		if not folder then return end
 		local root = entitylib.character.RootPart
 		local range = DropRange and DropRange.Value or 200
-		-- collect into a list first so we don't iterate a changing workspace
+		-- snapshot first so we don't iterate a folder that's changing as we collect
 		local drops = {}
-		for _, obj in workspace:GetDescendants() do
-			if looksLikeDrop(obj) then
-				local part = dropPart(obj)
-				if part and (part.Position - root.Position).Magnitude <= range then
-					table.insert(drops, part)
-				end
+		for _, obj in folder:GetChildren() do
+			local part = dropPart(obj)
+			if part and (part.Position - root.Position).Magnitude <= range then
+				table.insert(drops, part)
 			end
 		end
 		for _, part in drops do
