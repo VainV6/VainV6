@@ -1093,47 +1093,50 @@ run(function()
 		Name = 'AutoArrest',
 		Function = function(callback)
 			if callback then
-				-- Fire the arrest remote directly on the SAME conditions the server
-				-- validates (decoded from the game): you are Police with Handcuffs
-				-- equipped; the target is a Prisoner with a Humanoid, is NOT already
-				-- handcuffed, is NOT in a vehicle, and is within ArrestDistance. We do
-				-- NOT depend on the game's CircleAction spec (octree-distance throttled,
-				-- and never true for in-car targets) -- that was the unreliability.
-				-- In-vehicle criminals are ejected first, then arrested next pass.
+				-- One-time diagnostic so we can SEE why an arrest does/doesn't fire instead
+				-- of guessing: reports my team, whether handcuffs are equipped, and how many
+				-- nearby prisoners were seen on the first pass.
+				local diagDone = false
+				-- The game's ShouldArrest test (decoded) is purely: target is a Prisoner with
+				-- a Humanoid, NOT already handcuffed, and NOT in a vehicle. There is NO client
+				-- distance gate (distance is server-side). We mirror exactly that -- earlier a
+				-- too-strict distance/team gate was silently rejecting valid arrests. Handcuffs
+				-- equipped + Police team are the only local prerequisites (u803/u756).
 				repeat
-					if entitylib.isAlive and teamOf(lplr) == 'Police' then
-						local item = jb.ItemSystemController:GetLocalEquipped()
-						local hasCuffs = item and item.__ClassName == 'Handcuffs'
-						local char = entitylib.character
-						local root = char and char.RootPart
-						local myPos = root and root.Position
-						local range = (ArrestRange and ArrestRange.Value) or 18.4
-						local plrs = entitylib.AllPosition({
-							Players = true,
-							Part = 'RootPart',
-							Range = math.max(60, range + 10)
-						})
+					local item = jb.ItemSystemController:GetLocalEquipped()
+					local hasCuffs = item and item.__ClassName == 'Handcuffs' or false
+					local mine = teamOf(lplr)
+					if entitylib.isAlive and mine == 'Police' and hasCuffs then
+						local seen, fired = 0, 0
+						local plrs = entitylib.AllPosition({ Players = true, Part = 'RootPart', Range = 1000 })
 						for _, ent in plrs do
 							if not AutoArrest.Enabled then break end
 							local plr = ent.Player
-							if myPos and plr and ent.RootPart and ent.Humanoid
-								and teamOf(plr) == 'Prisoner' then
-								local tchar = plr.Character
+							local tchar = plr and plr.Character
+							if plr and tchar and ent.Humanoid and teamOf(plr) == 'Prisoner' then
+								seen += 1
 								local inVehicle = ent.Humanoid.Sit
-									or (tchar and tchar:GetAttribute('InVehicle'))
+									or tchar:GetAttribute('InVehicle')
 									or getVehicle(ent)
-								local cuffed = tchar and tchar:GetAttribute('HasHandcuffs')
+								local cuffed = tchar:GetAttribute('HasHandcuffs')
 								if inVehicle then
 									local vehicle = getVehicle(ent)
 									if vehicle then jb:FireServer('Eject', vehicle) end
-								elseif hasCuffs and not cuffed
-									and (myPos - ent.RootPart.Position).Magnitude <= range then
+								elseif not cuffed then
 									tryArrest(plr)
+									fired += 1
 								end
 							end
 						end
+						if not diagDone then
+							diagDone = true
+							notif('AutoArrest', ('Active. Team='..tostring(mine)..', cuffs='..tostring(hasCuffs)..', prisoners='..seen..', fired='..fired), 6)
+						end
+					elseif not diagDone then
+						diagDone = true
+						notif('AutoArrest', ('Idle: need Police team + Handcuffs equipped. Team='..tostring(mine)..', cuffs='..tostring(hasCuffs)), 8, 'alert')
 					end
-					task.wait()
+					task.wait(0.1)
 				until not AutoArrest.Enabled
 				table.clear(arrestDebounce)
 			end
