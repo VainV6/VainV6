@@ -44,6 +44,32 @@ local function notif(...)
 	return vain:CreateNotification(...)
 end
 
+-- ── Anti Hit bridge ───────────────────────────────────────────────────────────
+-- Anti Hit replicates your root far away so enemies can't reach you. But your own
+-- attacks also resolve against your replicated position, so they'd whiff too. This
+-- shared bridge lets the attack code briefly run "from your real position": it
+-- snaps the root back, runs the action, and the desync loop resumes next frame.
+-- The Anti Hit module (defined later) registers its handlers here.
+local antihit = {
+	active = false,        -- is Anti Hit currently desyncing?
+	getReal = nil,         -- () -> CFrame: where you really are
+	restore = nil,         -- (CFrame) -> (): write the real CFrame to the root now
+}
+
+-- Run fn with your real position replicated (so server-side hit checks see you
+-- where you actually are). No-op passthrough when Anti Hit is off.
+local function withRealPosition(fn)
+	if not (antihit.active and antihit.getReal and antihit.restore) then
+		return fn()
+	end
+	local real = antihit.getReal()
+	if real then antihit.restore(real) end
+	local ok, res = pcall(fn)
+	-- desync loop (Stepped) will push us back out next frame; nothing else to do
+	if not ok then return nil end
+	return res
+end
+
 local function isFriend(plr, recolor)
 	if plr and vain.Categories.Friends.Options['Use friends'].Enabled then
 		local friend = table.find(vain.Categories.Friends.ListEnabled, plr.Name) and true
@@ -166,11 +192,14 @@ local function attackEnemy(ent)
 	end
 	local hitbox = ent.Character and (ent.Character:FindFirstChild('EnemyHitBox') or ent.RootPart)
 	local aim = hitbox and hitbox.Position or ent.RootPart.Position
-	local ok = pcall(function()
+	-- If Anti Hit is desyncing us, resolve the swing from our real position so the
+	-- server sees us in range; otherwise the hit whiffs like everything else.
+	local ok = withRealPosition(function()
 		sc:InvokeServer('MouseClick', {Down = true, MousePosition = aim})
 		sc:InvokeServer('MouseClick', {Down = false, HeldTime = 0, MousePosition = aim})
+		return true
 	end)
-	return ok
+	return ok and true or false
 end
 
 local function aliveLocal()
@@ -711,8 +740,7 @@ run(function()
 	local AntiHit
 	local Distance, Direction
 	local stepConn, heartConn
-	local realCFrame    -- where you actually are (authoritative locally)
-	local syncing       -- guard so our own CFrame writes don't get captured as "real"
+	local offsetActive   -- true while the root is currently sitting at the far point
 
 	local DIRS = {
 		['Up'] = Vector3.new(0, 1, 0),
@@ -725,35 +753,66 @@ run(function()
 		return aliveLocal() and entitylib.character.RootPart or nil
 	end
 
+	-- Ordering is what makes this work AND keeps you mobile:
+	--   Heartbeat (post-physics): teleport the root to the far point. It replicates
+	--     to the server in the gap before the next frame -> server sees you far away.
+	--   Stepped  (pre-physics):   pull the root back to where it really is, BEFORE
+	--     the Humanoid simulates movement. So the entire physics step runs at your
+	--     real position -> walking, jumping, camera all behave normally.
+	-- The root only sits at the far point during the brief replication window, never
+	-- during simulation, so you never go airborne and never freeze.
+	local function offsetCF()
+		local dirName = Direction and Direction.Value or 'Up'
+		local dist = Distance and Distance.Value or 500
+		return (DIRS[dirName] or DIRS['Up']) * dist
+	end
+
+	-- expose to the attack bridge so swings resolve from your real position
+	local function setActive(on)
+		antihit.active = on
+		if on then
+			antihit.getReal = function()
+				local root = rootPart()
+				if not root then return nil end
+				-- offset is a pure translation, so subtract it to get the real spot
+				return offsetActive and (root.CFrame - offsetCF()) or root.CFrame
+			end
+			antihit.restore = function(real)
+				local root = rootPart()
+				if root and real then
+					root.CFrame = real
+					offsetActive = false
+				end
+			end
+		else
+			antihit.getReal = nil
+			antihit.restore = nil
+		end
+	end
+
 	AntiHit = vain.Categories.Blatant:CreateModule({
 		Name = 'Anti Hit',
 		Function = function(callback)
 			if callback then
-				realCFrame = nil
-				local dirName = Direction and Direction.Value or 'Up'
-				local offsetDir = DIRS[dirName] or DIRS['Up']
+				offsetActive = false
+				setActive(true)
 
-				-- Stepped fires just before physics is replicated to the server.
-				-- Push the root far away so the server-side checks see you out of range.
+				-- pull back to real position before the physics step simulates movement
 				stepConn = runService.Stepped:Connect(function()
 					local root = rootPart()
 					if not root then return end
-					-- capture the genuine position the game logic put us at this frame
-					if not syncing then realCFrame = root.CFrame end
-					local dist = Distance and Distance.Value or 500
-					syncing = true
-					root.CFrame = realCFrame + offsetDir * dist
-					syncing = false
+					if offsetActive then
+						root.CFrame = root.CFrame - offsetCF()
+						offsetActive = false
+					end
 				end)
 
-				-- Heartbeat fires after replication. Snap back so you stay where you
-				-- really are locally (movement, camera, your own attacks all work).
+				-- after physics, push out to the far point so the server sees us there
 				heartConn = runService.Heartbeat:Connect(function()
 					local root = rootPart()
-					if not root or not realCFrame then return end
-					syncing = true
-					root.CFrame = realCFrame
-					syncing = false
+					if not root or offsetActive then return end
+					root.CFrame = root.CFrame + offsetCF()
+					offsetActive = true
 				end)
 
 				vain:Clean(stepConn)
@@ -761,17 +820,16 @@ run(function()
 			else
 				if stepConn then stepConn:Disconnect() stepConn = nil end
 				if heartConn then heartConn:Disconnect() heartConn = nil end
-				-- restore real position so we don't strand the player offset
+				-- make sure we don't leave the root stranded at the far point
 				local root = rootPart()
-				if root and realCFrame then
-					syncing = true
-					pcall(function() root.CFrame = realCFrame end)
-					syncing = false
+				if root and offsetActive then
+					pcall(function() root.CFrame = root.CFrame - offsetCF() end)
 				end
-				realCFrame = nil
+				offsetActive = false
+				setActive(false)
 			end
 		end,
-		Tooltip = 'Desyncs your replicated position so enemies cannot reach/hit you, while you keep playing normally. If you get rubber-banded or flagged, lower the distance.'
+		Tooltip = 'Desyncs your replicated position so enemies cannot reach/hit you, while you keep playing and attacking normally. If you get rubber-banded or flagged, lower the distance.'
 	})
 
 	Distance = AntiHit:CreateSlider({
