@@ -202,36 +202,47 @@ run(function()
 	pcall(function() entitylib.start() end)
 end)
 
--- DIAGNOSTIC (teams): Match has Teams[Team_1, Team_2]. Dump each team's member
--- UserIds and flag which team contains the local player -> the enemy is the
--- OTHER team. Run during a duel.
+-- DIAGNOSTIC (deep): Team_1/Team_2 have no children -> membership stored
+-- elsewhere. Probe: (a) each Team object's own Value + attributes, (b) every
+-- Match.Players.<uid> folder's FULL contents (the team assignment likely lives
+-- there, e.g. a 'team' StringValue). Run during a duel.
 run(function()
 	task.delay(7, function()
 		local ro = replicatedStorage:FindFirstChild('ReadOnly')
 		local match = ro and ro:FindFirstChild('Match')
 		local teams = match and match:FindFirstChild('Teams')
-		local myUid = tostring(lplr.UserId)
 		local lines = {}
+		-- (a) team objects: own Value + attributes
 		if teams then
 			for _, team in teams:GetChildren() do
-				local members = {}
-				local mine = false
-				-- a team's members may be child instances named by UserId, or Value
-				-- objects whose .Value is a UserId/player. Capture both.
-				for _, m in team:GetChildren() do
-					local id = m.Name
-					pcall(function() if m.Value ~= nil then id = tostring(m.Value) end end)
-					members[#members + 1] = id
-					if id == myUid or id == lplr.Name then mine = true end
-				end
-				lines[#lines + 1] = team.Name .. (mine and '(ME)' or '') .. '={' .. table.concat(members, ',') .. '}'
+				local v = '?'
+				pcall(function() v = tostring(team.Value) end)
+				local attrs = {}
+				pcall(function() for k, av in team:GetAttributes() do attrs[#attrs+1] = k..'='..tostring(av) end end)
+				lines[#lines+1] = team.Name..'(cls='..team.ClassName..' val='..v..' attrs={'..table.concat(attrs,',')..'})'
 			end
 		end
-		local msg = (#lines > 0) and table.concat(lines, ' || ') or 'no Teams folder'
-		if vain.CreateNotification then
-			vain:CreateNotification('Redliner Teams', msg, 45, 'alert')
+		-- (b) Match.Players.<uid> folders -- dump children name=value
+		local mp = match and match:FindFirstChild('Players')
+		if mp then
+			for _, pf in mp:GetChildren() do
+				local kids = {}
+				for _, c in pf:GetChildren() do
+					local val = ''
+					pcall(function() if c.Value ~= nil then val = '='..tostring(c.Value) end end)
+					kids[#kids+1] = c.Name..val
+					if #kids >= 8 then break end
+				end
+				local attrs = {}
+				pcall(function() for k, av in pf:GetAttributes() do attrs[#attrs+1] = k..'='..tostring(av) end end)
+				lines[#lines+1] = 'P'..pf.Name..'={'..table.concat(kids,',')..'}attrs{'..table.concat(attrs,',')..'}'
+			end
 		end
-		warn('[Redliner Teams] ' .. msg)
+		local msg = (#lines > 0) and table.concat(lines, ' || ') or 'nothing'
+		if vain.CreateNotification then
+			vain:CreateNotification('Redliner Deep', msg, 50, 'alert')
+		end
+		warn('[Redliner Deep] ' .. msg)
 	end)
 end)
 
