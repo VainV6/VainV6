@@ -99,34 +99,70 @@ local function isFriend(plr)
 	return false
 end
 
--- THE TEAM FIX. Decides whether an entity is a valid target. The old behaviour
--- (default targetCheck) targeted EVERY player including your teammate, because
--- this game has no Teams service for entitylib to read. We define enemies as:
--- alive players who are in combat, are not you, and are not on your Friends list.
+-- TEAMS -- the real enemy signal. ReadOnly.Match.Teams holds Team_1 / Team_2,
+-- each listing member UserIds (as child instance names and/or Value objects).
+-- Your enemy = a player on the OPPOSITE team from you. This beats in_combat,
+-- which only says IF someone is fighting, not whose side they're on.
+local function teamsFolder()
+	local ro = readOnlyRoot()
+	local match = ro and ro:FindFirstChild('Match')
+	return match and match:FindFirstChild('Teams')
+end
+
+-- Collect the member ids (UserId string + Name) of a team folder into a set.
+local function teamMemberSet(team)
+	local set = {}
+	if not team then return set end
+	for _, m in team:GetChildren() do
+		set[m.Name] = true
+		pcall(function() if m.Value ~= nil then set[tostring(m.Value)] = true end end)
+	end
+	return set
+end
+
+-- Returns 'same' / 'enemy' / nil(unknown) for plr relative to the local player,
+-- using the match Teams folders.
+local function teamRelation(plr)
+	local teams = teamsFolder()
+	if not teams then return nil end
+	local myUid, myName = tostring(lplr.UserId), lplr.Name
+	local theirUid, theirName = tostring(plr.UserId), plr.Name
+	local myTeam, theirTeam
+	for _, team in teams:GetChildren() do
+		local set = teamMemberSet(team)
+		if set[myUid] or set[myName] then myTeam = team.Name end
+		if set[theirUid] or set[theirName] then theirTeam = team.Name end
+	end
+	if not myTeam or not theirTeam then return nil end -- not both placed yet
+	return (myTeam == theirTeam) and 'same' or 'enemy'
+end
+
+-- THE TEAM FIX. Decides whether an entity is a valid target.
+-- PRIMARY signal: the match Teams folders -- enemy == opposite team from you,
+-- teammate == same team (never targeted). This is exact, so when teams are known
+-- we trust them completely (ignoring the in_combat gate).
+-- FALLBACK (no active match / teams not populated): the in_combat heuristic.
 local OnlyInCombat -- toggle (declared by the module below); when nil, default true
 local function isEnemy(ent)
 	if not (ent and ent.Player) then return ent and ent.NPC or false end
 	if ent.Player == lplr then return false end
 	if isFriend(ent.Player) then return false end
 	if not isAlivePlr(ent.Player) then return false end
-	-- Only-in-combat gate (on by default). Best available "is this my enemy"
-	-- signal without an explicit opponent link:
-	--   * If YOU are in combat, an enemy is someone who is ALSO in_combat. A
-	--     teammate standing with you who isn't fighting is in_combat=false -> excluded.
-	--   * If you're NOT in combat, treat in_combat players as enemies too (they're
-	--     actively fighting), but anyone explicitly in_combat=false is a bystander.
-	--   * in_combat == nil (state not replicated) is left targetable so the aimbot
-	--     still functions if the flag is unavailable.
+
+	-- 1) Definitive: same/opposite team from the match Teams folders.
+	local rel = teamRelation(ent.Player)
+	if rel == 'same' then return false end  -- teammate -> NEVER target
+	if rel == 'enemy' then return true end  -- opposite team -> target
+
+	-- 2) No team data (between matches / lobby). Fall back to in_combat:
+	--   * in_combat == false -> known bystander, skip.
+	--   * if YOU are fighting, require them fighting too.
+	--   * nil stays targetable so modules still work with no state.
 	if OnlyInCombat == nil or OnlyInCombat.Enabled then
 		local theirs = inCombat(ent.Player)
-		if theirs == false then
-			return false
-		end
-		-- when we have our own combat state and we ARE fighting, require theirs true
+		if theirs == false then return false end
 		local mine = inCombat(lplr)
-		if mine == true and theirs ~= true then
-			return false
-		end
+		if mine == true and theirs ~= true then return false end
 	end
 	return true
 end
@@ -166,34 +202,36 @@ run(function()
 	pcall(function() entitylib.start() end)
 end)
 
--- DIAGNOSTIC (match): in_combat is true/false per player but does NOT say WHO
--- you're dueling. Dump the ReadOnly.Match tree + your own match folder to find
--- the opponent/match linkage (the real enemy signal). Run this DURING a duel.
+-- DIAGNOSTIC (teams): Match has Teams[Team_1, Team_2]. Dump each team's member
+-- UserIds and flag which team contains the local player -> the enemy is the
+-- OTHER team. Run during a duel.
 run(function()
 	task.delay(7, function()
-		local function dump(inst, depth)
-			local out = {}
-			if not inst then return '<nil>' end
-			for _, c in inst:GetChildren() do
-				local val = ''
-				pcall(function() if c.Value ~= nil then val = '=' .. tostring(c.Value) end end)
-				local sub = ''
-				if depth > 0 and #c:GetChildren() > 0 then sub = '[' .. dump(c, depth - 1) .. ']' end
-				out[#out + 1] = c.Name .. val .. sub
-				if #out >= 12 then break end
-			end
-			return table.concat(out, ', ')
-		end
 		local ro = replicatedStorage:FindFirstChild('ReadOnly')
 		local match = ro and ro:FindFirstChild('Match')
-		local myMatch = match and match:FindFirstChild('Players')
-		myMatch = myMatch and myMatch:FindFirstChild(tostring(lplr.UserId))
-		local msg = string.format('Match children={%s} || MyMatchFolder={%s}',
-			dump(match, 1), dump(myMatch, 1))
-		if vain.CreateNotification then
-			vain:CreateNotification('Redliner Match', msg, 45, 'alert')
+		local teams = match and match:FindFirstChild('Teams')
+		local myUid = tostring(lplr.UserId)
+		local lines = {}
+		if teams then
+			for _, team in teams:GetChildren() do
+				local members = {}
+				local mine = false
+				-- a team's members may be child instances named by UserId, or Value
+				-- objects whose .Value is a UserId/player. Capture both.
+				for _, m in team:GetChildren() do
+					local id = m.Name
+					pcall(function() if m.Value ~= nil then id = tostring(m.Value) end end)
+					members[#members + 1] = id
+					if id == myUid or id == lplr.Name then mine = true end
+				end
+				lines[#lines + 1] = team.Name .. (mine and '(ME)' or '') .. '={' .. table.concat(members, ',') .. '}'
+			end
 		end
-		warn('[Redliner Match] ' .. msg)
+		local msg = (#lines > 0) and table.concat(lines, ' || ') or 'no Teams folder'
+		if vain.CreateNotification then
+			vain:CreateNotification('Redliner Teams', msg, 45, 'alert')
+		end
+		warn('[Redliner Teams] ' .. msg)
 	end)
 end)
 
