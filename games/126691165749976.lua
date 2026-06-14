@@ -99,42 +99,31 @@ local function isFriend(plr)
 	return false
 end
 
--- TEAMS -- the real enemy signal. ReadOnly.Match.Teams holds Team_1 / Team_2,
--- each listing member UserIds (as child instance names and/or Value objects).
--- Your enemy = a player on the OPPOSITE team from you. This beats in_combat,
--- which only says IF someone is fighting, not whose side they're on.
-local function teamsFolder()
+-- TEAMS -- the real enemy signal. Confirmed live structure: each player's match
+-- folder ReadOnly.Match.Players.<UserId> carries a `team_id` ATTRIBUTE (1 or 2).
+-- Same team_id as you = teammate, different = enemy. (The Team_1/Team_2 folders
+-- under Match.Teams are empty markers -- the assignment lives on the player.)
+local function matchPlayersFolder()
 	local ro = readOnlyRoot()
 	local match = ro and ro:FindFirstChild('Match')
-	return match and match:FindFirstChild('Teams')
+	return match and match:FindFirstChild('Players')
 end
 
--- Collect the member ids (UserId string + Name) of a team folder into a set.
-local function teamMemberSet(team)
-	local set = {}
-	if not team then return set end
-	for _, m in team:GetChildren() do
-		set[m.Name] = true
-		pcall(function() if m.Value ~= nil then set[tostring(m.Value)] = true end end)
-	end
-	return set
+-- Returns the player's team_id (number) or nil if not in a match.
+local function teamId(plr)
+	if not plr then return nil end
+	local mp = matchPlayersFolder()
+	local pf = mp and mp:FindFirstChild(tostring(plr.UserId))
+	if not pf then return nil end
+	return pf:GetAttribute('team_id')
 end
 
--- Returns 'same' / 'enemy' / nil(unknown) for plr relative to the local player,
--- using the match Teams folders.
+-- Returns 'same' / 'enemy' / nil(unknown) for plr relative to the local player.
 local function teamRelation(plr)
-	local teams = teamsFolder()
-	if not teams then return nil end
-	local myUid, myName = tostring(lplr.UserId), lplr.Name
-	local theirUid, theirName = tostring(plr.UserId), plr.Name
-	local myTeam, theirTeam
-	for _, team in teams:GetChildren() do
-		local set = teamMemberSet(team)
-		if set[myUid] or set[myName] then myTeam = team.Name end
-		if set[theirUid] or set[theirName] then theirTeam = team.Name end
-	end
-	if not myTeam or not theirTeam then return nil end -- not both placed yet
-	return (myTeam == theirTeam) and 'same' or 'enemy'
+	local mine = teamId(lplr)
+	local theirs = teamId(plr)
+	if mine == nil or theirs == nil then return nil end -- not both in the match
+	return (mine == theirs) and 'same' or 'enemy'
 end
 
 -- THE TEAM FIX. Decides whether an entity is a valid target.
@@ -149,7 +138,7 @@ local function isEnemy(ent)
 	if isFriend(ent.Player) then return false end
 	if not isAlivePlr(ent.Player) then return false end
 
-	-- 1) Definitive: same/opposite team from the match Teams folders.
+	-- 1) Definitive: same/opposite team from the team_id attribute.
 	local rel = teamRelation(ent.Player)
 	if rel == 'same' then return false end  -- teammate -> NEVER target
 	if rel == 'enemy' then return true end  -- opposite team -> target
@@ -202,47 +191,24 @@ run(function()
 	pcall(function() entitylib.start() end)
 end)
 
--- DIAGNOSTIC (deep): Team_1/Team_2 have no children -> membership stored
--- elsewhere. Probe: (a) each Team object's own Value + attributes, (b) every
--- Match.Players.<uid> folder's FULL contents (the team assignment likely lives
--- there, e.g. a 'team' StringValue). Run during a duel.
+-- DIAGNOSTIC (confirm): team_id attribute on Match.Players.<uid> is the team
+-- signal. Report per entity its team_id, yours, and isEnemy. Remove once you
+-- confirm enemy=true only for the opposite team_id.
 run(function()
 	task.delay(7, function()
-		local ro = replicatedStorage:FindFirstChild('ReadOnly')
-		local match = ro and ro:FindFirstChild('Match')
-		local teams = match and match:FindFirstChild('Teams')
-		local lines = {}
-		-- (a) team objects: own Value + attributes
-		if teams then
-			for _, team in teams:GetChildren() do
-				local v = '?'
-				pcall(function() v = tostring(team.Value) end)
-				local attrs = {}
-				pcall(function() for k, av in team:GetAttributes() do attrs[#attrs+1] = k..'='..tostring(av) end end)
-				lines[#lines+1] = team.Name..'(cls='..team.ClassName..' val='..v..' attrs={'..table.concat(attrs,',')..'})'
+		local lines = {string.format('me team_id=%s', tostring(teamId(lplr)))}
+		for _, ent in entitylib.List do
+			local plr = ent.Player
+			if plr then
+				lines[#lines+1] = string.format('%s team_id=%s enemy=%s',
+					plr.Name, tostring(teamId(plr)), tostring(isEnemy(ent)))
 			end
 		end
-		-- (b) Match.Players.<uid> folders -- dump children name=value
-		local mp = match and match:FindFirstChild('Players')
-		if mp then
-			for _, pf in mp:GetChildren() do
-				local kids = {}
-				for _, c in pf:GetChildren() do
-					local val = ''
-					pcall(function() if c.Value ~= nil then val = '='..tostring(c.Value) end end)
-					kids[#kids+1] = c.Name..val
-					if #kids >= 8 then break end
-				end
-				local attrs = {}
-				pcall(function() for k, av in pf:GetAttributes() do attrs[#attrs+1] = k..'='..tostring(av) end end)
-				lines[#lines+1] = 'P'..pf.Name..'={'..table.concat(kids,',')..'}attrs{'..table.concat(attrs,',')..'}'
-			end
-		end
-		local msg = (#lines > 0) and table.concat(lines, ' || ') or 'nothing'
+		local msg = table.concat(lines, ' || ')
 		if vain.CreateNotification then
-			vain:CreateNotification('Redliner Deep', msg, 50, 'alert')
+			vain:CreateNotification('Redliner Diag', msg, 30, 'check')
 		end
-		warn('[Redliner Deep] ' .. msg)
+		warn('[Redliner Diag] ' .. msg)
 	end)
 end)
 
