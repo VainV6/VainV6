@@ -191,27 +191,6 @@ run(function()
 	pcall(function() entitylib.start() end)
 end)
 
--- DIAGNOSTIC (confirm): team_id attribute on Match.Players.<uid> is the team
--- signal. Report per entity its team_id, yours, and isEnemy. Remove once you
--- confirm enemy=true only for the opposite team_id.
-run(function()
-	task.delay(7, function()
-		local lines = {string.format('me team_id=%s', tostring(teamId(lplr)))}
-		for _, ent in entitylib.List do
-			local plr = ent.Player
-			if plr then
-				lines[#lines+1] = string.format('%s team_id=%s enemy=%s',
-					plr.Name, tostring(teamId(plr)), tostring(isEnemy(ent)))
-			end
-		end
-		local msg = table.concat(lines, ' || ')
-		if vain.CreateNotification then
-			vain:CreateNotification('Redliner Diag', msg, 30, 'check')
-		end
-		warn('[Redliner Diag] ' .. msg)
-	end)
-end)
-
 -- ============================================================================
 -- Optimized Aimbot -- game-tuned silent aim onto the highest-priority enemy.
 -- Redliner shots are projectiles, so we expose prediction (lead the target by
