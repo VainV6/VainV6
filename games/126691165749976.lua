@@ -128,29 +128,31 @@ run(function()
 	pcall(function() entitylib.start() end)
 end)
 
--- DIAGNOSTIC: this game disables CharacterAutoLoads and may spawn combat chars
--- via its own system, so the default entitylib (which reads player.Character)
--- can see nothing -> every module silently no-ops. Report once what entitylib
--- sees + where live characters live, so we can wire a custom adapter if needed.
+-- DIAGNOSTIC 2: entitylib populates from Workspace.Entities (List=3, localAlive=
+-- true confirmed). Now probe WHY modules reject targets -- per entity report
+-- whether it has a Player, is flagged NPC, its in_combat/status, and isEnemy.
 run(function()
-	task.delay(6, function()
-		local list = 0
-		for _ in entitylib.List do list += 1 end
-		local localOk = entitylib.isAlive and entitylib.character and entitylib.character.RootPart ~= nil
-		local charParent = lplr.Character and lplr.Character.Parent
-		local charName = charParent and charParent:GetFullName() or 'nil (no player.Character)'
-		local containers = {}
-		for _, f in workspace:GetChildren() do
-			if (f:IsA('Folder') or f:IsA('Model')) and f:FindFirstChildWhichIsA('Humanoid', true) then
-				containers[#containers + 1] = f.Name
-			end
+	task.delay(7, function()
+		local lines = {}
+		for _, ent in entitylib.List do
+			local plr = ent.Player
+			local nm = plr and plr.Name or (ent.NPC and 'NPC' or '?')
+			local combat = plr and tostring(inCombat(plr)) or '-'
+			local status = plr and tostring(stateValue(plr, 'status')) or '-'
+			lines[#lines + 1] = string.format('%s plr=%s npc=%s combat=%s status=%s enemy=%s',
+				nm, tostring(plr ~= nil), tostring(ent.NPC == true), combat, status, tostring(isEnemy(ent)))
 		end
-		local msg = string.format('List=%d localAlive=%s charParent=%s humFolders={%s}',
-			list, tostring(localOk and true or false), charName, table.concat(containers, ', '))
+		local msg = (#lines > 0) and table.concat(lines, ' || ') or 'entitylib.List EMPTY'
 		if vain.CreateNotification then
-			vain:CreateNotification('Redliner Diag', msg, 25, list > 0 and 'check' or 'alert')
+			vain:CreateNotification('Redliner Diag2', msg, 30, 'alert')
 		end
-		warn('[Redliner Diag] ' .. msg)
+		warn('[Redliner Diag2] ' .. msg)
+		-- also probe input: does VirtualInputManager exist & SendKeyEvent work?
+		local vimOk = pcall(function()
+			local v = cloneref(game:GetService('VirtualInputManager'))
+			return v.SendKeyEvent ~= nil
+		end)
+		warn('[Redliner Diag2] VirtualInputManager usable: ' .. tostring(vimOk))
 	end)
 end)
 
