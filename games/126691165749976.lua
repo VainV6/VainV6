@@ -109,12 +109,22 @@ local function isEnemy(ent)
 	if ent.Player == lplr then return false end
 	if isFriend(ent.Player) then return false end
 	if not isAlivePlr(ent.Player) then return false end
-	-- Only-in-combat gate (on by default): skip players whose in_combat flag is
-	-- EXPLICITLY false (known bystanders / your teammate). If the flag is nil
-	-- (state not replicated, e.g. no active match) we do NOT reject -- otherwise
-	-- everyone would be filtered out whenever the match folder is empty.
+	-- Only-in-combat gate (on by default). Best available "is this my enemy"
+	-- signal without an explicit opponent link:
+	--   * If YOU are in combat, an enemy is someone who is ALSO in_combat. A
+	--     teammate standing with you who isn't fighting is in_combat=false -> excluded.
+	--   * If you're NOT in combat, treat in_combat players as enemies too (they're
+	--     actively fighting), but anyone explicitly in_combat=false is a bystander.
+	--   * in_combat == nil (state not replicated) is left targetable so the aimbot
+	--     still functions if the flag is unavailable.
 	if OnlyInCombat == nil or OnlyInCombat.Enabled then
-		if inCombat(ent.Player) == false then
+		local theirs = inCombat(ent.Player)
+		if theirs == false then
+			return false
+		end
+		-- when we have our own combat state and we ARE fighting, require theirs true
+		local mine = inCombat(lplr)
+		if mine == true and theirs ~= true then
 			return false
 		end
 	end
@@ -194,8 +204,25 @@ end)
 -- without moving your mouse/camera.
 -- ============================================================================
 run(function()
-	local Aimbot, Target, AimPart, Priority, Range, FOV, Predict, Smoothness
+	local Aimbot, Target, AimPart, Priority, Range, FOV, Predict, Smoothness, Walls
 	local Hooked
+
+	-- Wallcheck: raycast from your head to the target part; if a non-character
+	-- object blocks it, the target is behind a wall -> not a valid aim target.
+	local wallParams = RaycastParams.new()
+	wallParams.FilterType = Enum.RaycastFilterType.Exclude
+	local function blockedByWall(ent, part)
+		if not (ent and ent[part]) then return true end
+		if not entitylib.isAlive then return false end
+		local from = (entitylib.character.Head and entitylib.character.Head.Position)
+			or entitylib.character.RootPart.Position
+		local to = ent[part].Position
+		wallParams.FilterDescendantsInstances = {
+			entitylib.character.Character, ent.Character, gameCamera,
+		}
+		local hit = workspace:Raycast(from, (to - from), wallParams)
+		return hit ~= nil -- something solid between you and them
+	end
 
 	-- priority sorters operate on entitylib candidate entries {Entity=, Magnitude=}
 	local function entCursorDist(ent)
@@ -236,6 +263,11 @@ run(function()
 			if (Vector2.new(sp.X, sp.Y) - m).Magnitude > fov then return nil, part end
 		end
 		if not isEnemy(ent) then return nil, part end
+		-- Walls toggle: when off (default), refuse targets behind a wall so the
+		-- aimbot doesn't lock onto someone you can't actually shoot.
+		if (Walls == nil or not Walls.Enabled) and blockedByWall(ent, part) then
+			return nil, part
+		end
 		return ent, part
 	end
 
@@ -344,6 +376,11 @@ run(function()
 		Name = 'Only In-Combat',
 		Default = true,
 		Tooltip = 'Only target players who are actually in combat with you (the red chest icon). This is what stops the aimbot from tracking your teammate / bystanders. Turn off for free-for-all.'
+	})
+	Walls = Aimbot:CreateToggle({
+		Name = 'Target Through Walls',
+		Default = false,
+		Tooltip = 'OFF (default) = only lock targets you have line-of-sight to (no aiming through walls). ON = lock targets even behind cover.'
 	})
 end)
 
