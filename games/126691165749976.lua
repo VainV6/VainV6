@@ -121,6 +121,37 @@ run(function()
 			task.wait(0.2)
 		end
 	end)
+
+	-- Make sure entitylib is running/populated. universal.lua also calls start()
+	-- but call it here too (idempotent, guarded by .Running) so we don't depend on
+	-- load order.
+	pcall(function() entitylib.start() end)
+end)
+
+-- DIAGNOSTIC: this game disables CharacterAutoLoads and may spawn combat chars
+-- via its own system, so the default entitylib (which reads player.Character)
+-- can see nothing -> every module silently no-ops. Report once what entitylib
+-- sees + where live characters live, so we can wire a custom adapter if needed.
+run(function()
+	task.delay(6, function()
+		local list = 0
+		for _ in entitylib.List do list += 1 end
+		local localOk = entitylib.isAlive and entitylib.character and entitylib.character.RootPart ~= nil
+		local charParent = lplr.Character and lplr.Character.Parent
+		local charName = charParent and charParent:GetFullName() or 'nil (no player.Character)'
+		local containers = {}
+		for _, f in workspace:GetChildren() do
+			if (f:IsA('Folder') or f:IsA('Model')) and f:FindFirstChildWhichIsA('Humanoid', true) then
+				containers[#containers + 1] = f.Name
+			end
+		end
+		local msg = string.format('List=%d localAlive=%s charParent=%s humFolders={%s}',
+			list, tostring(localOk and true or false), charName, table.concat(containers, ', '))
+		if vain.CreateNotification then
+			vain:CreateNotification('Redliner Diag', msg, 25, list > 0 and 'check' or 'alert')
+		end
+		warn('[Redliner Diag] ' .. msg)
+	end)
 end)
 
 -- ============================================================================
