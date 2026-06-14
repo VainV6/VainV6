@@ -128,31 +128,45 @@ run(function()
 	pcall(function() entitylib.start() end)
 end)
 
--- DIAGNOSTIC 2: entitylib populates from Workspace.Entities (List=3, localAlive=
--- true confirmed). Now probe WHY modules reject targets -- per entity report
--- whether it has a Player, is flagged NPC, its in_combat/status, and isEnemy.
+-- DIAGNOSTIC 3: players map (plr=true) but status=nil -> the state-folder lookup
+-- at ReplicatedStorage.Players.<UserId> is WRONG. Hunt for where each player's
+-- state actually lives: search the datamodel for a folder named the UserId or
+-- the player Name, and report its full path + a couple child names/values.
 run(function()
 	task.delay(7, function()
-		local lines = {}
-		for _, ent in entitylib.List do
-			local plr = ent.Player
-			local nm = plr and plr.Name or (ent.NPC and 'NPC' or '?')
-			local combat = plr and tostring(inCombat(plr)) or '-'
-			local status = plr and tostring(stateValue(plr, 'status')) or '-'
-			lines[#lines + 1] = string.format('%s plr=%s npc=%s combat=%s status=%s enemy=%s',
-				nm, tostring(plr ~= nil), tostring(ent.NPC == true), combat, status, tostring(isEnemy(ent)))
+		local plr = entitylib.List[1] and entitylib.List[1].Player or playersService:GetPlayers()[2] or lplr
+		local uid = tostring(plr.UserId)
+		local found = {}
+		local roots = {replicatedStorage, workspace, game:GetService('ReplicatedFirst')}
+		for _, root in roots do
+			for _, d in root:GetDescendants() do
+				if d.Name == uid or d.Name == plr.Name then
+					local kids = {}
+					for _, k in d:GetChildren() do
+						local val = ''
+						pcall(function() if k.Value ~= nil then val = '=' .. tostring(k.Value) end end)
+						kids[#kids + 1] = k.Name .. val
+						if #kids >= 6 then break end
+					end
+					found[#found + 1] = d:GetFullName() .. ' {' .. table.concat(kids, ', ') .. '}'
+					if #found >= 4 then break end
+				end
+			end
+			if #found >= 4 then break end
 		end
-		local msg = (#lines > 0) and table.concat(lines, ' || ') or 'entitylib.List EMPTY'
+		-- also list ReplicatedStorage.Players children (what keys does it use?)
+		local pf = replicatedStorage:FindFirstChild('Players')
+		local pkeys = {}
+		if pf then
+			for _, c in pf:GetChildren() do pkeys[#pkeys + 1] = c.Name; if #pkeys >= 6 then break end end
+		end
+		local msg = string.format('uid=%s | RS.Players=%s keys={%s} | found: %s',
+			uid, tostring(pf ~= nil), table.concat(pkeys, ','),
+			(#found > 0) and table.concat(found, ' || ') or 'NONE matching uid/name')
 		if vain.CreateNotification then
-			vain:CreateNotification('Redliner Diag2', msg, 30, 'alert')
+			vain:CreateNotification('Redliner Diag3', msg, 40, 'alert')
 		end
-		warn('[Redliner Diag2] ' .. msg)
-		-- also probe input: does VirtualInputManager exist & SendKeyEvent work?
-		local vimOk = pcall(function()
-			local v = cloneref(game:GetService('VirtualInputManager'))
-			return v.SendKeyEvent ~= nil
-		end)
-		warn('[Redliner Diag2] VirtualInputManager usable: ' .. tostring(vimOk))
+		warn('[Redliner Diag3] ' .. msg)
 	end)
 end)
 
