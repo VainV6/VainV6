@@ -100,6 +100,27 @@ run(function()
 		if ent.TeamCheck then return ent:TeamCheck() end
 		return isEnemy(ent)
 	end
+
+	-- KEEP Targetable LIVE. entitylib computes ent.Targetable ONCE when the entity
+	-- is added, but isEnemy depends on in_combat/status which change mid-game (a
+	-- player enters/leaves combat). Without this, ESP/Chams (which gate on
+	-- ent.Targetable) would freeze an enemy as a "teammate" or vice-versa. Each
+	-- frame we recompute Targetable for every entity and fire EntityUpdated when it
+	-- flips, so all visual + combat modules immediately follow the in_combat state.
+	task.spawn(function()
+		while true do
+			for _, ent in entitylib.List do
+				if ent and ent.Player then
+					local now = isEnemy(ent)
+					if ent.Targetable ~= now then
+						ent.Targetable = now
+						pcall(function() entitylib.Events.EntityUpdated:Fire(ent) end)
+					end
+				end
+			end
+			task.wait(0.2)
+		end
+	end)
 end)
 
 -- ============================================================================
@@ -450,5 +471,398 @@ run(function()
 		Default = 180,
 		Suffix = function(val) return 'ms' end,
 		Tooltip = 'How early before impact to sidestep.'
+	})
+end)
+
+-- ============================================================================
+-- Shared input helpers (VirtualInputManager). The game action controller is
+-- hidden, so we trigger its OWN keybinds (LMB melee / Q gun / F parry / RMB
+-- grapple / SHIFT dash / CTRL slide / SPACE wallrun) instead of reconstructing
+-- packets -- build-proof. Keybinds are changeable in-game; these assume defaults.
+-- ============================================================================
+local vim = cloneref(game:GetService('VirtualInputManager'))
+local function tapKey(key)
+	pcall(function()
+		vim:SendKeyEvent(true, key, false, game)
+		task.wait()
+		vim:SendKeyEvent(false, key, false, game)
+	end)
+end
+local function holdKey(key, down)
+	pcall(function() vim:SendKeyEvent(down and true or false, key, false, game) end)
+end
+local function clickMouse(right)
+	pcall(function()
+		local btn = right and 1 or 0
+		vim:SendMouseButtonEvent(0, 0, btn, true, game, 0)
+		task.wait()
+		vim:SendMouseButtonEvent(0, 0, btn, false, game, 0)
+	end)
+end
+
+-- ============================================================================
+-- Auto Parry -- the strong version of bullet defence. [F] parries bullets in
+-- Redliner; this watches for ANY incoming threat (projectile OR enemy melee
+-- lunge) and taps F on the tightest timing so the parry/deflect lands.
+-- ============================================================================
+run(function()
+	local AutoParry, ParryRange, MeleeParry
+
+	local function incomingWithin(range)
+		if not entitylib.isAlive then return false end
+		local myPos = entitylib.character.RootPart.Position
+		local function fast(o)
+			if not o:IsA('BasePart') then return false end
+			local vel = o.AssemblyLinearVelocity
+			local sp = vel.Magnitude
+			if sp < 40 then return false end
+			local rel = myPos - o.Position
+			return vel:Dot(rel) > 0 and (rel.Magnitude / sp) <= (range / 1000)
+		end
+		local tagged = collectionService:GetTagged('Projectile')
+		if #tagged > 0 then
+			for _, o in tagged do if fast(o) then return true end end
+		else
+			for _, o in workspace:GetDescendants() do
+				if o:IsA('BasePart') and not o.Anchored and o.CanQuery == false and fast(o) then
+					return true
+				end
+			end
+		end
+		if MeleeParry and MeleeParry.Enabled then
+			for _, ent in entitylib.List do
+				if ent.Player and isEnemy(ent) and ent.RootPart then
+					local rel = myPos - ent.RootPart.Position
+					if rel.Magnitude < 9 then
+						local ev = ent.RootPart.AssemblyLinearVelocity
+						if ev.Magnitude > 8 and ev:Dot(rel) > 0 then return true end
+					end
+				end
+			end
+		end
+		return false
+	end
+
+	AutoParry = vain.Categories.Combat:CreateModule({
+		Name = 'Auto Parry',
+		Function = function(callback)
+			if callback then
+				local last = 0
+				AutoParry:Clean(runService.Heartbeat:Connect(function()
+					if tick() - last < 0.16 then return end
+					if incomingWithin(ParryRange and ParryRange.Value or 220) then
+						last = tick()
+						tapKey(Enum.KeyCode.F)
+					end
+				end))
+			end
+		end,
+		Tooltip = 'Taps F on the tightest timing to parry incoming bullets -- and optionally enemy melee lunges. The precise version of Auto Block. (Assumes Parry is bound to F.)'
+	})
+	ParryRange = AutoParry:CreateSlider({
+		Name = 'Timing Window',
+		Min = 60, Max = 400, Default = 220,
+		Suffix = function() return 'ms' end,
+		Tooltip = 'How early before impact to parry. Lower = riskier last-frame parry; higher = safer.'
+	})
+	MeleeParry = AutoParry:CreateToggle({
+		Name = 'Parry Melee',
+		Default = true,
+		Tooltip = 'Also parry enemy melee lunges, not just bullets.'
+	})
+end)
+
+-- ============================================================================
+-- Melee Aimbot -- when an enemy is in melee range, snap your facing to them so
+-- the swing connects; optionally auto-swing (LMB).
+-- ============================================================================
+run(function()
+	local MeleeAimbot, MeleeRange, AutoSwing
+
+	MeleeAimbot = vain.Categories.Combat:CreateModule({
+		Name = 'Melee Aimbot',
+		Function = function(callback)
+			if callback then
+				local lastSwing = 0
+				MeleeAimbot:Clean(runService.RenderStepped:Connect(function()
+					if not entitylib.isAlive then return end
+					local range = MeleeRange and MeleeRange.Value or 14
+					local ent = entitylib.EntityPosition({
+						Range = range, Part = 'RootPart', Players = true,
+						Origin = entitylib.character.RootPart.Position,
+						Sort = function(a, b) return a.Magnitude < b.Magnitude end,
+					})
+					if not ent or not isEnemy(ent) then return end
+					local root = entitylib.character.RootPart
+					local target = (ent.RootPart or ent.Head).Position
+					root.CFrame = CFrame.lookAt(root.Position, Vector3.new(target.X, root.Position.Y, target.Z))
+					if AutoSwing and AutoSwing.Enabled and tick() - lastSwing > 0.35 then
+						lastSwing = tick()
+						clickMouse(false)
+					end
+				end))
+			end
+		end,
+		Tooltip = 'Snaps your facing onto the nearest enemy in melee range so swings land. Optionally auto-swings (LMB) when an enemy is close.'
+	})
+	MeleeRange = MeleeAimbot:CreateSlider({
+		Name = 'Melee Range',
+		Min = 5, Max = 30, Default = 14,
+		Suffix = function(val) return val == 1 and 'stud' or 'studs' end,
+		Tooltip = 'How close an enemy must be to trigger the facing-snap / auto-swing.'
+	})
+	AutoSwing = MeleeAimbot:CreateToggle({
+		Name = 'Auto Swing',
+		Default = false,
+		Tooltip = 'Automatically melee (LMB) when an enemy is within range.'
+	})
+end)
+
+-- ============================================================================
+-- Auto Grapple -- [RMB] grapple yanks you toward your aim. Auto-aims at the
+-- nearest enemy and fires to close distance for a melee.
+-- ============================================================================
+run(function()
+	local AutoGrapple, GrappleRange, GrappleDelay
+
+	AutoGrapple = vain.Categories.Combat:CreateModule({
+		Name = 'Auto Grapple',
+		Function = function(callback)
+			if callback then
+				local last = 0
+				AutoGrapple:Clean(runService.RenderStepped:Connect(function()
+					if not entitylib.isAlive then return end
+					local cd = GrappleDelay and GrappleDelay.Value or 1.5
+					if tick() - last < cd then return end
+					local range = GrappleRange and GrappleRange.Value or 120
+					local ent = entitylib.EntityPosition({
+						Range = range, Part = 'RootPart', Players = true,
+						Origin = entitylib.character.RootPart.Position,
+						Sort = function(a, b) return a.Magnitude < b.Magnitude end,
+					})
+					if not ent or not isEnemy(ent) then return end
+					local root = entitylib.character.RootPart
+					local d = (ent.RootPart.Position - root.Position).Magnitude
+					if d < 18 then return end
+					gameCamera.CFrame = CFrame.lookAt(gameCamera.CFrame.Position, ent.RootPart.Position)
+					last = tick()
+					clickMouse(true)
+				end))
+			end
+		end,
+		Tooltip = 'Auto-aims your grapple (RMB) at the nearest enemy and fires it to yank you into melee range. Only fires when there is distance to close.'
+	})
+	GrappleRange = AutoGrapple:CreateSlider({
+		Name = 'Grapple Range',
+		Min = 20, Max = 400, Default = 120,
+		Suffix = function(val) return 'studs' end,
+		Tooltip = 'Max distance to grapple an enemy from.'
+	})
+	GrappleDelay = AutoGrapple:CreateSlider({
+		Name = 'Re-grapple Delay',
+		Min = 0, Max = 5, Default = 1.5, Decimal = 10,
+		Suffix = function(val) return 's' end,
+		Tooltip = 'Cooldown between auto-grapples so it does not spam RMB.'
+	})
+end)
+
+-- ============================================================================
+-- Triggerbot -- auto-fire your gun ([Q]) when an enemy is under your crosshair.
+-- ============================================================================
+run(function()
+	local Triggerbot, TrigDelay
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+	Triggerbot = vain.Categories.Combat:CreateModule({
+		Name = 'Triggerbot',
+		Function = function(callback)
+			if callback then
+				local last = 0
+				Triggerbot:Clean(runService.RenderStepped:Connect(function()
+					if not entitylib.isAlive then return end
+					local delay = (TrigDelay and TrigDelay.Value or 60) / 1000
+					if tick() - last < delay then return end
+					local origin = gameCamera.CFrame.Position
+					local dir = gameCamera.CFrame.LookVector * 1000
+					rayParams.FilterDescendantsInstances = {entitylib.character.Character, gameCamera}
+					local hit = workspace:Raycast(origin, dir, rayParams)
+					if not hit then return end
+					local model = hit.Instance:FindFirstAncestorWhichIsA('Model')
+					local plr = model and playersService:GetPlayerFromCharacter(model)
+					if not plr then return end
+					for _, ent in entitylib.List do
+						if ent.Player == plr then
+							if isEnemy(ent) then
+								last = tick()
+								tapKey(Enum.KeyCode.Q)
+							end
+							break
+						end
+					end
+				end))
+			end
+		end,
+		Tooltip = 'Auto-fires your gun (Q) the moment an ENEMY is under your crosshair. Skips teammates/friends via the same enemy filter as the aimbot.'
+	})
+	TrigDelay = Triggerbot:CreateSlider({
+		Name = 'Fire Delay',
+		Min = 0, Max = 500, Default = 60,
+		Suffix = function(val) return 'ms' end,
+		Tooltip = 'Delay between auto-fires (reaction-time look + avoids spam).'
+	})
+end)
+
+-- ============================================================================
+-- Movement -- exploit the "no speed limit" + binds. Infinite wallrun, dash spam,
+-- camera-relative speed boost. Pure client velocity/input, no remote.
+-- ============================================================================
+run(function()
+	local Movement, WallrunHold, DashSpam, DashInterval, SpeedBoost, SpeedValue
+
+	Movement = vain.Categories.Blatant:CreateModule({
+		Name = 'Movement',
+		Function = function(callback)
+			if callback then
+				local lastDash = 0
+				Movement:Clean(runService.Heartbeat:Connect(function()
+					if not entitylib.isAlive then return end
+					local root = entitylib.character.RootPart
+					local hum = entitylib.character.Humanoid
+					if WallrunHold and WallrunHold.Enabled then
+						if inputService:IsKeyDown(Enum.KeyCode.W)
+							or inputService:IsKeyDown(Enum.KeyCode.A)
+							or inputService:IsKeyDown(Enum.KeyCode.D) then
+							holdKey(Enum.KeyCode.Space, true)
+						end
+					end
+					if DashSpam and DashSpam.Enabled then
+						local iv = (DashInterval and DashInterval.Value or 600) / 1000
+						if tick() - lastDash > iv then
+							lastDash = tick()
+							tapKey(Enum.KeyCode.LeftShift)
+						end
+					end
+					if SpeedBoost and SpeedBoost.Enabled and hum then
+						local move = hum.MoveDirection
+						if move.Magnitude > 0.1 then
+							local spd = SpeedValue and SpeedValue.Value or 60
+							local v = root.AssemblyLinearVelocity
+							root.AssemblyLinearVelocity = move * spd + Vector3.new(0, v.Y, 0)
+						end
+					end
+				end))
+			else
+				holdKey(Enum.KeyCode.Space, false)
+			end
+		end,
+		Tooltip = 'Movement exploits (this game has NO speed limit): infinite wallrun, dash spam, and a camera-relative speed boost. Pure client velocity/input.'
+	})
+	WallrunHold = Movement:CreateToggle({
+		Name = 'Infinite Wallrun',
+		Default = false,
+		Tooltip = 'Keeps wallrun (SPACE) alive while you hold a movement key against a wall.'
+	})
+	DashSpam = Movement:CreateToggle({
+		Name = 'Dash Spam',
+		Default = false,
+		Tooltip = 'Auto-presses dash (SHIFT) on an interval for constant dashing.'
+	})
+	DashInterval = Movement:CreateSlider({
+		Name = 'Dash Interval',
+		Min = 100, Max = 2000, Default = 600,
+		Suffix = function(val) return 'ms' end,
+		Tooltip = 'Time between auto-dashes.'
+	})
+	SpeedBoost = Movement:CreateToggle({
+		Name = 'Speed Boost',
+		Default = false,
+		Tooltip = 'Adds velocity in your movement direction. No speed limit in this game, but big values may still desync -- keep it sane.'
+	})
+	SpeedValue = Movement:CreateSlider({
+		Name = 'Speed',
+		Min = 20, Max = 300, Default = 60,
+		Suffix = function(val) return 'st/s' end,
+		Tooltip = 'How fast Speed Boost pushes you.'
+	})
+end)
+
+-- ============================================================================
+-- Enemy Chams -- highlight ONLY your enemies (alive + in_combat + not friend).
+-- The universal Chams can also do this (enable its hide-teammates toggle, since
+-- our targetCheck makes Targetable == enemy), but this is a dedicated enemy-only
+-- version that works with no extra toggles and follows the live in_combat state.
+-- ============================================================================
+run(function()
+	local EnemyChams, FillColor, OutlineColor, FillTransparency, OutlineTransparency, Walls
+	local highlights = {} -- [ent] = Highlight
+	local folder = Instance.new('Folder')
+	folder.Name = 'RedlinerEnemyChams'
+	folder.Parent = vain.gui or game:GetService('CoreGui')
+
+	local function clearAll()
+		for _, h in highlights do
+			pcall(function() h:Destroy() end)
+		end
+		table.clear(highlights)
+	end
+
+	EnemyChams = vain.Categories.Render:CreateModule({
+		Name = 'Enemy Chams',
+		Function = function(callback)
+			if callback then
+				EnemyChams:Clean(runService.RenderStepped:Connect(function()
+					for _, ent in entitylib.List do
+						local on = ent.Player and ent.Character and isEnemy(ent)
+						if on then
+							local h = highlights[ent]
+							if not h or not h.Parent then
+								h = Instance.new('Highlight')
+								h.Parent = folder
+								highlights[ent] = h
+							end
+							h.Adornee = ent.Character
+							h.DepthMode = Enum.HighlightDepthMode[(Walls and Walls.Enabled) and 'AlwaysOnTop' or 'Occluded']
+							h.FillColor = Color3.fromHSV(FillColor.Hue, FillColor.Sat, FillColor.Value)
+							h.OutlineColor = Color3.fromHSV(OutlineColor.Hue, OutlineColor.Sat, OutlineColor.Value)
+							h.FillTransparency = FillTransparency.Value
+							h.OutlineTransparency = OutlineTransparency.Value
+						elseif highlights[ent] then
+							pcall(function() highlights[ent]:Destroy() end)
+							highlights[ent] = nil
+						end
+					end
+					for ent, h in highlights do
+						if not ent.Character or not ent.Character.Parent then
+							pcall(function() h:Destroy() end)
+							highlights[ent] = nil
+						end
+					end
+				end))
+			else
+				clearAll()
+			end
+		end,
+		Tooltip = 'Chams (highlight) on ENEMIES only -- alive players in combat with you. Teammates, friends and bystanders are never shown. Follows the live in-combat state.'
+	})
+	FillColor = EnemyChams:CreateColorSlider({
+		Name = 'Fill Color',
+	})
+	OutlineColor = EnemyChams:CreateColorSlider({
+		Name = 'Outline Color',
+		DefaultSat = 0,
+	})
+	FillTransparency = EnemyChams:CreateSlider({
+		Name = 'Fill Transparency',
+		Min = 0, Max = 1, Default = 0.5, Decimal = 100
+	})
+	OutlineTransparency = EnemyChams:CreateSlider({
+		Name = 'Outline Transparency',
+		Min = 0, Max = 1, Default = 0, Decimal = 100
+	})
+	Walls = EnemyChams:CreateToggle({
+		Name = 'Through Walls',
+		Default = true,
+		Tooltip = 'Show the chams through walls (AlwaysOnTop).'
 	})
 end)
