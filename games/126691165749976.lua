@@ -3,8 +3,9 @@
 -- Data model discovered from the place file:
 --  * Players are STANDARD Roblox Humanoid characters, so the default entitylib
 --    populates normally (Players -> Character -> Humanoid -> RootPart).
---  * Per-player state lives at ReplicatedStorage.Players.<UserId> as a Folder of
---    Values: in_combat (BoolValue), status (StringValue "alive"/dead), level,
+--  * Per-player state lives under ReplicatedStorage.ReadOnly: persistent stats at
+--    ReadOnly.Players.<UserId> and live duel state at ReadOnly.Match.Players.
+--    <UserId> -- in_combat (BoolValue), status (StringValue "alive"/dead), level,
 --    casual_duel_winstreak, etc. The red enemy chest icon == being in combat.
 --  * Combat is hurtbox-based: attacks OverlapParams-cast against
 --    CollectionService:GetTagged("Hurtbox"); each hurtbox's ancestor Model is the
@@ -34,19 +35,38 @@ local targetinfo = vain.Libraries.targetinfo
 -- Shared helpers: per-player combat state + friend/team filtering
 -- ============================================================================
 
--- ReplicatedStorage.Players is a Folder keyed by UserId. Read a player's state
--- folder; nil-safe (it may not exist for a brief moment after join).
-local function stateFolder(plr)
-	if not plr then return nil end
-	local players = replicatedStorage:FindFirstChild('Players')
-	if not players then return nil end
-	return players:FindFirstChild(tostring(plr.UserId))
+-- Per-player state lives under ReplicatedStorage.ReadOnly, keyed by UserId, split
+-- across TWO folders (confirmed live via diagnostics):
+--   ReadOnly.Players.<UserId>        -> persistent stats (killstreak, yen, level,
+--                                        and status/in_combat when set)
+--   ReadOnly.Match.Players.<UserId>  -> per-match state (populated during a duel;
+--                                        empty outside one)
+-- We read a value from whichever folder has it. (NOTE: the old path
+-- ReplicatedStorage.Players was wrong -> status came back nil -> isEnemy rejected
+-- everyone -> nothing worked.)
+local function readOnlyRoot()
+	return replicatedStorage:FindFirstChild('ReadOnly')
+end
+
+local function stateFolders(plr)
+	if not plr then return nil, nil end
+	local ro = readOnlyRoot()
+	if not ro then return nil, nil end
+	local uid = tostring(plr.UserId)
+	local players = ro:FindFirstChild('Players')
+	local persistent = players and players:FindFirstChild(uid)
+	local match = ro:FindFirstChild('Match')
+	match = match and match:FindFirstChild('Players')
+	match = match and match:FindFirstChild(uid)
+	return persistent, match
 end
 
 local function stateValue(plr, name)
-	local f = stateFolder(plr)
-	local v = f and f:FindFirstChild(name)
-	return v and v.Value
+	local persistent, match = stateFolders(plr)
+	-- prefer the live match folder, fall back to the persistent one
+	local v = (match and match:FindFirstChild(name)) or (persistent and persistent:FindFirstChild(name))
+	if v then return v.Value end
+	return nil
 end
 
 -- A player is alive if their status value says so (falls back to humanoid health).
@@ -61,10 +81,14 @@ local function isAlivePlr(plr)
 end
 
 -- in_combat is the authoritative "is this player actively fighting" flag -- the
--- same state that lights up the red enemy chest icon. Your teammate / bystanders
--- are NOT in_combat with you, so this is how we stop tracking them.
+-- same state that lights up the red enemy chest icon. Returns true / false /
+-- nil. nil means "state not present" (e.g. outside a match) -- callers must NOT
+-- treat nil as "not in combat", or every target gets rejected when no duel is
+-- live. Only an EXPLICIT false means a known bystander.
 local function inCombat(plr)
-	return stateValue(plr, 'in_combat') == true
+	local v = stateValue(plr, 'in_combat')
+	if v == nil then return nil end
+	return v == true
 end
 
 local function isFriend(plr)
@@ -85,10 +109,14 @@ local function isEnemy(ent)
 	if ent.Player == lplr then return false end
 	if isFriend(ent.Player) then return false end
 	if not isAlivePlr(ent.Player) then return false end
-	-- Only-in-combat gate (on by default): skip anyone not engaged with you,
-	-- which is exactly your teammate / random bystanders.
-	if (OnlyInCombat == nil or OnlyInCombat.Enabled) and not inCombat(ent.Player) then
-		return false
+	-- Only-in-combat gate (on by default): skip players whose in_combat flag is
+	-- EXPLICITLY false (known bystanders / your teammate). If the flag is nil
+	-- (state not replicated, e.g. no active match) we do NOT reject -- otherwise
+	-- everyone would be filtered out whenever the match folder is empty.
+	if OnlyInCombat == nil or OnlyInCombat.Enabled then
+		if inCombat(ent.Player) == false then
+			return false
+		end
 	end
 	return true
 end
@@ -128,45 +156,25 @@ run(function()
 	pcall(function() entitylib.start() end)
 end)
 
--- DIAGNOSTIC 3: players map (plr=true) but status=nil -> the state-folder lookup
--- at ReplicatedStorage.Players.<UserId> is WRONG. Hunt for where each player's
--- state actually lives: search the datamodel for a folder named the UserId or
--- the player Name, and report its full path + a couple child names/values.
+-- DIAGNOSTIC (final): confirm the state path fix. Reports per entity whether it
+-- now resolves as an enemy. Once you see enemy=true for opponents, this can be
+-- removed. Fixed: state lives at ReplicatedStorage.ReadOnly.Players.<UserId>
+-- (+ ReadOnly.Match.Players.<UserId> during a duel), not RS.Players.
 run(function()
 	task.delay(7, function()
-		local plr = entitylib.List[1] and entitylib.List[1].Player or playersService:GetPlayers()[2] or lplr
-		local uid = tostring(plr.UserId)
-		local found = {}
-		local roots = {replicatedStorage, workspace, game:GetService('ReplicatedFirst')}
-		for _, root in roots do
-			for _, d in root:GetDescendants() do
-				if d.Name == uid or d.Name == plr.Name then
-					local kids = {}
-					for _, k in d:GetChildren() do
-						local val = ''
-						pcall(function() if k.Value ~= nil then val = '=' .. tostring(k.Value) end end)
-						kids[#kids + 1] = k.Name .. val
-						if #kids >= 6 then break end
-					end
-					found[#found + 1] = d:GetFullName() .. ' {' .. table.concat(kids, ', ') .. '}'
-					if #found >= 4 then break end
-				end
+		local lines = {}
+		for _, ent in entitylib.List do
+			local plr = ent.Player
+			if plr then
+				lines[#lines + 1] = string.format('%s combat=%s status=%s enemy=%s',
+					plr.Name, tostring(inCombat(plr)), tostring(stateValue(plr, 'status')), tostring(isEnemy(ent)))
 			end
-			if #found >= 4 then break end
 		end
-		-- also list ReplicatedStorage.Players children (what keys does it use?)
-		local pf = replicatedStorage:FindFirstChild('Players')
-		local pkeys = {}
-		if pf then
-			for _, c in pf:GetChildren() do pkeys[#pkeys + 1] = c.Name; if #pkeys >= 6 then break end end
-		end
-		local msg = string.format('uid=%s | RS.Players=%s keys={%s} | found: %s',
-			uid, tostring(pf ~= nil), table.concat(pkeys, ','),
-			(#found > 0) and table.concat(found, ' || ') or 'NONE matching uid/name')
+		local msg = (#lines > 0) and table.concat(lines, ' || ') or 'List empty'
 		if vain.CreateNotification then
-			vain:CreateNotification('Redliner Diag3', msg, 40, 'alert')
+			vain:CreateNotification('Redliner Diag', msg, 30, 'check')
 		end
-		warn('[Redliner Diag3] ' .. msg)
+		warn('[Redliner Diag] ' .. msg)
 	end)
 end)
 
