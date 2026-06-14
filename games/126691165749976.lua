@@ -156,25 +156,34 @@ run(function()
 	pcall(function() entitylib.start() end)
 end)
 
--- DIAGNOSTIC (final): confirm the state path fix. Reports per entity whether it
--- now resolves as an enemy. Once you see enemy=true for opponents, this can be
--- removed. Fixed: state lives at ReplicatedStorage.ReadOnly.Players.<UserId>
--- (+ ReadOnly.Match.Players.<UserId> during a duel), not RS.Players.
+-- DIAGNOSTIC (match): in_combat is true/false per player but does NOT say WHO
+-- you're dueling. Dump the ReadOnly.Match tree + your own match folder to find
+-- the opponent/match linkage (the real enemy signal). Run this DURING a duel.
 run(function()
 	task.delay(7, function()
-		local lines = {}
-		for _, ent in entitylib.List do
-			local plr = ent.Player
-			if plr then
-				lines[#lines + 1] = string.format('%s combat=%s status=%s enemy=%s',
-					plr.Name, tostring(inCombat(plr)), tostring(stateValue(plr, 'status')), tostring(isEnemy(ent)))
+		local function dump(inst, depth)
+			local out = {}
+			if not inst then return '<nil>' end
+			for _, c in inst:GetChildren() do
+				local val = ''
+				pcall(function() if c.Value ~= nil then val = '=' .. tostring(c.Value) end end)
+				local sub = ''
+				if depth > 0 and #c:GetChildren() > 0 then sub = '[' .. dump(c, depth - 1) .. ']' end
+				out[#out + 1] = c.Name .. val .. sub
+				if #out >= 12 then break end
 			end
+			return table.concat(out, ', ')
 		end
-		local msg = (#lines > 0) and table.concat(lines, ' || ') or 'List empty'
+		local ro = replicatedStorage:FindFirstChild('ReadOnly')
+		local match = ro and ro:FindFirstChild('Match')
+		local myMatch = match and match:FindFirstChild('Players')
+		myMatch = myMatch and myMatch:FindFirstChild(tostring(lplr.UserId))
+		local msg = string.format('Match children={%s} || MyMatchFolder={%s}',
+			dump(match, 1), dump(myMatch, 1))
 		if vain.CreateNotification then
-			vain:CreateNotification('Redliner Diag', msg, 30, 'check')
+			vain:CreateNotification('Redliner Match', msg, 45, 'alert')
 		end
-		warn('[Redliner Diag] ' .. msg)
+		warn('[Redliner Match] ' .. msg)
 	end)
 end)
 
