@@ -2474,19 +2474,42 @@ run(function()
     	Tooltip = 'Snaps bow aim onto the nearest valid target',
     	Function = function(callback)
     		if callback then
-    			local multi, predicted = 0, nil
+    			local predicted = nil
     			local lastpredicted = 0
     			local lastent, found, update = nil, 0, 0
     
     			launchHook = bedwars.ProjectileLaunchHook:Add('BowAssist', 10, function(nextLaunch, ...)
     				local res = nextLaunch(...)
     				local projmeta = select(2, ...)
-    				multi = projmeta and (projmeta.velocityMultiplier + 2) or 0
     				if projmeta and tick() - update < 0.1 and lastent and lastent.RootPart then
     					local meta = projmeta:getProjectileMeta()
-    					local gravity = (meta.gravitationalAcceleration or 196.2) * projmeta.gravityMultiplier
-    					local calc = prediction.SolveTrajectory(entitylib.character.RootPart.Position, (meta.launchVelocity or 100) * (1 - lplr:GetNetworkPing()), gravity, lastent.RootPart.Position, lastent.RootPart.Velocity, workspace.Gravity, entitylib.character.HipHeight, nil, rayCheck)
-    					predicted = calc
+    					-- Real muzzle speed = base launchVelocity scaled by the charge
+    					-- (velocityMultiplier). Gravity likewise scales by gravityMultiplier;
+    					-- 35 is the most common Bedwars projectile gravity, used as fallback.
+    					local speed = (meta.launchVelocity or 100) * (projmeta.velocityMultiplier or 1)
+    					local gravity = (meta.gravitationalAcceleration or 35) * (projmeta.gravityMultiplier or 1)
+
+    					-- Projectiles spawn from the bow/head, not the torso centre. Feeding
+    					-- the real muzzle lets the solver return a correct aim direction
+    					-- instead of relying on a downstream vertical fudge factor.
+    					local char = lplr.Character
+    					local head = char and char:FindFirstChild('Head')
+    					local origin = head and head.Position or entitylib.character.RootPart.Position
+
+    					-- Latency means the shot is processed on the server after `ping`
+    					-- seconds, by which time the target has already moved. Advance the
+    					-- target by that window first, then let SolveTrajectory lead the
+    					-- remaining flight time. (Old code mis-modelled this by slowing the
+    					-- arrow, which broke entirely at >1s ping.)
+    					local lat = lplr:GetNetworkPing() or 0
+    					local tvel = lastent.RootPart.Velocity
+    					local tpos = lastent.RootPart.Position + tvel * lat
+
+    					-- Keep the grounded raycast from hitting our own or the target's body.
+    					rayCheck.FilterType = Enum.RaycastFilterType.Exclude
+    					rayCheck.FilterDescendantsInstances = {char, lastent.RootPart.Parent}
+
+    					predicted = prediction.SolveTrajectory(origin, speed, gravity, tpos, tvel, workspace.Gravity, entitylib.character.HipHeight, nil, rayCheck)
     					lastpredicted = tick()
     				else
     					predicted = nil
@@ -2510,7 +2533,10 @@ run(function()
     					update = tick()
     					if tick() - lastpredicted < 0.1 then
     						targetinfo.Targets[ent] = tick() + 1
-    						local cframe, speed = findAim(gameCamera.CFrame, predicted or ent.RootPart.Position, dt, found, multi + ((entitylib.character.RootPart.Position.Y - ent.RootPart.Position.Y) / 7))
+    						local aimpoint = predicted or ent.RootPart.Position
+    						-- Solver now returns a fully corrected intercept point (true muzzle
+    						-- origin + charge-scaled speed), so no vertical fudge is needed.
+    						local cframe, speed = findAim(gameCamera.CFrame, aimpoint, dt, found, 0)
     						-- In first person move the camera directly; in third person nudge
     						-- the mouse. The old check (Head.LocalTransparencyModifier == 1) was
     						-- an unreliable first-person test that often left the aim doing
@@ -2518,7 +2544,7 @@ run(function()
     						if isFirstPerson() then
     							gameCamera.CFrame = cframe
     						elseif ThirdPerson.Enabled and inputService.MouseEnabled and mousemoverel then
-    							local viewport = gameCamera:WorldToViewportPoint(predicted)
+    							local viewport = gameCamera:WorldToViewportPoint(aimpoint)
     							local pos = (Vector2.new(viewport.X, viewport.Y) - inputService:GetMouseLocation()) * (speed / 15)
     							mousemoverel(pos.X, pos.Y)
     						end
