@@ -931,7 +931,6 @@ run(function()
 		end
 		if ent.NPC then return true end
 		if isFriend(ent.Player) then return false end
-		if not select(2, whitelist:get(ent.Player)) then return false end
 		return lplr:GetAttribute('Team') ~= ent.Player:GetAttribute('Team')
 	end
 	vain:Clean(entitylib.Events.LocalAdded:Connect(updateVelocity))
@@ -2421,7 +2420,54 @@ run(function()
     local Mouse
     local ThirdPerson
     local Projectiles
-    
+    local AimPart
+    local FOVCircle
+
+    -- Draw an optional ring showing the Max angle cone, projected from the world
+    -- angle onto the screen via the camera FOV and centred on the crosshair.
+    local function makeFOVCircle(module)
+        local circle = Drawing.new('Circle')
+        circle.Thickness = 1
+        circle.Filled = false
+        circle.NumSides = 64
+        circle.Color = Color3.fromRGB(255, 255, 255)
+        circle.Visible = false
+        module:Clean(function() circle:Remove() end)
+        module:Clean(runService.RenderStepped:Connect(function()
+            local show = FOVCircle and FOVCircle.Enabled
+            circle.Visible = show or false
+            if show then
+                local vpY = gameCamera.ViewportSize.Y
+                local halfAngle = math.rad(math.min(Angle.Value, 179) / 2)
+                local camHalf = math.max(math.tan(math.rad(gameCamera.FieldOfView / 2)), 0.01)
+                circle.Radius = math.min((vpY / 2) * math.tan(halfAngle) / camHalf, vpY)
+                local m = inputService:GetMouseLocation()
+                circle.Position = Vector2.new(m.X, m.Y)
+            end
+        end))
+    end
+
+    -- Resolve which point on the target to aim at. Auto uses the head up close
+    -- (more damage, reliable at short range) and centre-mass at distance (a
+    -- bigger, easier target to land a led shot on). Falls back to RootPart if a
+    -- part is missing.
+    local function aimPartPosition(ent)
+    	local char = ent.Character
+    	local head = char and char:FindFirstChild('Head')
+    	local torso = char and (char:FindFirstChild('UpperTorso') or char:FindFirstChild('Torso'))
+    	local mode = AimPart and AimPart.Value or 'Auto'
+    	if mode == 'Head' then
+    		return head and head.Position or ent.RootPart.Position
+    	elseif mode == 'Torso' then
+    		return torso and torso.Position or ent.RootPart.Position
+    	end
+    	local dist = (ent.RootPart.Position - entitylib.character.RootPart.Position).Magnitude
+    	if dist <= 40 and head then
+    		return head.Position
+    	end
+    	return torso and torso.Position or ent.RootPart.Position
+    end
+
     local function ease(t)
     	return t < 0.5 and 4 * t * t * t or 1 - math.pow(-2 * t + 2, 3) / 2
     end
@@ -2435,6 +2481,20 @@ run(function()
     
     local launchHook
     local lasttarget, started = nil, 0
+    -- The held target is still good only while it is alive, present, a valid
+    -- enemy, and inside our range. Re-checking this every call lets us drop a
+    -- target the instant it leaves the FOV/range instead of staying locked on
+    -- a stale one for up to a second (the old behaviour only re-scanned on a
+    -- 1s timer or on death).
+    local function stillValid(t)
+    	if not t or not t.Parent or not t.RootPart or not t.Humanoid or t.Humanoid.Health <= 0 then
+    		return false
+    	end
+    	if not isEnemy(t) then
+    		return false
+    	end
+    	return (t.RootPart.Position - entitylib.character.RootPart.Position).Magnitude <= FOV.Value
+    end
     local function getAttackData()
     	if not entitylib.isAlive then
     		return false
@@ -2448,8 +2508,8 @@ run(function()
     	if Blacklist.Enabled and table.find(Projectiles.ListEnabled, store.hand.tool.Name == 'glue_trap' and 'gloop' or store.hand.tool.Name) then
     		return false
     	end
-    
-    	if (tick() - started) > 1 or not lasttarget or not lasttarget.Parent or not lasttarget.Humanoid or lasttarget.Humanoid.Health <= 0 then
+
+    	if (tick() - started) > 1 or not stillValid(lasttarget) then
     		local ent = entitylib.EntityMouse({
     			Origin = entitylib.character.RootPart.Position,
     			Range = FOV.Value,
@@ -2474,10 +2534,29 @@ run(function()
     	Tooltip = 'Snaps bow aim onto the nearest valid target',
     	Function = function(callback)
     		if callback then
+    			makeFOVCircle(BowAssist)
     			local predicted = nil
     			local lastpredicted = 0
     			local lastent, found, update = nil, 0, 0
-    
+    			-- Target velocity jitters frame-to-frame (knockback, jumps, stair
+    			-- stepping), which makes the predicted lead wobble. Average the last
+    			-- few samples for a steadier aim. Reset when the target changes.
+    			local velSamples = {}
+    			local VEL_SAMPLES = 4
+    			local function pushVel(v)
+    				table.insert(velSamples, v)
+    				if #velSamples > VEL_SAMPLES then
+    					table.remove(velSamples, 1)
+    				end
+    			end
+    			local function smoothVel()
+    				local n = #velSamples
+    				if n == 0 then return nil end
+    				local sum = Vector3.zero
+    				for _, v in velSamples do sum += v end
+    				return sum / n
+    			end
+
     			launchHook = bedwars.ProjectileLaunchHook:Add('BowAssist', 10, function(nextLaunch, ...)
     				local res = nextLaunch(...)
     				local projmeta = select(2, ...)
@@ -2502,8 +2581,8 @@ run(function()
     					-- remaining flight time. (Old code mis-modelled this by slowing the
     					-- arrow, which broke entirely at >1s ping.)
     					local lat = lplr:GetNetworkPing() or 0
-    					local tvel = lastent.RootPart.Velocity
-    					local tpos = lastent.RootPart.Position + tvel * lat
+    					local tvel = smoothVel() or lastent.RootPart.Velocity
+    					local tpos = aimPartPosition(lastent) + tvel * lat
 
     					-- Keep the grounded raycast from hitting our own or the target's body.
     					rayCheck.FilterType = Enum.RaycastFilterType.Exclude
@@ -2528,12 +2607,14 @@ run(function()
     					end
     					if ent ~= lastent then
     						found = tick()
+    						table.clear(velSamples)
     					end
     					lastent = ent
     					update = tick()
+    					pushVel(ent.RootPart.Velocity)
     					if tick() - lastpredicted < 0.1 then
     						targetinfo.Targets[ent] = tick() + 1
-    						local aimpoint = predicted or ent.RootPart.Position
+    						local aimpoint = predicted or aimPartPosition(ent)
     						-- Solver now returns a fully corrected intercept point (true muzzle
     						-- origin + charge-scaled speed), so no vertical fudge is needed.
     						local cframe, speed = findAim(gameCamera.CFrame, aimpoint, dt, found, 0)
@@ -2586,6 +2667,22 @@ run(function()
     		Threat = 'Targets the enemy judged to be the greatest combat threat',
     		Kit = 'Prioritizes dangerous kit users (Hannah, Spirit Assassin, etc.)',
     	},
+    })
+    AimPart = BowAssist:CreateDropdown({
+    	Name = 'Aim Part',
+    	Tooltip = 'Which point on the target to lead the shot onto',
+    	List = {'Auto', 'Head', 'Torso'},
+    	Default = 'Auto',
+    	ItemTooltips = {
+    		Auto = 'Head up close, centre-mass at range',
+    		Head = 'Aims at the head — more damage, smaller target',
+    		Torso = 'Aims at centre-mass — reliable and easy to land',
+    	},
+    })
+    FOVCircle = BowAssist:CreateToggle({
+    	Name = 'Show FOV',
+    	Tooltip = 'Draws a ring on your crosshair showing the Max angle cone',
+    	Default = false,
     })
     Speed = BowAssist:CreateSlider({
     	Name = 'Aim speed',
@@ -2646,8 +2743,223 @@ run(function()
 end)
 
 run(function()
+    local GrappleAimbot
+    local Targets, Sort, Range, Angle, Speed, Predict, AutoFire, FireRate, Mouse, ThirdPerson, AimPart, FOVCircle
+    local lasttarget, started, lastFire = nil, 0, 0
+
+    -- Matches the Bow Assist easing so the snap feels identical across modules.
+    local function ease(t)
+        return t < 0.5 and 4 * t * t * t or 1 - math.pow(-2 * t + 2, 3) / 2
+    end
+
+    -- Head up close (more damage, reliable), centre-mass at range; falls back to
+    -- RootPart when a part is missing. Mirrors the Bow Assist resolver.
+    local function aimPartPosition(ent)
+        local char = ent.Character
+        local head = char and char:FindFirstChild('Head')
+        local torso = char and (char:FindFirstChild('UpperTorso') or char:FindFirstChild('Torso'))
+        local mode = AimPart and AimPart.Value or 'Auto'
+        if mode == 'Head' then
+            return head and head.Position or ent.RootPart.Position
+        elseif mode == 'Torso' then
+            return torso and torso.Position or ent.RootPart.Position
+        end
+        local dist = (ent.RootPart.Position - entitylib.character.RootPart.Position).Magnitude
+        if dist <= 40 and head then
+            return head.Position
+        end
+        return torso and torso.Position or ent.RootPart.Position
+    end
+
+    local function holdingGrapple()
+        if not store.hand or not store.hand.tool then return false end
+        return store.hand.tool.Name:lower():find('grappling') ~= nil
+    end
+
+    -- Drop the held target the instant it dies, leaves range, or stops being a
+    -- valid enemy (same fast-reacquire approach as Bow Assist).
+    local function stillValid(t)
+        if not t or not t.Parent or not t.RootPart or not t.Humanoid or t.Humanoid.Health <= 0 then
+            return false
+        end
+        if not isEnemy(t) then return false end
+        return (t.RootPart.Position - entitylib.character.RootPart.Position).Magnitude <= Range.Value
+    end
+
+    local function getTarget()
+        if (tick() - started) > 0.5 or not stillValid(lasttarget) then
+            local ent = entitylib.EntityMouse({
+                Origin = entitylib.character.RootPart.Position,
+                Range = Range.Value,
+                Part = 'RootPart',
+                Wallcheck = Targets.Walls.Enabled,
+                Players = Targets.Players.Enabled,
+                NPCs = Targets.NPCs.Enabled,
+                Sort = sortmethods[Sort.Value],
+            })
+            if ent then started = tick() end
+            lasttarget = ent
+        end
+        return lasttarget
+    end
+
+    GrappleAimbot = vain.Categories.Combat:CreateModule({
+        Name = 'Grapple Aimbot',
+        Tooltip = 'Aims (and optionally fires) the grappling hook at the nearest enemy to close distance',
+        Function = function(callback)
+            if callback then
+                local found = 0
+                -- FOV ring showing the Max angle cone, centred on the crosshair.
+                local circle = Drawing.new('Circle')
+                circle.Thickness = 1
+                circle.Filled = false
+                circle.NumSides = 64
+                circle.Color = Color3.fromRGB(255, 255, 255)
+                circle.Visible = false
+                GrappleAimbot:Clean(function() circle:Remove() end)
+                GrappleAimbot:Clean(runService.RenderStepped:Connect(function()
+                    local show = FOVCircle and FOVCircle.Enabled
+                    circle.Visible = show or false
+                    if show then
+                        local vpY = gameCamera.ViewportSize.Y
+                        local halfAngle = math.rad(math.min(Angle.Value, 179) / 2)
+                        local camHalf = math.max(math.tan(math.rad(gameCamera.FieldOfView / 2)), 0.01)
+                        circle.Radius = math.min((vpY / 2) * math.tan(halfAngle) / camHalf, vpY)
+                        local m = inputService:GetMouseLocation()
+                        circle.Position = Vector2.new(m.X, m.Y)
+                    end
+                end))
+                GrappleAimbot:Clean(runService.PostSimulation:Connect(function(dt)
+                    if not entitylib.isAlive then return end
+                    if Mouse.Enabled and not inputService:IsMouseButtonPressed(0) then return end
+                    if not holdingGrapple() then return end
+
+                    local ent = getTarget()
+                    if not ent or not ent.RootPart then return end
+
+                    local origin = entitylib.character.RootPart.Position
+                    local delta = (ent.RootPart.Position - origin)
+                    local facing = entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1)
+                    local flat = (delta * Vector3.new(1, 0, 1))
+                    if flat.Magnitude < 0.01 then return end
+                    local angle = math.acos(math.clamp(facing:Dot(flat.Unit), -1, 1))
+                    if angle >= (math.rad(Angle.Value) / 2) then return end
+
+                    if ent ~= lasttarget then found = tick() end
+
+                    -- Grapple projectiles are fast and roughly straight over engage
+                    -- range, so a simple ping-based linear lead is plenty (no need
+                    -- for the full ballistic solver the bow uses).
+                    local aimpoint = aimPartPosition(ent)
+                    if Predict.Enabled then
+                        aimpoint = aimpoint + ent.RootPart.Velocity * (lplr:GetNetworkPing() or 0)
+                    end
+
+                    targetinfo.Targets[ent] = tick() + 1
+
+                    local prog = ease(math.min((tick() - found) / (1 / math.max(Speed.Value * 0.5, 0.01)), 1))
+                    local alpha = math.clamp(Speed.Value * prog * dt, 0, 1)
+                    if isFirstPerson() then
+                        gameCamera.CFrame = gameCamera.CFrame:Lerp(CFrame.lookAt(gameCamera.CFrame.Position, aimpoint), alpha)
+                    elseif ThirdPerson.Enabled and inputService.MouseEnabled and mousemoverel then
+                        local viewport = gameCamera:WorldToViewportPoint(aimpoint)
+                        local pos = (Vector2.new(viewport.X, viewport.Y) - inputService:GetMouseLocation()) * (Speed.Value * prog / 15)
+                        mousemoverel(pos.X, pos.Y)
+                    end
+
+                    if AutoFire.Enabled and mouse1click and (tick() - lastFire) >= FireRate.Value then
+                        lastFire = tick()
+                        mouse1click()
+                    end
+                end))
+            end
+        end,
+    })
+
+    Targets = GrappleAimbot:CreateTargets({
+        Tooltip = 'Configure which types of targets to include',
+        Players = true,
+        Walls = true,
+    })
+    local methods = {'Damage', 'Distance'}
+    for i in sortmethods do
+        if not table.find(methods, i) then table.insert(methods, i) end
+    end
+    Sort = GrappleAimbot:CreateDropdown({
+        Name = 'Target mode',
+        Tooltip = 'Selects how targets are prioritized and selected',
+        List = methods,
+        Default = 'Angle',
+    })
+    AimPart = GrappleAimbot:CreateDropdown({
+        Name = 'Aim Part',
+        Tooltip = 'Which point on the target to aim at',
+        List = {'Auto', 'Head', 'Torso'},
+        Default = 'Auto',
+        ItemTooltips = {
+            Auto = 'Head up close, centre-mass at range',
+            Head = 'Aims at the head — more damage, smaller target',
+            Torso = 'Aims at centre-mass — reliable and easy to land',
+        },
+    })
+    FOVCircle = GrappleAimbot:CreateToggle({
+        Name = 'Show FOV',
+        Tooltip = 'Draws a ring on your crosshair showing the Max angle cone',
+        Default = false,
+    })
+    Range = GrappleAimbot:CreateSlider({
+        Name = 'Range',
+        Tooltip = 'Maximum distance to engage a target',
+        Min = 10,
+        Max = 200,
+        Default = 80,
+        Suffix = 'studs',
+    })
+    Angle = GrappleAimbot:CreateSlider({
+        Name = 'Max angle',
+        Tooltip = 'Maximum angle in degrees from your look direction to engage',
+        Min = 1,
+        Max = 360,
+        Default = 120,
+    })
+    Speed = GrappleAimbot:CreateSlider({
+        Name = 'Aim speed',
+        Tooltip = 'How fast you will aim per second',
+        Min = 1,
+        Max = 20,
+        Default = 10,
+        Suffix = 'sp/s',
+    })
+    Predict = GrappleAimbot:CreateToggle({
+        Name = 'Predict',
+        Tooltip = "Leads the shot using the target's velocity and your ping",
+    })
+    AutoFire = GrappleAimbot:CreateToggle({
+        Name = 'Auto Fire',
+        Tooltip = 'Automatically fires the grapple while aimed at a target',
+    })
+    FireRate = GrappleAimbot:CreateSlider({
+        Name = 'Fire Rate',
+        Tooltip = 'Minimum delay between auto-fired grapples',
+        Min = 0.1,
+        Max = 3,
+        Default = 0.8,
+        Decimal = 10,
+        Suffix = 'sec',
+    })
+    Mouse = GrappleAimbot:CreateToggle({
+        Name = 'Require mouse down',
+        Tooltip = 'Only activates while the left mouse button is held',
+    })
+    ThirdPerson = GrappleAimbot:CreateToggle({
+        Name = 'Use mouse aim',
+        Tooltip = 'In third person, nudges the mouse instead of moving the camera',
+    })
+end)
+
+run(function()
     local old
-    
+
     vain.Categories.Combat:CreateModule({
         Name = 'No Click Delay',
         Tooltip = 'Enables the No Click Delay module',
@@ -3237,6 +3549,10 @@ run(function()
 	local ProjectileFirerate
 	local ProjectileLegitSwitch
 	local ProjectileDelayShoot
+	local RequireMouse
+	local TriggerDelay
+	local DelayRandom
+	local HitChance
 
 	local rayparms = RaycastParams.new()
 	rayparms.FilterType = Enum.RaycastFilterType.Exclude
@@ -3247,6 +3563,11 @@ run(function()
 	local doAttack = false
 	local lastShot = tick()
 	local t = 0
+	-- Humanization state for the sword path: when the crosshair first lands on a
+	-- target we arm a randomized delay; the swing only fires once it elapses, then
+	-- a hit-chance roll decides whether to actually swing this cycle.
+	local triggerArmedAt = 0
+	local pendingDelay = 0
 
 	TriggerBot = vain.Categories.Combat:CreateModule({
 		Name = 'TriggerBot',
@@ -3256,7 +3577,8 @@ run(function()
 			if callback then
 				lastCapture = 0
 				doAttack = false
-				
+				triggerArmedAt = 0
+
 				TriggerBot:Clean(lplr.CharacterAdded:Connect(function()
 					rayparms.FilterDescendantsInstances = {lplr.Character}
 				end))
@@ -3266,6 +3588,13 @@ run(function()
 				repeat
 					if not entitylib.isAlive then
 						t = 0.16
+						task.wait(t)
+						continue
+					end
+
+					if RequireMouse.Enabled and not inputService:IsMouseButtonPressed(0) then
+						triggerArmedAt = 0
+						t = 0.05
 						task.wait(t)
 						continue
 					end
@@ -3293,9 +3622,25 @@ run(function()
 								doAttack = doAttack or bedwars.SwordController:getTargetInRegion(attackRange or 4.13 * 3, 0)
 								
 								if doAttack then
-									t = (1 / SwordCPS.GetRandomValue())
-									bedwars.SwordController:swingSwordAtMouse()
+									-- Arm a randomized delay the moment the crosshair lands on a
+									-- target; only swing once it elapses, then roll the hit chance.
+									if triggerArmedAt == 0 then
+										triggerArmedAt = tick()
+										pendingDelay = (TriggerDelay.Value + math.random() * DelayRandom.Value) / 1000
+									end
+									if (tick() - triggerArmedAt) >= pendingDelay then
+										triggerArmedAt = 0
+										if math.random(1, 100) <= HitChance.Value then
+											t = (1 / SwordCPS.GetRandomValue())
+											bedwars.SwordController:swingSwordAtMouse()
+										else
+											t = 0.05
+										end
+									else
+										t = 0.016
+									end
 								else
+									triggerArmedAt = 0
 									t = 0.028
 								end
 
@@ -3414,6 +3759,39 @@ run(function()
 		DefaultMin = 7,
 		Darker = true,
 		Visible = SwordToggle.Enabled
+	})
+
+	RequireMouse = TriggerBot:CreateToggle({
+		Name = 'Require mouse down',
+		Tooltip = 'Only triggers while holding the left mouse button',
+		Default = false,
+	})
+
+	TriggerDelay = TriggerBot:CreateSlider({
+		Name = 'Trigger Delay',
+		Tooltip = 'Base delay after the crosshair lands on a target before swinging',
+		Min = 0,
+		Max = 500,
+		Default = 0,
+		Suffix = 'ms',
+	})
+
+	DelayRandom = TriggerBot:CreateSlider({
+		Name = 'Delay Randomization',
+		Tooltip = 'Adds up to this many extra ms of random delay to each swing',
+		Min = 0,
+		Max = 500,
+		Default = 0,
+		Suffix = 'ms',
+	})
+
+	HitChance = TriggerBot:CreateSlider({
+		Name = 'Hit Chance',
+		Tooltip = 'Chance to actually swing when a target is under the crosshair',
+		Min = 1,
+		Max = 100,
+		Default = 100,
+		Suffix = '%',
 	})
 
 	if not inputService.TouchEnabled then
@@ -4706,6 +5084,7 @@ run(function()
     local WallCheck
     local PopBalloons
     local TP
+    local AutoDisable
     local rayCheck = RaycastParams.new()
     rayCheck.RespectCanCollide = true
     local up, down, old = 0, 0
@@ -4802,6 +5181,13 @@ run(function()
                         end))
                     end)
                 end
+                -- Turn Fly off automatically on death so you don't have to remember
+                -- to re-toggle, and so a respawn never starts mid-air with it on.
+                Fly:Clean(lplr.CharacterRemoving:Connect(function()
+                    if AutoDisable.Enabled and Fly.Enabled then
+                        Fly:Toggle()
+                    end
+                end))
             else
                 bedwars.BalloonController.deflateBalloon = old
                 if PopBalloons.Enabled and entitylib.isAlive and (lplr.Character:GetAttribute('InflatedBalloons') or 0) > 0 then
@@ -4850,6 +5236,11 @@ run(function()
         Name = 'TP Down',
         Tooltip = 'Teleports down to ground level when fly is active',
         Default = true
+    })
+    AutoDisable = Fly:CreateToggle({
+        Name = 'Auto Disable',
+        Tooltip = 'Automatically turns Fly off when you die',
+        Default = false
     })
 end)
 
@@ -5196,6 +5587,7 @@ run(function()
     local Attackable
     local AngleSlider
     local MaxTargets
+    local SwitchDelay
     local Mouse
     local Swing
     local GUI
@@ -5370,6 +5762,7 @@ run(function()
                 local swingCooldown, switchCooldown, lastSwing, targetIndex = tick(), tick(), 0, 0
                 local lastShot, projectileIndex = tick(), 0
                 local lastHit = 0
+                local singleTarget = nil
                 repeat
                     local attacked, sword, meta = {}, getAttackData()
                     Attacking = false
@@ -5381,7 +5774,7 @@ run(function()
                             Part = 'RootPart',
                             Players = Targets.Players.Enabled,
                             NPCs = Targets.NPCs.Enabled,
-                            Limit = Mode.Value == 'Single' and 1 or MaxTargets.Value,
+                            Limit = Mode.Value == 'Single' and 8 or MaxTargets.Value,
                             Sort = sortmethods[Sort.Value]
                         })
     
@@ -5389,8 +5782,35 @@ run(function()
                             switchItem(sword.tool, 0)
                             local selfpos = entitylib.character.RootPart.Position
                             local localfacing = entitylib.character.RootPart.CFrame.LookVector * Vector3.new(1, 0, 1)
+                            -- Single mode locks onto one target: keep the current one while
+                            -- it stays a valid, in-angle candidate (AllPosition already drops
+                            -- it once dead or out of range), otherwise lock the best in-angle
+                            -- target. This makes the 'hits them exclusively until they die or
+                            -- leave range' behaviour real instead of re-picking every tick.
+                            if Mode.Value == 'Single' then
+                                local function inAngle(v)
+                                    local d = (v.RootPart.Position - selfpos) * Vector3.new(1, 0, 1)
+                                    return d.Magnitude < 0.001 or math.acos(math.clamp(localfacing:Dot(d.Unit), -1, 1)) <= (math.rad(AngleSlider.Value) / 2)
+                                end
+                                local chosen
+                                if singleTarget then
+                                    for _, v in plrs do
+                                        if v == singleTarget then
+                                            if inAngle(v) then chosen = v end
+                                            break
+                                        end
+                                    end
+                                end
+                                if not chosen then
+                                    for _, v in plrs do
+                                        if inAngle(v) then chosen = v break end
+                                    end
+                                end
+                                singleTarget = chosen
+                                plrs = chosen and {chosen} or {}
+                            end
                             if tick() > switchCooldown and Mode.Value == 'Switch' then
-    							switchCooldown = tick() + 0.7
+    							switchCooldown = tick() + SwitchDelay.Value
     							targetIndex += 1
     						end
                             if not plrs[targetIndex] then
@@ -5721,6 +6141,15 @@ run(function()
         Max = 5,
         Default = 5
     })
+    SwitchDelay = Killaura:CreateSlider({
+        Name = 'Switch Delay',
+        Tooltip = 'How long to stay on each target before rotating (Switch mode)',
+        Min = 0.1,
+        Max = 3,
+        Default = 0.7,
+        Decimal = 100,
+        Suffix = 'sec',
+    })
     Mode = Killaura:CreateDropdown({
     	Name = 'Attack Mode',
     	List = {'Single', 'Multi', 'Switch'},
@@ -5734,6 +6163,7 @@ run(function()
     	Function = function(val)
     		pcall(function()
     			MaxTargets.Object.Visible = val ~= 'Single'
+    			if SwitchDelay then SwitchDelay.Object.Visible = val == 'Switch' end
     		end)
     	end,
     })
@@ -11139,6 +11569,9 @@ run(function()
 	local AutoPearl
 	local LimitItems
 	local HandCheck
+	local Cooldown
+	local FallSpeed
+	local ReactDelay
 
 	local rayCheck = RaycastParams.new()
 	rayCheck.RespectCanCollide = true
@@ -11334,11 +11767,10 @@ run(function()
 
 	AutoPearl = vain.Categories.Utility:CreateModule({
 		Name = 'AutoPearl',
-		Tooltip = 'Automatically throws ender pearls toward targets',
+		Tooltip = 'Automatically pearls to safety when falling into the void',
 		Function = function(callback)
 			if callback then
 				local lastThrowTime = 0
-				local throwCooldown = 3
 				local pearlTriggered = false
 				local pearlCountAtFallStart = nil
 				local manualThrowTime = nil
@@ -11356,7 +11788,7 @@ run(function()
 						local currentTime = tick()
 
 						local velY = root.AssemblyLinearVelocity.Y
-						local falling = velY < -60
+						local falling = velY < -FallSpeed.Value
 						local isJumping = velY > 5
 						local noGroundBelow = not workspace:Raycast(root.Position, Vector3.new(0, -120, 0), voidRayParams)
 
@@ -11384,8 +11816,8 @@ run(function()
 						end
 						local fallInVoidDuration = fallInVoidStart and (currentTime - fallInVoidStart) or 0
 
-						if pearl and falling and noGroundBelow and not isJumping and not blockedByManual and fallInVoidDuration >= 0.6 and not (HandCheck.Enabled and isHoldingPearl()) then
-							if not pearlTriggered and (currentTime - lastThrowTime) >= throwCooldown then
+						if pearl and falling and noGroundBelow and not isJumping and not blockedByManual and fallInVoidDuration >= ReactDelay.Value and not (HandCheck.Enabled and isHoldingPearl()) then
+							if not pearlTriggered and (currentTime - lastThrowTime) >= Cooldown.Value then
 								pearlTriggered = true
 								lastThrowTime = currentTime
 								if currentTime - lastScanTime >= 0.5 then
@@ -11419,6 +11851,35 @@ run(function()
 		Name = 'Hand Check',
 		Default = false,
 		Tooltip = 'disables auto pearl while holding a pearl'
+	})
+
+	Cooldown = AutoPearl:CreateSlider({
+		Name = 'Throw Cooldown',
+		Tooltip = 'Minimum time between automatic pearl throws',
+		Min = 0,
+		Max = 10,
+		Default = 3,
+		Decimal = 10,
+		Suffix = 'sec',
+	})
+
+	FallSpeed = AutoPearl:CreateSlider({
+		Name = 'Fall Sensitivity',
+		Tooltip = 'Downward speed that counts as falling — lower triggers sooner',
+		Min = 10,
+		Max = 150,
+		Default = 60,
+		Suffix = 'sp/s',
+	})
+
+	ReactDelay = AutoPearl:CreateSlider({
+		Name = 'React Delay',
+		Tooltip = 'How long you must be falling over the void before it pearls',
+		Min = 0,
+		Max = 3,
+		Default = 0.6,
+		Decimal = 100,
+		Suffix = 'sec',
 	})
 end)
 
@@ -12945,7 +13406,9 @@ end)
 run(function()
     local AutoTool
     local old, event
-    
+    local SwitchBack
+    local savedSlot
+
     local function switchHotbarItem(block)
         if block and not block:GetAttribute('NoBreak') and not block:GetAttribute('Team'..(lplr:GetAttribute('Team') or 0)..'NoBreak') then
             local tool, slot = store.tools[bedwars.ItemMeta[block.Name].block.breakType], nil
@@ -12953,7 +13416,13 @@ run(function()
                 for i, v in store.inventory.hotbar do
                     if v.item and v.item.itemType == tool.itemType then slot = i - 1 break end
                 end
-    
+
+                -- Remember the slot we came from the first time we swap away, so it
+                -- can be restored once the player stops breaking.
+                if SwitchBack.Enabled and savedSlot == nil and store.inventory.hotbarSlot ~= slot then
+                    savedSlot = store.inventory.hotbarSlot
+                end
+
                 if hotbarSwitch(slot) then
                     if inputService:IsMouseButtonPressed(0) then 
                         event:Fire() 
@@ -12969,10 +13438,19 @@ run(function()
         Tooltip = 'Automatically switches to the best tool for the block',
         Function = function(callback)
             if callback then
+                savedSlot = nil
                 event = Instance.new('BindableEvent')
                 AutoTool:Clean(event)
                 AutoTool:Clean(event.Event:Connect(function()
                     contextActionService:CallFunction('block-break', Enum.UserInputState.Begin, newproxy(true))
+                end))
+                -- When the player stops breaking, hop back to the slot we were on
+                -- before Auto Tool swapped to the pickaxe/axe/etc.
+                AutoTool:Clean(inputService.InputEnded:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 and savedSlot ~= nil then
+                        if SwitchBack.Enabled then hotbarSwitch(savedSlot) end
+                        savedSlot = nil
+                    end
                 end))
                 old = bedwars.BlockBreaker.hitBlock
                 bedwars.BlockBreaker.hitBlock = function(self, maid, raycastparams, ...)
@@ -12983,9 +13461,16 @@ run(function()
             else
                 bedwars.BlockBreaker.hitBlock = old
                 old = nil
+                savedSlot = nil
             end
         end,
         Tooltip = 'Automatically selects the correct tool'
+    })
+
+    SwitchBack = AutoTool:CreateToggle({
+        Name = 'Switch Back',
+        Tooltip = 'Returns to your previous hotbar slot when you stop breaking',
+        Default = false,
     })
 end)
 

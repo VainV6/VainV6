@@ -16,6 +16,21 @@ local mainapi = {
 	-- { Version = '...', Date = '...', Changes = { 'line', ... } }.
 	PatchNotes = {
 		{
+			Version = '4.20',
+			Date = 'June 2026',
+			Changes = {
+				'Bow Assist: now leads with the real charge-scaled arrow speed from the bow muzzle and predicts target movement by your ping instead of slowing the arrow — far more accurate at all ranges and pings.',
+				'Bow Assist: added an Aim Part selector (Auto/Head/Torso), smoothed target velocity for steadier leads, and faster target reacquire.',
+				'New module - Grapple Aimbot: aims and optionally auto-fires the grappling hook at the nearest enemy, with Aim Part, Predict and Auto Fire options.',
+				'Bow Assist & Grapple Aimbot: added an optional Show FOV ring on the crosshair.',
+				'TriggerBot: added Trigger Delay, Delay Randomization, Hit Chance and Require Mouse Down for safer, more human triggering.',
+				'Killaura: Single mode now truly locks onto one target until it dies or leaves range; Switch rotation speed is now configurable (Switch Delay).',
+				'AutoPearl: exposed Throw Cooldown, Fall Sensitivity and React Delay sliders.',
+				'Auto Tool: added Switch Back to return to your previous hotbar slot after breaking.',
+				'Fly: added Auto Disable to turn it off automatically when you die.',
+			},
+		},
+		{
 			Version = '4.19',
 			Date = 'June 2026',
 			Changes = {
@@ -48,7 +63,7 @@ local mainapi = {
 	Scale = {Value = 1},
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
-	Version = '4.19',
+	Version = '4.20',
 	Windows = {}
 }
 
@@ -2616,6 +2631,21 @@ function mainapi:CreateGUI()
 	patchbutton.ImageColor3 = color.Light(uipallet.Main, 0.37)
 	patchbutton.Parent = window
 	addTooltip(patchbutton, 'Patch notes')
+	-- Unread indicator: a small dot on the patch notes icon, shown until the
+	-- newest changelog version has been opened (persisted to a file so it stays
+	-- cleared across sessions until the next update bumps the version).
+	local latestPatchVersion = (mainapi.PatchNotes[1] and mainapi.PatchNotes[1].Version) or mainapi.Version
+	local patchdot = Instance.new('Frame')
+	patchdot.Name = 'Unread'
+	patchdot.Size = UDim2.fromOffset(6, 6)
+	patchdot.AnchorPoint = Vector2.new(0.5, 0.5)
+	patchdot.Position = UDim2.fromScale(1, 0)
+	patchdot.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+	patchdot.BorderSizePixel = 0
+	patchdot.ZIndex = 5
+	patchdot.Parent = patchbutton
+	addCorner(patchdot, UDim.new(1, 0))
+	patchdot.Visible = ((isfile('vain/profiles/patchseen.txt') and readfile('vain/profiles/patchseen.txt')) or '') ~= latestPatchVersion
 	local settingspane = Instance.new('TextButton')
 	settingspane.Size = UDim2.fromScale(1, 1)
 	settingspane.BackgroundColor3 = color.Dark(uipallet.Main, 0.02)
@@ -3803,6 +3833,8 @@ function mainapi:CreateGUI()
 	end)
 	patchbutton.MouseButton1Click:Connect(function()
 		patchpane.Visible = true
+		patchdot.Visible = false
+		pcall(function() writefile('vain/profiles/patchseen.txt', latestPatchVersion) end)
 	end)
 	patchback.MouseEnter:Connect(function()
 		patchback.ImageColor3 = uipallet.Text
