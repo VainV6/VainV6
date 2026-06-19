@@ -1642,7 +1642,7 @@ run(function()
 					if not node then break end
 					hay = hay .. ' ' .. node.Name:lower()
 				end
-				if hay:find('playersready') or hay:find('readyup') or hay:find('ready') then
+				if hay:find('startround') or hay:find('playersready') or hay:find('readyup') or hay:find('ready') then
 					readyClick = d
 					return d
 				end
