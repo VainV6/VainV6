@@ -680,7 +680,7 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
 	local AutoFarm
-	local Offset, Height, ReturnHome, CollectDrops, CollectHearts, CollectShields, DropRange, AutoEquip
+	local Offset, Height, ReturnHome, CollectDrops, CollectHearts, CollectShields, CollectMana, DropRange, AutoEquip
 
 	local function nearestEnemy()
 		if not aliveLocal() then return nil end
@@ -712,6 +712,7 @@ run(function()
 		if model then name = name .. ' ' .. model.Name:lower() end
 		if name:find('heart') or name:find('health') or name:find('heal') then return 'heart' end
 		if name:find('shield') then return 'shield' end
+		if name:find('mana') or name:find('star') then return 'mana' end
 		if name:find('tix') or part:IsDescendantOf(workspace:FindFirstChild('Tixes') or workspace) then return 'tix' end
 		return 'loot'
 	end
@@ -730,11 +731,12 @@ run(function()
 	-- Collect every nearby enabled drop by teleporting onto each in turn.
 	local function sweepDrops()
 		if not aliveLocal() then return end
-		-- run if ANY collect option is on (master loot, hearts, or shields)
+		-- run if ANY collect option is on (master loot, hearts, shields, or mana)
 		local wantLoot = CollectDrops and CollectDrops.Enabled
 		local wantHearts = CollectHearts and CollectHearts.Enabled
 		local wantShields = CollectShields and CollectShields.Enabled
-		if not (wantLoot or wantHearts or wantShields) then return end
+		local wantMana = CollectMana and CollectMana.Enabled
+		if not (wantLoot or wantHearts or wantShields or wantMana) then return end
 
 		local root = entitylib.character.RootPart
 		local range = DropRange and DropRange.Value or 200
@@ -749,6 +751,7 @@ run(function()
 						-- have their own toggles so you can grab them even with loot off
 						local take = (kind == 'heart' and wantHearts)
 							or (kind == 'shield' and wantShields)
+							or (kind == 'mana' and wantMana)
 							or ((kind == 'tix' or kind == 'loot') and wantLoot)
 						if take then table.insert(drops, obj) end
 					end
@@ -838,6 +841,7 @@ run(function()
 	CollectDrops = AutoFarm:CreateToggle({Name = 'Collect Drops', Default = true, Tooltip = 'After each kill, teleport onto nearby loot / Tix / Mana Stars (EnemiesDrops) and force-touch them so they collect. On by default so you do not need the separate Auto Collect (which would fight AutoFarm for teleports).'})
 	CollectHearts = AutoFarm:CreateToggle({Name = 'Collect Hearts', Default = true, Tooltip = 'Also grab nearby heart / health pickups (works even if Collect Drops is off).'})
 	CollectShields = AutoFarm:CreateToggle({Name = 'Collect Shields', Default = true, Tooltip = 'Also grab nearby shield pickups (works even if Collect Drops is off).'})
+	CollectMana = AutoFarm:CreateToggle({Name = 'Collect Mana', Default = true, Tooltip = 'Also grab nearby Mana Star pickups (works even if Collect Drops is off).'})
 	DropRange = AutoFarm:CreateSlider({Name = 'Drop Range', Min = 20, Max = 500, Default = 200, Suffix = 'studs', Tooltip = 'Only collect drops within this range of you.'})
 	ReturnHome = AutoFarm:CreateToggle({Name = 'Return On Disable', Tooltip = 'Teleport back to your start position when AutoFarm is turned off.'})
 	AutoEquip = AutoFarm:CreateToggle({Name = 'Auto Equip', Default = true, Tooltip = 'If your hands are empty when about to attack, equip the best sword (or slot 1) first so the swing lands.'})
