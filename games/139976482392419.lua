@@ -383,6 +383,33 @@ local function getEquippedTool()
 	return char:FindFirstChildOfClass('Tool')
 end
 
+-- Equip the best available weapon when our hands are empty: prefer a sword
+-- (highest Damage attribute if several), otherwise just the first backpack tool
+-- (slot 1). Lets an empty-handed AutoFarm swing actually land.
+local function equipBestWeapon()
+	local char = lplr.Character
+	local hum = char and char:FindFirstChildOfClass('Humanoid')
+	local backpack = lplr:FindFirstChild('Backpack')
+	if not (char and hum and backpack) then return false end
+	if char:FindFirstChildOfClass('Tool') then return true end
+	local sword, swordDmg, first
+	for _, t in backpack:GetChildren() do
+		if t:IsA('Tool') then
+			first = first or t
+			if t.Name:lower():find('sword') then
+				local dmg = t:GetAttribute('Damage') or t:GetAttribute('damage') or 0
+				if not sword or dmg > swordDmg then sword, swordDmg = t, dmg end
+			end
+		end
+	end
+	local pick = sword or first
+	if pick then
+		pcall(function() hum:EquipTool(pick) end)
+		return char:FindFirstChildOfClass('Tool') ~= nil
+	end
+	return false
+end
+
 local function getServerControl(tool)
 	tool = tool or getEquippedTool()
 	return tool and tool:FindFirstChild('ServerControl'), tool
@@ -429,6 +456,24 @@ end
 
 local function aliveLocal()
 	return entitylib.isAlive and entitylib.character and entitylib.character.RootPart
+end
+
+-- Every workspace folder/model that looks like a drop container, matched by name
+-- (case-insensitive) so we adapt to the game's folders -- EnemiesDrops, Tixes,
+-- DropS, Hearts, ManaStars, etc. The old code only scanned EnemiesDrops + Tixes,
+-- so hearts / mana stars (which live in other folders) were never collected.
+local function collectibleFolders()
+	local out = {}
+	for _, child in workspace:GetChildren() do
+		if child:IsA('Folder') or child:IsA('Model') then
+			local n = child.Name:lower()
+			if n:find('drop') or n:find('tix') or n:find('heart') or n:find('mana')
+				or n:find('star') or n:find('loot') or n:find('pickup') or n:find('shield') then
+				table.insert(out, child)
+			end
+		end
+	end
+	return out
 end
 
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -603,7 +648,7 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
 	local AutoFarm
-	local Offset, Height, ReturnHome, CollectDrops, CollectHearts, CollectShields, DropRange
+	local Offset, Height, ReturnHome, CollectDrops, CollectHearts, CollectShields, DropRange, AutoEquip
 
 	local function nearestEnemy()
 		if not aliveLocal() then return nil end
@@ -663,8 +708,7 @@ run(function()
 		local range = DropRange and DropRange.Value or 200
 		-- snapshot first so we don't iterate folders that change as we collect
 		local drops = {}
-		for _, folderName in DROP_FOLDERS do
-			local folder = workspace:FindFirstChild(folderName)
+		for _, folder in collectibleFolders() do
 			if folder then
 				for _, obj in folder:GetDescendants() do
 					if obj:IsA('BasePart') and (obj.Position - root.Position).Magnitude <= range then
@@ -727,6 +771,8 @@ run(function()
 							-- through every enemy on the map.
 							repeat
 								teleportTo(ent)
+								-- equip a weapon first if we're empty-handed, else the swing whiffs
+								if AutoEquip.Enabled and not getEquippedTool() then equipBestWeapon() end
 								attackEnemy(ent)
 								if targetinfo and targetinfo.Targets then
 									targetinfo.Targets[ent] = tick() + 0.5
@@ -762,6 +808,7 @@ run(function()
 	CollectShields = AutoFarm:CreateToggle({Name = 'Collect Shields', Tooltip = 'Also grab nearby shield pickups (works even if Collect Drops is off).'})
 	DropRange = AutoFarm:CreateSlider({Name = 'Drop Range', Min = 20, Max = 500, Default = 200, Suffix = 'studs', Tooltip = 'Only collect drops within this range of you.'})
 	ReturnHome = AutoFarm:CreateToggle({Name = 'Return On Disable', Tooltip = 'Teleport back to your start position when AutoFarm is turned off.'})
+	AutoEquip = AutoFarm:CreateToggle({Name = 'Auto Equip', Default = true, Tooltip = 'If your hands are empty when about to attack, equip the best sword (or slot 1) first so the swing lands.'})
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -777,14 +824,12 @@ run(function()
 	local function collectAllTix()
 		if not aliveLocal() then return end
 		local root = entitylib.character.RootPart
-		for _, folderName in {'Tixes', 'EnemiesDrops'} do
-			local folder = workspace:FindFirstChild(folderName)
-			if not folder then continue end
+		for _, folder in collectibleFolders() do
 			for _, obj in folder:GetDescendants() do
 				if obj:IsA('BasePart') and obj.Parent then
-					-- everything in Tixes is currency; in EnemiesDrops only tix-named parts
+					-- only fire on Tix: folder, part, or model name contains 'tix'
 					local model = obj:FindFirstAncestorWhichIsA('Model')
-					local isTix = folderName == 'Tixes'
+					local isTix = folder.Name:lower():find('tix')
 						or obj.Name:lower():find('tix')
 						or (model and model.Name:lower():find('tix'))
 					if isTix then
