@@ -1549,8 +1549,14 @@ run(function()
 						end
 					end)
 					task.wait()
+					-- fireproximityprompt already works for weapons. Accessory prompts
+					-- can be gated (Enabled off) or blocked by line of sight (the shop
+					-- barrels), so force both off, then fire the proven path.
 					pcall(function()
-						fireproximityprompt(entry.prompt)
+						local prompt = entry.prompt
+						prompt.Enabled = true
+						prompt.RequiresLineOfSight = false
+						fireproximityprompt(prompt)
 					end)
 					task.wait(BuyDelay and BuyDelay.Value or 0.3)
 					if shopHome and aliveLocal() then
