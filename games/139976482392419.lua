@@ -1610,25 +1610,24 @@ run(function()
 	-- no arguments (confirmed from the decompiled shop UI: it does
 	-- RemoteEventStart:FireServer() and waits on its OnClientEvent). So we fire
 	-- that remote directly.
-	local readyRemote
-	local function findReadyRemote()
-		if readyRemote and readyRemote.Parent then return readyRemote end
-		-- Prefer the known name, but game updates sometimes rename it, so fall
-		-- back to any RemoteEvent that clearly looks like a round-start/ready
-		-- signal. Recursive search covers ReplicatedStorage moves.
-		local r = replicatedStorage:FindFirstChild('RemoteEventStart', true)
-			or game:FindFirstChild('RemoteEventStart', true)
-		if r and r:IsA('RemoteEvent') then
-			readyRemote = r
-			return r
-		end
-		for _, d in replicatedStorage:GetDescendants() do
-			if d:IsA('RemoteEvent') then
-				local n = d.Name:lower()
-				if n:find('readyup') or n:find('playersready') or n:find('startround')
-					or n:find('startwave') or n:find('nextwave') or n:find('beginround')
-					or n == 'ready' or n == 'start' then
-					readyRemote = d
+	-- Readying up is a ClickDetector on the "Ready" button in the shop zone -- NOT
+	-- a remote (RemoteEventStart is an unrelated minigame, which is why firing it
+	-- never worked). Find the ClickDetector whose part/ancestor is named like the
+	-- ready button and click it with fireclickdetector. Only 12 ClickDetectors in
+	-- the whole place, so the name match is reliable.
+	local readyClick
+	local function findReadyClick()
+		if readyClick and readyClick.Parent then return readyClick end
+		for _, d in workspace:GetDescendants() do
+			if d:IsA('ClickDetector') then
+				local hay, node = '', d
+				for _ = 1, 4 do
+					node = node.Parent
+					if not node then break end
+					hay = hay .. ' ' .. node.Name:lower()
+				end
+				if hay:find('playersready') or hay:find('readyup') or hay:find('ready') then
+					readyClick = d
 					return d
 				end
 			end
@@ -1637,11 +1636,12 @@ run(function()
 	end
 
 	local function pressReady()
-		local r = findReadyRemote()
-		if r then
-			local ok = pcall(function() r:FireServer() end)
-			return ok
-		end
+		local d = findReadyClick()
+		if not (d and fireclickdetector) then return false end
+		-- try the common signatures; the first that doesn't error wins
+		if pcall(fireclickdetector, d) then return true end
+		if pcall(fireclickdetector, d, 0) then return true end
+		if pcall(fireclickdetector, d, 50, 'MouseClick') then return true end
 		return false
 	end
 
@@ -1649,10 +1649,11 @@ run(function()
 		Name = 'Auto Ready',
 		Function = function(callback)
 			if callback then
-				-- Diagnostics: surface exactly which dependency is missing so a
-				-- silent failure (game update renamed something) is obvious.
-				if not findReadyRemote() then
-					notif('Auto Ready', 'Could not find the start/ready remote -- the game likely updated. A place dump is needed to re-map it.', 8, 'alert')
+				-- Diagnostics: surface exactly which dependency is missing.
+				if not fireclickdetector then
+					notif('Auto Ready', 'Your executor lacks fireclickdetector -- cannot click the Ready button.', 8, 'alert')
+				elseif not findReadyClick() then
+					notif('Auto Ready', 'Could not find the Ready ClickDetector (not in the shop yet?). It will keep looking.', 6, 'warning')
 				elseif not replicatedStorage:FindFirstChild('IsInShop') then
 					notif('Auto Ready', 'Shop flag (IsInShop) not found -- cannot detect the shop, so it will not auto-fire.', 8, 'warning')
 				end
