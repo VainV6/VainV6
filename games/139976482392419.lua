@@ -835,9 +835,9 @@ run(function()
 	})
 	Offset = AutoFarm:CreateSlider({Name = 'TP Distance', Min = 0, Max = 20, Default = 4, Suffix = 'studs', Tooltip = 'How far in front of the enemy to land.'})
 	Height = AutoFarm:CreateSlider({Name = 'TP Height', Min = -10, Max = 20, Default = 0, Suffix = 'studs', Tooltip = 'Vertical offset so you do not clip into the enemy.'})
-	CollectDrops = AutoFarm:CreateToggle({Name = 'Collect Drops', Tooltip = 'After each kill, teleport onto nearby loot (EnemiesDrops) and Tix and force-touch them so they collect.'})
-	CollectHearts = AutoFarm:CreateToggle({Name = 'Collect Hearts', Tooltip = 'Also grab nearby heart / health pickups (works even if Collect Drops is off).'})
-	CollectShields = AutoFarm:CreateToggle({Name = 'Collect Shields', Tooltip = 'Also grab nearby shield pickups (works even if Collect Drops is off).'})
+	CollectDrops = AutoFarm:CreateToggle({Name = 'Collect Drops', Default = true, Tooltip = 'After each kill, teleport onto nearby loot / Tix / Mana Stars (EnemiesDrops) and force-touch them so they collect. On by default so you do not need the separate Auto Collect (which would fight AutoFarm for teleports).'})
+	CollectHearts = AutoFarm:CreateToggle({Name = 'Collect Hearts', Default = true, Tooltip = 'Also grab nearby heart / health pickups (works even if Collect Drops is off).'})
+	CollectShields = AutoFarm:CreateToggle({Name = 'Collect Shields', Default = true, Tooltip = 'Also grab nearby shield pickups (works even if Collect Drops is off).'})
 	DropRange = AutoFarm:CreateSlider({Name = 'Drop Range', Min = 20, Max = 500, Default = 200, Suffix = 'studs', Tooltip = 'Only collect drops within this range of you.'})
 	ReturnHome = AutoFarm:CreateToggle({Name = 'Return On Disable', Tooltip = 'Teleport back to your start position when AutoFarm is turned off.'})
 	AutoEquip = AutoFarm:CreateToggle({Name = 'Auto Equip', Default = true, Tooltip = 'If your hands are empty when about to attack, equip the best sword (or slot 1) first so the swing lands.'})
@@ -1561,13 +1561,11 @@ run(function()
 					task.wait()
 					-- fireproximityprompt already works for weapons. Accessory prompts
 					-- can be gated (Enabled off) or blocked by line of sight (the shop
-					-- barrels), so force both off, then fire the proven path.
-					pcall(function()
-						local prompt = entry.prompt
-						prompt.Enabled = true
-						prompt.RequiresLineOfSight = false
-						fireproximityprompt(prompt)
-					end)
+					-- barrels). Set those best-effort in SEPARATE pcalls so that if the
+					-- game locks them, the fire still runs (otherwise nothing buys).
+					pcall(function() entry.prompt.Enabled = true end)
+					pcall(function() entry.prompt.RequiresLineOfSight = false end)
+					pcall(function() fireproximityprompt(entry.prompt) end)
 					task.wait(BuyDelay and BuyDelay.Value or 0.3)
 					if shopHome and aliveLocal() then
 						pcall(function() entitylib.character.RootPart.CFrame = shopHome end)
@@ -1728,11 +1726,20 @@ run(function()
 	local function pressReady()
 		local d = findReadyClick()
 		if not (d and fireclickdetector) then return false end
+		-- ClickDetectors are distance-validated, so teleport onto the ready button
+		-- (its part) before clicking, then snap back.
+		local home, part = nil, d.Parent
+		if part and part:IsA('BasePart') and aliveLocal() then
+			home = entitylib.character.RootPart.CFrame
+			pcall(function() entitylib.character.RootPart.CFrame = CFrame.new(part.Position) end)
+			task.wait()
+		end
 		-- try the common signatures; the first that doesn't error wins
-		if pcall(fireclickdetector, d) then return true end
-		if pcall(fireclickdetector, d, 0) then return true end
-		if pcall(fireclickdetector, d, 50, 'MouseClick') then return true end
-		return false
+		local ok = pcall(fireclickdetector, d) or pcall(fireclickdetector, d, 0) or pcall(fireclickdetector, d, 50, 'MouseClick')
+		if home and aliveLocal() then
+			pcall(function() entitylib.character.RootPart.CFrame = home end)
+		end
+		return ok
 	end
 
 	AutoReady = vain.Categories.Utility:CreateModule({
