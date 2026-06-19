@@ -160,15 +160,18 @@ export async function handleUpdateProfile(request: Request, env: Env, id: string
   return json({ ok: true });
 }
 
-// DELETE /profiles/:id  body: { from }
+// DELETE /profiles/:id?from=X  (from may also be in the body)
 export async function handleDeleteProfile(request: Request, env: Env, id: string): Promise<Response> {
   const secret = request.headers.get('x-vain-secret');
   if (secret !== env.BOT_SECRET) return authErr();
 
+  // Accept `from` via query param OR body. Many Roblox HTTP clients drop the
+  // request body on DELETE, so the query param is the reliable transport.
   const body = await request.json().catch(() => null) as Record<string, string> | null;
-  if (!body?.from) return err('Missing from');
+  const from = new URL(request.url).searchParams.get('from') || body?.from;
+  if (!from) return err('Missing from');
 
-  const user = await getByRoblox(env.DB, body.from);
+  const user = await getByRoblox(env.DB, from);
   if (!user) return err('Not whitelisted', 403);
 
   const profile = await env.DB.prepare('SELECT * FROM global_profiles WHERE id = ?')
