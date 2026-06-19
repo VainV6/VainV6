@@ -272,28 +272,18 @@ end
 -- holding a ProximityPrompt is buyable - don't restrict by class, since shop items
 -- can be Models, Tools, Accessories or bare parts depending on the item.
 local function forEachShopItem(fn)
-	local shop = shopFolder()
-	if not shop then return end
-	-- The category folders (VisualGears / VisualAccessories / VisualSacrifices)
-	-- are nested under the Shop at runtime (e.g. inside VisualShop), so a fixed
-	-- direct-child lookup found nothing -- that's why Auto Buy did nothing.
-	-- Instead, recursively grab every ProximityPrompt under the Shop and treat
-	-- the model it belongs to as the buyable item, deriving the category from the
-	-- nearest Visual* ancestor.
-	local seen = {}
-	for _, prompt in shop:GetDescendants() do
-		if prompt:IsA('ProximityPrompt') then
-			local item = prompt:FindFirstAncestorWhichIsA('Model') or prompt.Parent
-			if item and not seen[item] then
-				seen[item] = true
-				local category, a = 'Gears', item
-				while a and a ~= shop do
-					if a.Name == 'VisualAccessories' then category = 'Accessories' break end
-					if a.Name == 'VisualSacrifices' then category = 'Sacrifices' break end
-					if a.Name == 'VisualGears' then category = 'Gears' break end
-					a = a.Parent
-				end
-				fn(item, category, prompt)
+	-- The buyable items live in VisualGears / VisualAccessories / VisualSacrifices
+	-- folders nested somewhere under the shop rig in workspace. A fixed path missed
+	-- them, so find each folder wherever it is (recursive) and iterate its direct
+	-- children -- each child (e.g. HealthPotion) is an item model with a
+	-- ProximityPrompt you trigger to buy.
+	local cats = {VisualGears = 'Gears', VisualAccessories = 'Accessories', VisualSacrifices = 'Sacrifices'}
+	for folderName, category in cats do
+		local folder = workspace:FindFirstChild(folderName, true)
+		if folder then
+			for _, item in folder:GetChildren() do
+				local prompt = item:FindFirstChildWhichIsA('ProximityPrompt', true)
+				if prompt then fn(item, category, prompt) end
 			end
 		end
 	end
@@ -1518,6 +1508,9 @@ run(function()
 				return a.price < b.price
 			end)
 
+			-- Where we stand in the shop; we snap back here after each buy so we
+			-- don't drift around (the TP onto an item is what makes the buy land).
+			local shopHome = aliveLocal() and entitylib.character.RootPart.CFrame or nil
 			for _, entry in list do
 				if not AutoBuy.Enabled or not inShop() then break end
 				if getTix() - entry.price < reserve then
@@ -1525,10 +1518,26 @@ run(function()
 					-- means nothing else fits either
 					if order ~= 'Expensive first' then break end
 				else
+					-- TP onto the item so the prompt's server-side distance check
+					-- passes (it won't trigger from across the shop), fire it, return.
+					pcall(function()
+						local p = entry.prompt.Parent
+						local pos = p and (p:IsA('BasePart') and p.Position
+							or p:IsA('Attachment') and p.WorldPosition)
+							or (entry.item:IsA('Model') and entry.item:GetPivot().Position)
+							or (entry.item:IsA('BasePart') and entry.item.Position)
+						if pos and aliveLocal() then
+							entitylib.character.RootPart.CFrame = CFrame.new(pos)
+						end
+					end)
+					task.wait()
 					pcall(function()
 						fireproximityprompt(entry.prompt)
 					end)
 					task.wait(BuyDelay and BuyDelay.Value or 0.3)
+					if shopHome and aliveLocal() then
+						pcall(function() entitylib.character.RootPart.CFrame = shopHome end)
+					end
 				end
 			end
 		end)
