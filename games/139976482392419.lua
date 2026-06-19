@@ -1564,13 +1564,19 @@ run(function()
 						end
 					end)
 					task.wait()
-					-- fireproximityprompt already works for weapons. Accessory prompts
-					-- can be gated (Enabled off) or blocked by line of sight (the shop
-					-- barrels). Set those best-effort in SEPARATE pcalls so that if the
-					-- game locks them, the fire still runs (otherwise nothing buys).
+					-- Accessory prompts sit on the item Model (not a part), and the
+					-- executor's fireproximityprompt no-ops on those while it works for
+					-- weapons. The native InputHoldBegin/End -- exactly what pressing the
+					-- prompt key does -- triggers both. Ungate Enabled / line of sight
+					-- first (separate pcalls so a locked prop can't block the trigger).
 					pcall(function() entry.prompt.Enabled = true end)
 					pcall(function() entry.prompt.RequiresLineOfSight = false end)
-					pcall(function() fireproximityprompt(entry.prompt) end)
+					pcall(function()
+						local prompt = entry.prompt
+						prompt:InputHoldBegin()
+						task.wait((prompt.HoldDuration or 0) + 0.05)
+						prompt:InputHoldEnd()
+					end)
 					task.wait(BuyDelay and BuyDelay.Value or 0.3)
 					if shopHome and aliveLocal() then
 						pcall(function() entitylib.character.RootPart.CFrame = shopHome end)
