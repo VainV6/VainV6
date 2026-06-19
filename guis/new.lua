@@ -5818,7 +5818,11 @@ function mainapi:CreateNotification(title, text, duration, type)
 		iconshadow.ZIndex = 5
 		iconshadow.BackgroundTransparency = 1
 		local iconType = (type == 'alert' or type == 'warning') and type or 'info'
-		iconshadow.Image = getcustomasset('vain/assets/new/'..iconType..'.png')
+		-- Asset load can fail on executors whose game:HttpGet is unavailable here
+		-- ("HttpGet is not a valid member of DataModel Ugc"); degrade to no icon
+		-- instead of erroring on every single notification.
+		local okicon, iconimg = pcall(getcustomasset, 'vain/assets/new/'..iconType..'.png')
+		iconshadow.Image = okicon and iconimg or ''
 		iconshadow.ImageColor3 = Color3.new()
 		iconshadow.ImageTransparency = 0.5
 		iconshadow.Parent = notification
