@@ -2098,7 +2098,7 @@ end)
 -- remotes. Optionally drops remote EVENTS that get spammed past a threshold.
 run(function()
 	local RemoteSpy
-	local LogArgs, BlockSpam, SpamThreshold
+	local Verbose, BlockSpam, SpamThreshold, IgnoreList
 
 	local oldnamecall
 	local enabled = false
@@ -2127,10 +2127,7 @@ run(function()
 	local function logCall(remote, method, args, n)
 		local path = tostring(remote)
 		pcall(function() path = remote:GetFullName() end)
-		local line = '[RemoteSpy] ' .. method .. '  ' .. path
-		if LogArgs.Enabled then
-			line = line .. '   args: { ' .. fmtArgs(args, n) .. ' }'
-		end
+		local line = '[RemoteSpy] ' .. method .. '  ' .. path .. '   args: { ' .. fmtArgs(args, n) .. ' }'
 		print(line)
 		pcall(function() if appendfile then appendfile('remotespy.txt', line .. '\n') end end)
 	end
@@ -2151,7 +2148,8 @@ run(function()
 						local ok, method = pcall(getnamecallmethod)
 						if ok and (method == 'FireServer' or method == 'InvokeServer') then
 							local remote = ...
-							if typeof(remote) == 'Instance' and not (checkcaller and checkcaller()) then
+							if typeof(remote) == 'Instance' and not (checkcaller and checkcaller())
+								and not table.find(IgnoreList.ListEnabled, remote.Name) then
 								-- Spam blocking: events only (blocking a RemoteFunction
 								-- would hang the caller that yields on its return).
 								if BlockSpam.Enabled and method == 'FireServer' then
@@ -2173,7 +2171,7 @@ run(function()
 								end
 								-- Default: one clean line per distinct remote. With Log
 								-- Arguments on, log every call with its args.
-								if LogArgs.Enabled or not seen[remote] then
+								if Verbose.Enabled or not seen[remote] then
 									seen[remote] = true
 									pcall(logCall, remote, method, {select(2, ...)}, select('#', ...) - 1)
 								end
@@ -2195,10 +2193,14 @@ run(function()
 		Tooltip = 'Logs every remote the game fires (FireServer / InvokeServer) to the console (and remotespy.txt) so you can see what it calls. Turn on Log Arguments for full detail. Block Spam drops remote events firing faster than the threshold.'
 	})
 
-	LogArgs = RemoteSpy:CreateToggle({
-		Name = 'Log Arguments',
+	Verbose = RemoteSpy:CreateToggle({
+		Name = 'Verbose',
 		Default = false,
-		Tooltip = 'Log each call WITH its arguments (and log every call, not just the first sighting of each remote). Verbose.'
+		Tooltip = 'Log EVERY call. Off (default) logs each distinct remote only once with its args -- a clean list, ideal for finding a specific remote.'
+	})
+	IgnoreList = RemoteSpy:CreateTextList({
+		Name = 'Ignore',
+		Tooltip = 'Remote names to never log (one per line). Add the spammy ones (e.g. CyborgInput, VocaloidMicUpdate) so the useful remotes stand out.',
 	})
 	BlockSpam = RemoteSpy:CreateToggle({
 		Name = 'Block Spam',
