@@ -6504,11 +6504,11 @@ do
 			suffix += 1
 		end
 
-		-- Build a COMPLETE savedata blob: every local module gets an entry so the
-		-- profile cleanly enables the downloaded modules AND disables the rest.
-		-- (Downloads only carry enabled modules, so any absent one defaults to off.)
+		-- Build a COMPLETE savedata blob so the profile persists correctly and can
+		-- be re-selected later: every local module gets an explicit entry (enabled
+		-- ones from the download, everything else off).
 		local savedata = { Modules = {}, Categories = {}, Legit = {} }
-		for modName in mainapi.Modules do
+		for modName, object in mainapi.Modules do
 			local saved = data.Modules[modName]
 			savedata.Modules[modName] = {
 				Enabled = (saved and saved.Enabled) and true or false,
@@ -6517,18 +6517,32 @@ do
 			}
 		end
 
-		-- Register the profile and persist the profile LIST first. Save() writes
-		-- the gui file (now including this name) plus the CURRENT profile's data;
-		-- doing it BEFORE we write our file means it can't clobber the download.
+		-- Register the profile, make it the active one, and persist. Save(name)
+		-- writes the gui file with this profile active + in the list; we then
+		-- overwrite this profile's data file with the downloaded blob so a future
+		-- rejoin re-applies it.
 		table.insert(mainapi.Profiles, { Name = name, Bind = {} })
-		mainapi:Save()
-
+		mainapi.Profile = name
+		mainapi:Save(name)
 		writefile('vain/profiles/' .. name .. mainapi.Place .. '.txt', http_:JSONEncode(savedata))
 
-		-- Switch to and load the new profile. Passing `name` is essential: Load
-		-- otherwise re-derives the active profile from the gui file and resets to
-		-- default, which is exactly why downloads "didn't apply" before.
-		mainapi:Load(true, name)
+		-- Apply to the LIVE session immediately. Done directly on the module
+		-- objects (NOT via mainapi:Load) so activation + settings are guaranteed
+		-- to take effect now: set each module's options first, then toggle it to
+		-- the downloaded enabled state.
+		for modName, object in mainapi.Modules do
+			local saved = data.Modules[modName]
+			local wantEnabled = (saved and saved.Enabled) and true or false
+			if saved and saved.Options and object.Options then
+				mainapi:LoadOptions(object, saved.Options)
+			end
+			if wantEnabled ~= object.Enabled then
+				object:Toggle(true)
+			end
+		end
+		mainapi:SortModules()
+		mainapi:UpdateTextGUI(true)
+		mainapi.Categories.Profiles:ChangeValue()
 		return true, name
 	end
 
