@@ -1087,9 +1087,10 @@ components = {
 			end
 		end
 		
-		function optionapi:Change(list, icons)
+		function optionapi:Change(list, icons, tips)
 			optionsettings.List = list or {}
 			if icons ~= nil then optionsettings.Icons = icons end
+			if tips ~= nil then optionsettings.ItemTooltips = tips end
 			if not table.find(optionsettings.List, self.Value) then
 				self:SetValue(self.Value)
 			end

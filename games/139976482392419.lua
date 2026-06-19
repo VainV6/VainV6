@@ -213,6 +213,22 @@ local function itemPrompt(model)
 	return model:FindFirstChildWhichIsA('ProximityPrompt', true)
 end
 
+-- best-effort description text for an item, for the picker hover tooltip. Items
+-- carry it as a Description / CurrentDescription (attribute, StringValue, or a
+-- text label). Returns nil if none, so the tooltip just shows the name.
+local function itemDescription(model)
+	local d = model:GetAttribute('CurrentDescription') or model:GetAttribute('Description')
+	if type(d) == 'string' and d ~= '' then return d end
+	for _, name in {'CurrentDescription', 'Description'} do
+		local c = model:FindFirstChild(name, true)
+		if c then
+			if c:IsA('ValueBase') and type(c.Value) == 'string' and c.Value ~= '' then return c.Value end
+			if (c:IsA('TextLabel') or c:IsA('TextButton')) and c.Text ~= '' then return c.Text end
+		end
+	end
+	return nil
+end
+
 -- best-effort image asset id for an item model, for the picker icons. Gears are
 -- Tools (Tool.TextureId is the icon); accessories may not carry a flat image, in
 -- which case we return nil and the option just renders text-only.
@@ -1410,7 +1426,7 @@ run(function()
 	-- then purchases whitelisted items whenever they appear in the shop.
 	local function refreshPicker(announce)
 		if not ItemPicker then return end
-		local seen, names, icons = {}, {}, {}
+		local seen, names, icons, descs = {}, {}, {}, {}
 		forEachCatalogItem(function(item)
 			local nm = item.Name
 			if nm and nm ~= '' and not seen[nm] then
@@ -1418,6 +1434,8 @@ run(function()
 				table.insert(names, nm)
 				local ok, ic = pcall(itemIcon, item)   -- never let one odd item abort the load
 				if ok and ic then icons[nm] = ic end
+				local okd, d = pcall(itemDescription, item)
+				if okd and d then descs[nm] = d end
 			end
 		end)
 		table.sort(names)
@@ -1425,7 +1443,7 @@ run(function()
 			ItemPicker:Change({'(item catalog not found)'}, {})
 			if announce then notif('Auto Buy', 'Could not find the item catalog in ReplicatedStorage.') end
 		else
-			ItemPicker:Change(names, icons)   -- second arg = per-item icon map
+			ItemPicker:Change(names, icons, descs)   -- args: names, per-item icons, per-item hover tooltips
 			if announce then notif('Auto Buy', ('Loaded %d items.'):format(#names)) end
 		end
 	end
