@@ -1495,12 +1495,10 @@ run(function()
 	local function wanted(item, category)
 		-- Buy Everything overrides all filters (still bound by Max Price / Reserve)
 		if BuyEverything and BuyEverything.Enabled then return true end
-		-- category gate
-		local tog = catToggle[category]
-		if tog and not tog.Enabled then return false end
-		-- name whitelist (if any entries, the item must match one). Compare each
-		-- whitelist entry against every identity the item exposes, both ways
-		-- (substring), so partial picks and display/instance name differences match.
+		-- Explicit whitelist WINS over the category toggles: if you picked an item,
+		-- buy it regardless of whether its category is enabled (that was the bug --
+		-- a whitelisted accessory got rejected because the Accessories category was
+		-- off). Match each entry against every identity the item exposes, both ways.
 		local set, hasList = whitelistSet()
 		if hasList then
 			for _, nm in itemNames(item) do
@@ -1512,6 +1510,9 @@ run(function()
 			end
 			return false
 		end
+		-- No whitelist: fall back to the category toggles.
+		local tog = catToggle[category]
+		if tog and not tog.Enabled then return false end
 		return true
 	end
 
