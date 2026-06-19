@@ -213,17 +213,27 @@ local function itemPrompt(model)
 	return model:FindFirstChildWhichIsA('ProximityPrompt', true)
 end
 
+-- Strip Roblox RichText markup (the tooltip label isn't rich-text, so the raw
+-- <font color="..."> tags would show literally) and decode common entities.
+local function stripRich(s)
+	s = tostring(s)
+	s = s:gsub('<br%s*/?>', '\n')      -- line breaks -> newlines
+	s = s:gsub('<[^>]->', '')          -- drop every other tag (font, b, i, ...)
+	s = s:gsub('&lt;', '<'):gsub('&gt;', '>'):gsub('&quot;', '"'):gsub('&apos;', "'"):gsub('&amp;', '&')
+	return (s:gsub('^%s+', ''):gsub('%s+$', ''))
+end
+
 -- best-effort description text for an item, for the picker hover tooltip. Items
 -- carry it as a Description / CurrentDescription (attribute, StringValue, or a
 -- text label). Returns nil if none, so the tooltip just shows the name.
 local function itemDescription(model)
 	local d = model:GetAttribute('CurrentDescription') or model:GetAttribute('Description')
-	if type(d) == 'string' and d ~= '' then return d end
+	if type(d) == 'string' and d ~= '' then return stripRich(d) end
 	for _, name in {'CurrentDescription', 'Description'} do
 		local c = model:FindFirstChild(name, true)
 		if c then
-			if c:IsA('ValueBase') and type(c.Value) == 'string' and c.Value ~= '' then return c.Value end
-			if (c:IsA('TextLabel') or c:IsA('TextButton')) and c.Text ~= '' then return c.Text end
+			if c:IsA('ValueBase') and type(c.Value) == 'string' and c.Value ~= '' then return stripRich(c.Value) end
+			if (c:IsA('TextLabel') or c:IsA('TextButton')) and c.Text ~= '' then return stripRich(c.Text) end
 		end
 	end
 	return nil
