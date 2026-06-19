@@ -765,6 +765,58 @@ run(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
+--  TIX MAGNET  (collect every Tix on the map from any distance, no teleport)
+-- ══════════════════════════════════════════════════════════════════════════════
+run(function()
+	local TixMagnet
+	local Interval
+
+	-- Pickups are touch-based, so we fake a Touched between each Tix and our
+	-- root (firetouchinterest) without moving -- no teleport, no range limit, so
+	-- it grabs Tix from anywhere on the map.
+	local function collectAllTix()
+		if not aliveLocal() then return end
+		local root = entitylib.character.RootPart
+		for _, folderName in {'Tixes', 'EnemiesDrops'} do
+			local folder = workspace:FindFirstChild(folderName)
+			if not folder then continue end
+			for _, obj in folder:GetDescendants() do
+				if obj:IsA('BasePart') and obj.Parent then
+					-- everything in Tixes is currency; in EnemiesDrops only tix-named parts
+					local model = obj:FindFirstAncestorWhichIsA('Model')
+					local isTix = folderName == 'Tixes'
+						or obj.Name:lower():find('tix')
+						or (model and model.Name:lower():find('tix'))
+					if isTix then
+						pcall(function()
+							firetouchinterest(obj, root, 0)
+							firetouchinterest(obj, root, 1)
+							firetouchinterest(obj, root, 0)
+						end)
+					end
+				end
+			end
+		end
+	end
+
+	TixMagnet = vain.Categories.Utility:CreateModule({
+		Name = 'Tix Magnet',
+		Function = function(callback)
+			if callback then
+				task.spawn(function()
+					repeat
+						collectAllTix()
+						task.wait(Interval and Interval.Value or 0.2)
+					until not TixMagnet.Enabled
+				end)
+			end
+		end,
+		Tooltip = 'Collects every Tix on the map from any distance (no teleport) by firing the pickup touch directly. If the game validates proximity server-side it may not register -- then use AutoFarm + Collect Drops instead.'
+	})
+	Interval = TixMagnet:CreateSlider({Name = 'Interval', Min = 0.05, Max = 2, Default = 0.2, Decimal = 100, Suffix = 'sec', Tooltip = 'How often to sweep every Tix on the map.'})
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
 --  BOW AIMBOT  (lead the nearest enemy when firing a bow/ranged weapon)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
@@ -1516,12 +1568,25 @@ run(function()
 	local readyRemote
 	local function findReadyRemote()
 		if readyRemote and readyRemote.Parent then return readyRemote end
-		-- it lives under ReplicatedStorage; fall back to a workspace-wide search
+		-- Prefer the known name, but game updates sometimes rename it, so fall
+		-- back to any RemoteEvent that clearly looks like a round-start/ready
+		-- signal. Recursive search covers ReplicatedStorage moves.
 		local r = replicatedStorage:FindFirstChild('RemoteEventStart', true)
 			or game:FindFirstChild('RemoteEventStart', true)
 		if r and r:IsA('RemoteEvent') then
 			readyRemote = r
 			return r
+		end
+		for _, d in replicatedStorage:GetDescendants() do
+			if d:IsA('RemoteEvent') then
+				local n = d.Name:lower()
+				if n:find('readyup') or n:find('playersready') or n:find('startround')
+					or n:find('startwave') or n:find('nextwave') or n:find('beginround')
+					or n == 'ready' or n == 'start' then
+					readyRemote = d
+					return d
+				end
+			end
 		end
 		return nil
 	end
@@ -1539,6 +1604,13 @@ run(function()
 		Name = 'Auto Ready',
 		Function = function(callback)
 			if callback then
+				-- Diagnostics: surface exactly which dependency is missing so a
+				-- silent failure (game update renamed something) is obvious.
+				if not findReadyRemote() then
+					notif('Auto Ready', 'Could not find the start/ready remote -- the game likely updated. A place dump is needed to re-map it.', 8, 'alert')
+				elseif not replicatedStorage:FindFirstChild('IsInShop') then
+					notif('Auto Ready', 'Shop flag (IsInShop) not found -- cannot detect the shop, so it will not auto-fire.', 8, 'warning')
+				end
 				lastInShop = inShop()
 				local readiedThisShop = false
 				local enteredAt = lastInShop and tick() or 0
