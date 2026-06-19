@@ -2093,6 +2093,128 @@ run(function()
     })
 end)
 
+-- Remote Spy: logs every remote the GAME fires (FireServer / InvokeServer) so you
+-- can see exactly what it calls -- useful for reverse-engineering ready/buy/pickup
+-- remotes. Optionally drops remote EVENTS that get spammed past a threshold.
+run(function()
+	local RemoteSpy
+	local LogArgs, BlockSpam, SpamThreshold
+
+	local oldnamecall
+	local enabled = false
+	local seen = setmetatable({}, {__mode = 'k'})     -- remote -> logged once
+	local rate = setmetatable({}, {__mode = 'k'})     -- remote -> {c = count, t = windowStart}
+	local blocking = setmetatable({}, {__mode = 'k'}) -- remote -> currently treated as spam
+
+	local function fmtArgs(args, n)
+		local parts = {}
+		for i = 1, n do
+			local v = args[i]
+			local t = typeof(v)
+			if t == 'Instance' then
+				parts[i] = v.ClassName .. '(' .. v.Name .. ')'
+			elseif t == 'string' then
+				parts[i] = '"' .. v .. '"'
+			elseif t == 'table' then
+				parts[i] = 'table'
+			else
+				parts[i] = tostring(v)
+			end
+		end
+		return table.concat(parts, ', ')
+	end
+
+	local function logCall(remote, method, args, n)
+		local path = tostring(remote)
+		pcall(function() path = remote:GetFullName() end)
+		local line = '[RemoteSpy] ' .. method .. '  ' .. path
+		if LogArgs.Enabled then
+			line = line .. '   args: { ' .. fmtArgs(args, n) .. ' }'
+		end
+		print(line)
+		pcall(function() if appendfile then appendfile('remotespy.txt', line .. '\n') end end)
+	end
+
+	RemoteSpy = vain.Categories.Utility:CreateModule({
+		Name = 'Remote Spy',
+		Function = function(callback)
+			enabled = callback
+			if callback then
+				if not (hookmetamethod and getnamecallmethod) then
+					notif('Remote Spy', 'Your executor lacks hookmetamethod / getnamecallmethod.', 8, 'alert')
+					return
+				end
+				if oldnamecall then return end
+				notif('Remote Spy', 'Logging remotes to the console' .. (appendfile and ' and remotespy.txt' or '') .. '.', 5)
+				oldnamecall = hookmetamethod(game, '__namecall', function(...)
+					if enabled then
+						local ok, method = pcall(getnamecallmethod)
+						if ok and (method == 'FireServer' or method == 'InvokeServer') then
+							local remote = ...
+							if typeof(remote) == 'Instance' and not (checkcaller and checkcaller()) then
+								-- Spam blocking: events only (blocking a RemoteFunction
+								-- would hang the caller that yields on its return).
+								if BlockSpam.Enabled and method == 'FireServer' then
+									local now = tick()
+									local r = rate[remote]
+									if not r or now - r.t >= 1 then
+										rate[remote] = {c = 1, t = now}
+										blocking[remote] = nil
+									else
+										r.c += 1
+										if r.c > SpamThreshold.Value then
+											if not blocking[remote] then
+												blocking[remote] = true
+												pcall(notif, 'Remote Spy', 'Blocking spam: ' .. remote.Name .. ' (' .. r.c .. '/s)', 4, 'warning')
+											end
+											return -- drop this spammed call
+										end
+									end
+								end
+								-- Default: one clean line per distinct remote. With Log
+								-- Arguments on, log every call with its args.
+								if LogArgs.Enabled or not seen[remote] then
+									seen[remote] = true
+									pcall(logCall, remote, method, {select(2, ...)}, select('#', ...) - 1)
+								end
+							end
+						end
+					end
+					return oldnamecall(...)
+				end)
+			else
+				if oldnamecall then
+					hookmetamethod(game, '__namecall', oldnamecall)
+					oldnamecall = nil
+				end
+				table.clear(seen)
+				table.clear(rate)
+				table.clear(blocking)
+			end
+		end,
+		Tooltip = 'Logs every remote the game fires (FireServer / InvokeServer) to the console (and remotespy.txt) so you can see what it calls. Turn on Log Arguments for full detail. Block Spam drops remote events firing faster than the threshold.'
+	})
+
+	LogArgs = RemoteSpy:CreateToggle({
+		Name = 'Log Arguments',
+		Default = false,
+		Tooltip = 'Log each call WITH its arguments (and log every call, not just the first sighting of each remote). Verbose.'
+	})
+	BlockSpam = RemoteSpy:CreateToggle({
+		Name = 'Block Spam',
+		Default = false,
+		Tooltip = 'Drop remote events (FireServer) that fire more than the threshold per second. Does NOT block RemoteFunctions (would hang the game).'
+	})
+	SpamThreshold = RemoteSpy:CreateSlider({
+		Name = 'Spam Threshold',
+		Min = 5,
+		Max = 300,
+		Default = 30,
+		Suffix = '/s',
+		Tooltip = 'Calls-per-second above which a remote event is treated as spam and dropped.'
+	})
+end)
+
 run(function()
     local TriggerBot
     local Targets
