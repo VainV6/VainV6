@@ -831,50 +831,81 @@ end)
 --  TIX MAGNET  (collect every Tix on the map from any distance, no teleport)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
-	local TixMagnet
-	local Interval
+	local AutoCollect
+	local Tix, Hearts, Mana, Shields, Loot, Range, Interval, ReturnPos
 
-	-- Pickups are touch-based, so we fake a Touched between each Tix and our
-	-- root (firetouchinterest) without moving -- no teleport, no range limit, so
-	-- it grabs Tix from anywhere on the map.
-	local function collectAllTix()
+	-- Classify a drop part by its name (+ its ancestor model name).
+	local function kindOf(part)
+		local n = part.Name:lower()
+		local m = part:FindFirstAncestorWhichIsA('Model')
+		if m then n = n .. ' ' .. m.Name:lower() end
+		if n:find('tix') then return 'tix' end
+		if n:find('heart') or n:find('health') or n:find('heal') then return 'heart' end
+		if n:find('mana') or n:find('star') then return 'mana' end
+		if n:find('shield') then return 'shield' end
+		return 'loot'
+	end
+	local function wants(kind)
+		return (kind == 'tix' and Tix.Enabled)
+			or (kind == 'heart' and Hearts.Enabled)
+			or (kind == 'mana' and Mana.Enabled)
+			or (kind == 'shield' and Shields.Enabled)
+			or (kind == 'loot' and Loot.Enabled)
+	end
+
+	-- Drops collect on touch but the server validates proximity (a no-teleport
+	-- magnet can't work here), so briefly teleport onto each wanted drop, fire its
+	-- pickup touch, then snap back to where we started.
+	local function sweep()
 		if not aliveLocal() then return end
 		local root = entitylib.character.RootPart
+		local home = root.CFrame
+		local range = Range and Range.Value or 2000
+		local moved = false
 		for _, folder in collectibleFolders() do
 			for _, obj in folder:GetDescendants() do
-				if obj:IsA('BasePart') and obj.Parent then
-					-- only fire on Tix: folder, part, or model name contains 'tix'
-					local model = obj:FindFirstAncestorWhichIsA('Model')
-					local isTix = folder.Name:lower():find('tix')
-						or obj.Name:lower():find('tix')
-						or (model and model.Name:lower():find('tix'))
-					if isTix then
-						pcall(function()
-							firetouchinterest(obj, root, 0)
-							firetouchinterest(obj, root, 1)
-							firetouchinterest(obj, root, 0)
-						end)
-					end
+				if obj:IsA('BasePart') and obj.Parent
+					and (obj.Position - home.Position).Magnitude <= range
+					and wants(kindOf(obj)) then
+					pcall(function()
+						root.CFrame = CFrame.new(obj.Position)
+						firetouchinterest(obj, root, 0)
+						firetouchinterest(obj, root, 1)
+						firetouchinterest(obj, root, 0)
+					end)
+					moved = true
+					task.wait() -- one frame so the server registers the touch
+					if not AutoCollect.Enabled or not aliveLocal() then return end
 				end
 			end
 		end
+		if moved and ReturnPos.Enabled and aliveLocal() then
+			pcall(function() entitylib.character.RootPart.CFrame = home end)
+		end
 	end
 
-	TixMagnet = vain.Categories.Utility:CreateModule({
-		Name = 'Tix Magnet',
+	AutoCollect = vain.Categories.Utility:CreateModule({
+		Name = 'Auto Collect',
 		Function = function(callback)
 			if callback then
 				task.spawn(function()
 					repeat
-						collectAllTix()
-						task.wait(Interval and Interval.Value or 0.2)
-					until not TixMagnet.Enabled
+						sweep()
+						task.wait(Interval and Interval.Value or 0.15)
+					until not AutoCollect.Enabled
 				end)
 			end
 		end,
-		Tooltip = 'Collects every Tix on the map from any distance (no teleport) by firing the pickup touch directly. If the game validates proximity server-side it may not register -- then use AutoFarm + Collect Drops instead.'
+		Tooltip = 'Collects drops (Tix / Hearts / Mana / Shields / loot) by briefly teleporting onto each and firing its pickup touch, then snapping back. Pickups are proximity-validated, so collecting from a distance without moving is not possible here. WARNING: teleporting is detectable.'
 	})
-	Interval = TixMagnet:CreateSlider({Name = 'Interval', Min = 0.05, Max = 2, Default = 0.2, Decimal = 100, Suffix = 'sec', Tooltip = 'How often to sweep every Tix on the map.'})
+	Tix = AutoCollect:CreateToggle({Name = 'Tix', Default = true, Tooltip = 'Collect Tix.'})
+	Hearts = AutoCollect:CreateToggle({Name = 'Hearts', Default = true, Tooltip = 'Collect Heart / health drops.'})
+	Mana = AutoCollect:CreateToggle({Name = 'Mana', Default = true, Tooltip = 'Collect Mana Stars.'})
+	Shields = AutoCollect:CreateToggle({Name = 'Shields', Default = true, Tooltip = 'Collect Shield drops.'})
+	Loot = AutoCollect:CreateToggle({Name = 'Other Loot', Default = false, Tooltip = 'Collect any other drop type.'})
+	Range = AutoCollect:CreateSlider({Name = 'Range', Min = 20, Max = 2000, Default = 2000, Suffix = 'studs', Tooltip = 'Only collect drops within this range (2000 = effectively the whole map).'})
+	ReturnPos = AutoCollect:CreateToggle({Name = 'Return', Default = true, Tooltip = 'Snap back to your start position after a sweep so you do not drift around the map.'})
+	Interval = AutoCollect:CreateSlider({Name = 'Interval', Min = 0.05, Max = 2, Default = 0.15, Decimal = 100, Suffix = 'sec', Tooltip = 'How often to sweep for drops.'})
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
