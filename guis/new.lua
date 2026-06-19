@@ -16,6 +16,17 @@ local mainapi = {
 	-- { Version = '...', Date = '...', Changes = { 'line', ... } }.
 	PatchNotes = {
 		{
+			Version = '4.21',
+			Date = 'June 2026',
+			Changes = {
+				'Global Profiles are now shared across every place of a game (keyed by experience), so you see everyone\'s uploads instead of only ones made on the exact same place.',
+				'Click a profile to inspect the modules it has enabled before installing.',
+				'Installing a profile now properly activates its modules and applies their settings.',
+				'Fixed profile deletion always failing ("Delete failed").',
+				'Removed the install counter from profile cards.',
+			},
+		},
+		{
 			Version = '4.20',
 			Date = 'June 2026',
 			Changes = {
@@ -63,7 +74,7 @@ local mainapi = {
 	Scale = {Value = 1},
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
-	Version = '4.20',
+	Version = '4.21',
 	Windows = {}
 }
 
@@ -6989,7 +7000,9 @@ do
 
 			delBtn.MouseButton1Click:Connect(function()
 				task.spawn(function()
-					local res = apiRequest('DELETE', '/profiles/' .. profile.id, { from = lplr.Name })
+					-- `from` goes in the query string, not the body: many executors drop
+					-- the request body on DELETE, which made deletes always fail.
+					local res = apiRequest('DELETE', '/profiles/' .. profile.id .. '?from=' .. lplr.Name, nil)
 					if res and res.ok then
 						card:Destroy()
 						mainapi:CreateNotification('Profiles', 'Profile deleted', 4)
