@@ -8,7 +8,7 @@ DISCORD_APPLICATION_ID = "1512790996033736946"
 DISCORD_PUBLIC_KEY = "16a9de509ad002a8c4f4fea6aa533cb777e125bddd8a76f112b0af938f4726f3"
 DISCORD_GUILD_ID = "1511371574018707637"
 
-[[triggers]]
+[triggers]
 crons = ["*/5 * * * *"]
 
 [[d1_databases]]

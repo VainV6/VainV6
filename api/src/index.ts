@@ -4,7 +4,7 @@ import { handleCommand } from './discord/commands';
 import { handleCheck, handleTiers } from './routes/check';
 import { handleLongPoll, handleQueue } from './routes/commands';
 import {
-  handleListProfiles, handleCreateProfile, handleUpdateProfile,
+  handleListProfiles, handleGetProfile, handleCreateProfile, handleUpdateProfile,
   handleDeleteProfile, handleInstallProfile,
 } from './routes/globalProfiles';
 
@@ -38,6 +38,7 @@ export default {
     const profileMatch = path.match(/^\/profiles\/([^/]+)(\/install)?$/);
     if (profileMatch) {
       const id = profileMatch[1];
+      if (method === 'GET' && !profileMatch[2]) return withCors(await handleGetProfile(request, env, id));
       if (method === 'PUT')    return withCors(await handleUpdateProfile(request, env, id));
       if (method === 'DELETE') return withCors(await handleDeleteProfile(request, env, id));
       if (method === 'POST' && profileMatch[2]) return withCors(await handleInstallProfile(request, env, id));

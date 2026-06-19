@@ -4139,6 +4139,16 @@ function mainapi:CreateCategory(categorysettings)
 		end
 
 		function moduleapi:Toggle(multiple)
+			-- Legit Mode: refuse to ENABLE a module whose current configuration is
+			-- easily detectable (blatant). Disabling is always allowed so you can
+			-- still turn things off. LegitBlock() returns (blocked, reason).
+			if not self.Enabled and self.LegitBlock and mainapi.LegitMode and mainapi.LegitMode.Enabled then
+				local blocked, reason = self.LegitBlock()
+				if blocked then
+					mainapi:CreateNotification('Legit Mode', self.Name..' blocked - '..(reason or 'too detectable'), 5, 'alert')
+					return
+				end
+			end
 			if mainapi.ThreadFix then
 				setthreadidentity(8)
 			end
@@ -6494,26 +6504,31 @@ do
 			suffix += 1
 		end
 
-		-- Build an on-disk savedata blob in the format mainapi:Load expects.
-		-- Only enabled modules are present in a downloaded profile.
+		-- Build a COMPLETE savedata blob: every local module gets an entry so the
+		-- profile cleanly enables the downloaded modules AND disables the rest.
+		-- (Downloads only carry enabled modules, so any absent one defaults to off.)
 		local savedata = { Modules = {}, Categories = {}, Legit = {} }
-		for modName, saved in data.Modules do
-			if mainapi.Modules[modName] then
-				savedata.Modules[modName] = {
-					Enabled = saved.Enabled and true or false,
-					Bind = {},
-					Options = saved.Options or {},
-				}
-			end
+		for modName in mainapi.Modules do
+			local saved = data.Modules[modName]
+			savedata.Modules[modName] = {
+				Enabled = (saved and saved.Enabled) and true or false,
+				Bind = {},
+				Options = (saved and saved.Options) or {},
+			}
 		end
 
-		writefile('vain/profiles/' .. name .. mainapi.Place .. '.txt', http_:JSONEncode(savedata))
+		-- Register the profile and persist the profile LIST first. Save() writes
+		-- the gui file (now including this name) plus the CURRENT profile's data;
+		-- doing it BEFORE we write our file means it can't clobber the download.
 		table.insert(mainapi.Profiles, { Name = name, Bind = {} })
+		mainapi:Save()
 
-		-- Switch the active profile to the freshly created one and load it.
-		-- mainapi:Load refreshes the profile list UI (Categories.Profiles:ChangeValue) itself.
-		mainapi.Profile = name
-		mainapi:Load(true)
+		writefile('vain/profiles/' .. name .. mainapi.Place .. '.txt', http_:JSONEncode(savedata))
+
+		-- Switch to and load the new profile. Passing `name` is essential: Load
+		-- otherwise re-derives the active profile from the gui file and resets to
+		-- default, which is exactly why downloads "didn't apply" before.
+		mainapi:Load(true, name)
 		return true, name
 	end
 
@@ -6708,6 +6723,125 @@ do
 		statusLabel.Text = ''
 	end
 
+	-- Inspect a profile: pull its data read-only (no install) and list the
+	-- modules it has enabled, in an overlay panel.
+	local function inspectProfile(profile)
+		local bg = Instance.new('Frame')
+		bg.Size = UDim2.new(1, 0, 1, 0)
+		bg.BackgroundColor3 = Color3.new(0, 0, 0)
+		bg.BackgroundTransparency = 0.5
+		bg.BorderSizePixel = 0
+		bg.ZIndex = 30
+		bg.Parent = browserWindow
+
+		local panel = Instance.new('Frame')
+		panel.Size = UDim2.fromOffset(280, 320)
+		panel.Position = UDim2.new(0.5, -140, 0.5, -160)
+		panel.BackgroundColor3 = color.Light(uipallet.Main, 0.06)
+		panel.BorderSizePixel = 0
+		panel.ZIndex = 31
+		panel.Parent = bg
+		addCorner(panel)
+
+		local pTitle = Instance.new('TextLabel')
+		pTitle.Size = UDim2.new(1, -40, 0, 22)
+		pTitle.Position = UDim2.fromOffset(12, 8)
+		pTitle.BackgroundTransparency = 1
+		pTitle.Text = profile.name
+		pTitle.TextXAlignment = Enum.TextXAlignment.Left
+		pTitle.TextColor3 = uipallet.Text
+		pTitle.TextSize = 13
+		pTitle.TextTruncate = Enum.TextTruncate.AtEnd
+		pTitle.FontFace = uipallet.FontSemiBold
+		pTitle.ZIndex = 32
+		pTitle.Parent = panel
+
+		local pSub = Instance.new('TextLabel')
+		pSub.Size = UDim2.new(1, -40, 0, 16)
+		pSub.Position = UDim2.fromOffset(12, 28)
+		pSub.BackgroundTransparency = 1
+		pSub.Text = 'by ' .. profile.author_roblox_username
+		pSub.TextXAlignment = Enum.TextXAlignment.Left
+		pSub.TextColor3 = color.Dark(uipallet.Text, 0.45)
+		pSub.TextSize = 11
+		pSub.FontFace = uipallet.Font
+		pSub.ZIndex = 32
+		pSub.Parent = panel
+
+		local pClose = Instance.new('TextButton')
+		pClose.Size = UDim2.fromOffset(24, 24)
+		pClose.Position = UDim2.new(1, -28, 0, 6)
+		pClose.BackgroundTransparency = 1
+		pClose.Text = '×'
+		pClose.TextColor3 = color.Dark(uipallet.Text, 0.3)
+		pClose.TextSize = 18
+		pClose.FontFace = uipallet.Font
+		pClose.ZIndex = 32
+		pClose.Parent = panel
+		pClose.MouseButton1Click:Connect(function() bg:Destroy() end)
+
+		local pList = Instance.new('ScrollingFrame')
+		pList.Size = UDim2.new(1, -16, 1, -56)
+		pList.Position = UDim2.fromOffset(8, 48)
+		pList.BackgroundTransparency = 1
+		pList.BorderSizePixel = 0
+		pList.ScrollBarThickness = 2
+		pList.ScrollBarImageTransparency = 0.75
+		pList.CanvasSize = UDim2.new()
+		pList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+		pList.ZIndex = 32
+		pList.Parent = panel
+		local pLayout = Instance.new('UIListLayout')
+		pLayout.SortOrder = Enum.SortOrder.Name
+		pLayout.Padding = UDim.new(0, 2)
+		pLayout.Parent = pList
+
+		local pStatus = Instance.new('TextLabel')
+		pStatus.Size = UDim2.new(1, 0, 0, 20)
+		pStatus.BackgroundTransparency = 1
+		pStatus.Text = 'Loading...'
+		pStatus.TextColor3 = color.Dark(uipallet.Text, 0.4)
+		pStatus.TextSize = 12
+		pStatus.FontFace = uipallet.Font
+		pStatus.ZIndex = 32
+		pStatus.Parent = pList
+
+		task.spawn(function()
+			local res = apiRequest('GET', '/profiles/' .. profile.id, nil)
+			local enabled = {}
+			if res and res.data then
+				local ok, data = pcall(http_.JSONDecode, http_, res.data)
+				if ok and data and data.Modules then
+					for modName, m in data.Modules do
+						if m.Enabled then table.insert(enabled, modName) end
+					end
+				end
+			elseif not res then
+				pStatus.Text = 'Failed to load'
+				return
+			end
+			table.sort(enabled)
+			if #enabled == 0 then
+				pStatus.Text = 'No enabled modules'
+				return
+			end
+			pStatus.Text = #enabled .. ' enabled module' .. (#enabled == 1 and '' or 's')
+			pStatus.TextColor3 = color.Dark(uipallet.Text, 0.5)
+			for _, modName in enabled do
+				local row = Instance.new('TextLabel')
+				row.Size = UDim2.new(1, 0, 0, 18)
+				row.BackgroundTransparency = 1
+				row.Text = '• ' .. modName
+				row.TextXAlignment = Enum.TextXAlignment.Left
+				row.TextColor3 = color.Dark(uipallet.Text, 0.18)
+				row.TextSize = 12
+				row.FontFace = uipallet.Font
+				row.ZIndex = 32
+				row.Parent = pList
+			end
+		end)
+	end
+
 	local function addProfileCard(profile, myRoblox)
 		local card = Instance.new('Frame')
 		card.Size = UDim2.new(1, -4, 0, 58)
@@ -6720,6 +6854,20 @@ do
 		cardStroke.Color = color.Light(uipallet.Main, 0.08)
 		cardStroke.Thickness = 1
 		cardStroke.Parent = card
+
+		-- Clicking the card body (anywhere but the action buttons) inspects the
+		-- profile. Sits at ZIndex 11; the action buttons are raised to 13 so they
+		-- still receive their own clicks. The text labels are non-interactive so
+		-- clicks fall through to this button.
+		local clickBtn = Instance.new('TextButton')
+		clickBtn.Size = UDim2.new(1, 0, 1, 0)
+		clickBtn.BackgroundTransparency = 1
+		clickBtn.Text = ''
+		clickBtn.ZIndex = 11
+		clickBtn.Parent = card
+		clickBtn.MouseButton1Click:Connect(function()
+			inspectProfile(profile)
+		end)
 
 		local nameLabel = Instance.new('TextLabel')
 		nameLabel.Size = UDim2.new(1, -70, 0, 20)
@@ -6737,7 +6885,7 @@ do
 		metaLabel.Size = UDim2.new(1, -12, 0, 16)
 		metaLabel.Position = UDim2.fromOffset(8, 26)
 		metaLabel.BackgroundTransparency = 1
-		metaLabel.Text = 'by ' .. profile.author_roblox_username .. '  ·  ' .. tostring(profile.installs) .. ' installs'
+		metaLabel.Text = 'by ' .. profile.author_roblox_username
 		metaLabel.TextXAlignment = Enum.TextXAlignment.Left
 		metaLabel.TextColor3 = color.Dark(uipallet.Text, 0.45)
 		metaLabel.TextSize = 11
@@ -6756,6 +6904,7 @@ do
 		installBtn.TextColor3 = Color3.new(1, 1, 1)
 		installBtn.TextSize = 11
 		installBtn.FontFace = uipallet.FontSemiBold
+		installBtn.ZIndex = 13
 		installBtn.Parent = card
 		addCorner(installBtn)
 
@@ -6786,6 +6935,7 @@ do
 			updateBtn.TextColor3 = color.Dark(uipallet.Text, 0.2)
 			updateBtn.TextSize = 10
 			updateBtn.FontFace = uipallet.Font
+			updateBtn.ZIndex = 13
 			updateBtn.Parent = card
 			addCorner(updateBtn)
 
@@ -6819,6 +6969,7 @@ do
 			delBtn.TextColor3 = Color3.fromRGB(220, 80, 80)
 			delBtn.TextSize = 11
 			delBtn.FontFace = uipallet.Font
+			delBtn.ZIndex = 13
 			delBtn.Parent = card
 			addCorner(delBtn)
 
@@ -6847,7 +6998,9 @@ do
 
 		task.spawn(function()
 			local search = searchBox.Text ~= '' and ('&search=' .. searchBox.Text) or ''
-			local url = '/profiles?game_id=' .. tostring(game.PlaceId) .. '&sort=' .. currentSort .. '&page=' .. currentPage .. search
+			-- Key by GameId (universe), not PlaceId: one experience can have many
+			-- place IDs, and profiles must be shared across all of them.
+			local url = '/profiles?game_id=' .. tostring(game.GameId) .. '&sort=' .. currentSort .. '&page=' .. currentPage .. search
 			local res = apiRequest('GET', url, nil)
 
 			statusLabel.Text = ''
@@ -6992,7 +7145,7 @@ do
 				local res, status = apiRequest('POST', '/profiles', {
 					from        = lplr.Name,
 					name        = name,
-					game_id     = tostring(game.PlaceId),
+					game_id     = tostring(game.GameId),
 					data        = gatherProfileData(),
 				})
 				promptBg:Destroy()
