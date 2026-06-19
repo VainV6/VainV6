@@ -162,6 +162,8 @@ local SHOP_CATEGORIES = {
 
 local function shopFolder()
 	return workspace:FindFirstChild('Shop')
+		or workspace:FindFirstChild('VisualShop')
+		or workspace:FindFirstChild('ShopVisual')
 end
 
 -- current Tix (the spendable currency)
@@ -272,12 +274,26 @@ end
 local function forEachShopItem(fn)
 	local shop = shopFolder()
 	if not shop then return end
-	for category, folderName in SHOP_CATEGORIES do
-		local folder = shop:FindFirstChild(folderName)
-		if folder then
-			for _, item in folder:GetChildren() do
-				local prompt = itemPrompt(item)
-				if prompt then fn(item, category, prompt) end
+	-- The category folders (VisualGears / VisualAccessories / VisualSacrifices)
+	-- are nested under the Shop at runtime (e.g. inside VisualShop), so a fixed
+	-- direct-child lookup found nothing -- that's why Auto Buy did nothing.
+	-- Instead, recursively grab every ProximityPrompt under the Shop and treat
+	-- the model it belongs to as the buyable item, deriving the category from the
+	-- nearest Visual* ancestor.
+	local seen = {}
+	for _, prompt in shop:GetDescendants() do
+		if prompt:IsA('ProximityPrompt') then
+			local item = prompt:FindFirstAncestorWhichIsA('Model') or prompt.Parent
+			if item and not seen[item] then
+				seen[item] = true
+				local category, a = 'Gears', item
+				while a and a ~= shop do
+					if a.Name == 'VisualAccessories' then category = 'Accessories' break end
+					if a.Name == 'VisualSacrifices' then category = 'Sacrifices' break end
+					if a.Name == 'VisualGears' then category = 'Gears' break end
+					a = a.Parent
+				end
+				fn(item, category, prompt)
 			end
 		end
 	end
