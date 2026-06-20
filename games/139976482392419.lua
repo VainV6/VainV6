@@ -129,14 +129,23 @@ local function isBossModel(model)
 		or model:FindFirstChild('BeveledCube') ~= nil
 end
 
--- find the live boss character model inside a *BossFight folder
-local function bossCharacterIn(folder)
-	if not folder then return nil end
-	if isBossModel(folder) then return folder end
-	for _, d in folder:GetDescendants() do
-		if d:IsA('Model') and isBossModel(d) then return d end
+-- find the live boss character model for a *BossFight instance, which may itself
+-- be the boss Model (a character in workspace), or a Folder containing it.
+local function bossCharacterIn(fight)
+	if not fight then return nil end
+	-- the fight instance itself is the boss character (Model with a Humanoid)
+	if fight:IsA('Model') and fight:FindFirstChildOfClass('Humanoid') then return fight end
+	if isBossModel(fight) then return fight end
+	-- otherwise the boss is a character Model inside the fight: prefer one flagged
+	-- as a boss, else fall back to any Model that has a Humanoid.
+	local fallback
+	for _, d in fight:GetDescendants() do
+		if d:IsA('Model') and d:FindFirstChildOfClass('Humanoid') then
+			if isBossModel(d) then return d end
+			fallback = fallback or d
+		end
 	end
-	return nil
+	return fallback
 end
 
 local function enemyName(model)
@@ -388,8 +397,11 @@ run(function()
 		end)
 	end
 
+	-- A boss fight appears in workspace as a *BossFight instance -- sometimes a
+	-- Folder containing the boss, sometimes the boss character Model itself
+	-- (e.g. "1x1x1x1BossFight"). Accept either.
 	local function isBossFightFolder(inst)
-		return inst and inst:IsA('Folder') and inst.Name:find('BossFight')
+		return inst and (inst:IsA('Folder') or inst:IsA('Model')) and inst.Name:find('BossFight') ~= nil
 	end
 
 	for _, child in workspace:GetChildren() do
