@@ -1768,38 +1768,35 @@ run(function()
 				lastInShop = inShop()
 				local readiedThisShop = false
 				local enteredAt = lastInShop and tick() or 0
+				local lastTry = 0
 
-				-- fire the ready remote (optionally after the delay), once per shop visit
-				local function doReady()
-					if readiedThisShop then return end
-					readiedThisShop = true
-					local d = ReadyDelay and ReadyDelay.Value or 0
-					local function fire()
-						if AutoReady.Enabled and inShop() then pressReady() end
-					end
-					if d > 0 then task.delay(d, fire) else fire() end
+				-- Keep trying to click Ready until it actually registers. The StartRound
+				-- button streams in a moment after you (re-)enter the shop, so a single
+				-- attempt on entry can miss; we retry until pressReady succeeds and only
+				-- then mark this shop visit done. Respects the configured delay.
+				local function tryReady()
+					if readiedThisShop or not AutoReady.Enabled or not inShop() then return end
+					if tick() - enteredAt < (ReadyDelay and ReadyDelay.Value or 0) then return end
+					if tick() - lastTry < 0.4 then return end
+					lastTry = tick()
+					if pressReady() then readiedThisShop = true end
 				end
-
-				-- if we're already in the shop when enabled, ready up now
-				if lastInShop then doReady() end
 
 				AutoReady:Clean(runService.Heartbeat:Connect(function()
 					local now = inShop()
-					if now and not lastInShop then
-						readiedThisShop = false   -- new shop visit
-						enteredAt = tick()
-						doReady()
-					elseif now and not readiedThisShop then
-						-- safety retry if the first fire was missed on entry
-						if tick() - enteredAt > 1 then doReady() end
-					elseif not now then
+					if now ~= lastInShop then
+						-- entered or left the shop: reset, and drop the cached button --
+						-- it's recreated each shop visit, so a stale cache would mis-click.
 						readiedThisShop = false
+						readyClick = nil
+						if now then enteredAt = tick() end
 					end
 					lastInShop = now
+					if now then tryReady() end
 				end))
 			end
 		end,
-		Tooltip = 'Automatically readies up when you enter the shop to start the next round (fires the RemoteEventStart signal). Pairs with Auto Buy - raise the delay to let buys finish first.'
+		Tooltip = 'Automatically readies up when you enter the shop to start the next round (TPs to and clicks the Ready button). Retries until it registers, every shop visit. Pairs with Auto Buy - raise the delay to let buys finish first.'
 	})
 
 	ReadyDelay = AutoReady:CreateSlider({
