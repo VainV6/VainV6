@@ -387,3 +387,141 @@ run(function()
 	AutoDeclare = AutoWar:CreateToggle({ Name = 'Auto Declare', Default = true, Tooltip = 'Also fire DeclareWar once justification allows it. Off = justify only.' })
 	Interval = AutoWar:CreateSlider({ Name = 'Retry', Min = 2, Max = 60, Default = 8, Suffix = 'sec', Tooltip = 'How often to retry justify/declare until you are at war.' })
 end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
+--  AUTO DEFENSE  (garrison borders + reinforce tiles under attack -- never attacks)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- Spawns troops via FireServer("CreateArmyOnTile", tile, unitType, count) ONLY on
+-- tiles you own. Border tiles are found by position (an owned tile next to a
+-- non-owned one), and tiles under attack are detected by the tile's "Fighting"
+-- attribute (the red-outline combat you screenshotted). It never moves onto enemy
+-- land and never declares war -- purely defensive.
+run(function()
+	local AutoDefense, UnitType, Garrison, DefendBattles, MoneyReserve, ManpowerReserve, Interval, Notify
+
+	local function tilePos(t)
+		local ok, p = pcall(function() return t:GetPivot().Position end)
+		if ok and p then return p end
+		if t:IsA('BasePart') then return t.Position end
+		local pp = t:FindFirstChildWhichIsA('BasePart')
+		return pp and pp.Position or nil
+	end
+
+	-- owned tiles that sit next to a non-owned tile (your frontier)
+	local function borderTiles(myCountry)
+		local regions = workspace:FindFirstChild('Regions')
+		if not (regions and myCountry) then return {} end
+		local all = {}
+		for _, t in regions:GetChildren() do
+			local p = tilePos(t)
+			if p then
+				table.insert(all, { tile = t, pos = p, mine = t:GetAttribute('Country') == myCountry })
+			end
+		end
+		local borders = {}
+		for _, o in all do
+			if o.mine then
+				-- nearest neighbour of any ownership vs nearest ENEMY neighbour:
+				-- if an enemy tile is about as close as our closest neighbour, we border it
+				local dAny, dEnemy = math.huge, math.huge
+				for _, x in all do
+					if x ~= o then
+						local d = (o.pos - x.pos).Magnitude
+						if d < dAny then dAny = d end
+						if not x.mine and d < dEnemy then dEnemy = d end
+					end
+				end
+				if dEnemy <= dAny * 1.5 then table.insert(borders, o.tile) end
+			end
+		end
+		return borders
+	end
+
+	-- owned tiles currently being fought over
+	local function fightingTiles(myCountry)
+		local regions = workspace:FindFirstChild('Regions')
+		local out = {}
+		if regions and myCountry then
+			for _, t in regions:GetChildren() do
+				if t:GetAttribute('Country') == myCountry and t:GetAttribute('Fighting') == true then
+					table.insert(out, t)
+				end
+			end
+		end
+		return out
+	end
+
+	local function sweep()
+		local myCountry = lplr:GetAttribute('MyCountry')
+		if not (myCountry and getActionRemote()) then return end
+		local moneyReserve = (MoneyReserve.Value or 0) * 1e6
+		local mpReserve = (ManpowerReserve.Value or 0) * 1e3
+		local unit = (UnitType and UnitType.Value) or 'Infantry'
+		local garrison = math.floor(Garrison.Value)
+		local reinforced, garrisoned = 0, 0
+
+		local function canSpend()
+			local m, p = getBalance(myCountry)
+			if m and m <= moneyReserve then return false end
+			if p and p <= mpReserve then return false end
+			return true
+		end
+		local function spawn(tile, count)
+			if tile:GetAttribute('SpawningArmy') ~= nil then return false end
+			if not canSpend() then return false end
+			fireAction('CreateArmyOnTile', tile, unit, count)
+			task.wait(0.15)
+			return true
+		end
+
+		-- 1) emergency: reinforce any owned tile under attack
+		if DefendBattles.Enabled then
+			for _, t in fightingTiles(myCountry) do
+				if not AutoDefense.Enabled then break end
+				if spawn(t, garrison) then reinforced = reinforced + 1 end
+			end
+		end
+		-- 2) garrison the frontier
+		for _, t in borderTiles(myCountry) do
+			if not AutoDefense.Enabled then break end
+			if spawn(t, garrison) then garrisoned = garrisoned + 1 end
+		end
+
+		if Notify.Enabled and (reinforced + garrisoned) > 0 then
+			notif('Auto Defense', string.format('Reinforced %d battle(s), garrisoned %d border tile(s)',
+				reinforced, garrisoned), 4)
+		end
+	end
+
+	AutoDefense = vain.Categories.Utility:CreateModule({
+		Name = 'Auto Defense',
+		Function = function(callback)
+			if callback then
+				do
+					local myCountry = lplr:GetAttribute('MyCountry')
+					notif('Auto Defense', string.format('%s  |  border tiles: %d  |  under attack: %d',
+						getActionRemote() and 'Remote OK' or 'NO REMOTE',
+						#borderTiles(myCountry), #fightingTiles(myCountry)), 7,
+						(getActionRemote() and myCountry) and nil or 'warning')
+				end
+				task.spawn(function()
+					repeat
+						sweep()
+						task.wait(Interval and Interval.Value or 12)
+					until not AutoDefense.Enabled
+				end)
+			end
+		end,
+		Tooltip = 'Purely defensive: garrisons your border tiles and emergency-reinforces any tile under attack. Only ever spawns troops on tiles you own -- never moves onto enemy land and never declares war. Respects your money/manpower reserve.'
+	})
+	UnitType = AutoDefense:CreateDropdown({
+		Name = 'Unit', List = { 'Infantry', 'Tank', 'Artillery', 'AntiAircraft' }, Default = 'Infantry',
+		Tooltip = 'Which unit to defend with. Infantry is cheapest; Tank/Artillery hit harder but cost more.'
+	})
+	Garrison = AutoDefense:CreateSlider({ Name = 'Garrison Size', Min = 1, Max = 50, Default = 5, Tooltip = 'How many units to (re)spawn per tile each pass.' })
+	DefendBattles = AutoDefense:CreateToggle({ Name = 'Reinforce Battles', Default = true, Tooltip = 'Emergency-spawn troops on any owned tile currently being fought over.' })
+	MoneyReserve = AutoDefense:CreateSlider({ Name = 'Money Reserve', Min = 0, Max = 500, Default = 5, Suffix = 'M', Tooltip = 'Never spend money below this.' })
+	ManpowerReserve = AutoDefense:CreateSlider({ Name = 'Manpower Reserve', Min = 0, Max = 1000, Default = 20, Suffix = 'K', Tooltip = 'Never spend manpower below this.' })
+	Interval = AutoDefense:CreateSlider({ Name = 'Interval', Min = 2, Max = 60, Default = 12, Suffix = 'sec', Tooltip = 'How often to reinforce borders and battles.' })
+	Notify = AutoDefense:CreateToggle({ Name = 'Notify', Default = false, Tooltip = 'Notify each pass how many tiles were reinforced/garrisoned.' })
+end)
