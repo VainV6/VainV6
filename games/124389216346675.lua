@@ -46,20 +46,23 @@ local function getNetwork()
 	return Network
 end
 
--- Every CITY tile the local player owns: in workspace.Regions, has a CityInfo
--- child, and its Country attribute matches the player's MyCountry. Re-evaluated
--- each sweep so cities from newly captured countries are picked up automatically.
-local function ownedCities()
+-- Every tile/region the local player owns: in workspace.Regions with a Country
+-- attribute equal to the player's MyCountry. (We do NOT require a CityInfo child
+-- -- that's the UI panel, not something on the tile, so requiring it matched zero
+-- tiles, which is why upgrades did nothing.) Each owned tile is developable: its
+-- DevelopTier (tax) and DefenceTier are what we raise. Re-evaluated each sweep so
+-- tiles from newly captured countries are picked up automatically.
+local function ownedTiles()
 	local out = {}
 	local regions = workspace:FindFirstChild('Regions')
 	local myCountry = lplr:GetAttribute('MyCountry')
-	if not (regions and myCountry) then return out end
+	if not (regions and myCountry) then return out, myCountry end
 	for _, tile in regions:GetChildren() do
-		if tile:GetAttribute('Country') == myCountry and tile:FindFirstChild('CityInfo') then
+		if tile:GetAttribute('Country') == myCountry then
 			table.insert(out, tile)
 		end
 	end
-	return out
+	return out, myCountry
 end
 
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -73,13 +76,24 @@ run(function()
 		Name = 'Auto Upgrade',
 		Function = function(callback)
 			if callback then
+				-- one-time diagnostic so a silent failure is obvious: did we resolve
+				-- the Network, what country are we, and how many tiles do we own?
+				do
+					local net = getNetwork()
+					local tiles, myCountry = ownedTiles()
+					notif('Auto Upgrade',
+						(net and net.FireServer and 'Network OK' or 'NETWORK NOT FOUND')
+						.. '  |  country: ' .. tostring(myCountry)
+						.. '  |  owned tiles: ' .. #tiles,
+						7, (net and net.FireServer and #tiles > 0) and nil or 'warning')
+				end
 				task.spawn(function()
 					repeat
 						local net = getNetwork()
 						if net and net.FireServer then
-							local cities = ownedCities()
+							local cities = ownedTiles()
 							if Notify.Enabled and #cities > 0 then
-								notif('Auto Upgrade', 'Upgrading ' .. #cities .. ' cities...', 3)
+								notif('Auto Upgrade', 'Upgrading ' .. #cities .. ' tiles...', 3)
 							end
 							for _, city in cities do
 								if not AutoUpgrade.Enabled then break end
