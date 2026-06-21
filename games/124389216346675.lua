@@ -250,3 +250,140 @@ run(function()
 		Tooltip = "Toggles the game's built-in auto-capture (keeps expanding into adjacent tiles). If it behaves like a pure toggle in-game, flip it once to sync."
 	})
 end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
+--  shared helpers for intel / diplomacy
+-- ══════════════════════════════════════════════════════════════════════════════
+-- compact big-number formatting: 1.23B / 45.6M / 12.3K / 980
+local function fmtNum(n)
+	if not n then return '?' end
+	local a = math.abs(n)
+	if a >= 1e9 then return string.format('%.2fB', n / 1e9) end
+	if a >= 1e6 then return string.format('%.2fM', n / 1e6) end
+	if a >= 1e3 then return string.format('%.1fK', n / 1e3) end
+	return tostring(math.floor(n))
+end
+local function cfValue(cf, name)
+	local c = cf and cf:FindFirstChild(name)
+	return c and c.Value or nil
+end
+-- every country's live stats (money/manpower/pop/tiles), sorted by money desc
+local function allCountryStats()
+	local reg = replicatedStorage:FindFirstChild('CountryRegistry')
+	local list = {}
+	if reg then
+		for _, cf in reg:GetChildren() do
+			table.insert(list, {
+				name = cf.Name,
+				money = cfValue(cf, 'Money') or 0,
+				manpower = cfValue(cf, 'Manpower') or 0,
+				population = cfValue(cf, 'Population') or 0,
+				tiles = cfValue(cf, 'Tiles') or 0,
+				atWar = cf:GetAttribute('AtWar'),
+			})
+		end
+		table.sort(list, function(a, b) return a.money > b.money end)
+	end
+	return list
+end
+
+-- ══════════════════════════════════════════════════════════════════════════════
+--  COUNTRY INTEL  (live ranked stats feed: top powers + your own standing)
+-- ══════════════════════════════════════════════════════════════════════════════
+run(function()
+	local Intel, ShowMine, ShowTop, Interval
+
+	local function report()
+		local stats = allCountryStats()
+		if #stats == 0 then
+			notif('Country Intel', 'CountryRegistry not loaded yet.', 4, 'warning')
+			return
+		end
+		local myCountry = lplr:GetAttribute('MyCountry')
+		local dur = Interval and Interval.Value or 25
+
+		if ShowTop.Enabled then
+			local lines = {}
+			for i = 1, math.min(5, #stats) do
+				local s = stats[i]
+				table.insert(lines, string.format('%d. %s  $%s  pop %s  %s tiles',
+					i, s.name, fmtNum(s.money), fmtNum(s.population), fmtNum(s.tiles)))
+			end
+			notif('Top Powers', table.concat(lines, '\n'), dur)
+		end
+
+		if ShowMine.Enabled and myCountry then
+			local rank, mine
+			for i, s in stats do
+				if s.name == myCountry then rank = i mine = s break end
+			end
+			if mine then
+				notif('My Country (' .. myCountry .. ')', string.format(
+					'Rank #%d by money\n$%s  |  %s manpower\npop %s  |  %s tiles%s',
+					rank or 0, fmtNum(mine.money), fmtNum(mine.manpower), fmtNum(mine.population),
+					fmtNum(mine.tiles), mine.atWar and '\nAT WAR' or ''), dur)
+			end
+		end
+	end
+
+	Intel = vain.Categories.Utility:CreateModule({
+		Name = 'Country Intel',
+		Function = function(callback)
+			if callback then
+				task.spawn(function()
+					repeat
+						report()
+						task.wait(Interval and Interval.Value or 25)
+					until not Intel.Enabled
+				end)
+			end
+		end,
+		Tooltip = 'Live strategic intel from CountryRegistry: the strongest powers (money / population / tiles) and your own standing & rank. Refreshes on an interval.'
+	})
+	ShowTop = Intel:CreateToggle({ Name = 'Top Powers', Default = true, Tooltip = 'Show the 5 strongest countries by money.' })
+	ShowMine = Intel:CreateToggle({ Name = 'My Stats', Default = true, Tooltip = 'Show your country: money / manpower / population / tiles and global money rank.' })
+	Interval = Intel:CreateSlider({ Name = 'Refresh', Min = 5, Max = 120, Default = 25, Suffix = 'sec', Tooltip = 'How often to refresh the intel feed.' })
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
+--  AUTO WAR  (justify + declare war on the countries you list)
+-- ══════════════════════════════════════════════════════════════════════════════
+run(function()
+	local AutoWar, Targets, AutoDeclare, Interval
+
+	local function atWarWith(name)
+		-- best-effort: the target's AtWar attribute flips once a war involving it begins
+		local reg = replicatedStorage:FindFirstChild('CountryRegistry')
+		local cf = reg and reg:FindFirstChild(name)
+		return (cf and cf:GetAttribute('AtWar') == true) or false
+	end
+
+	AutoWar = vain.Categories.Utility:CreateModule({
+		Name = 'Auto War',
+		Function = function(callback)
+			if callback then
+				task.spawn(function()
+					repeat
+						if getActionRemote() then
+							for _, name in (Targets and Targets.ListEnabled or {}) do
+								if not AutoWar.Enabled then break end
+								if name ~= '' and not atWarWith(name) then
+									fireAction('JustifyWar', name)
+									task.wait(0.3)
+									if AutoDeclare.Enabled then
+										fireAction('DeclareWar', name)
+									end
+								end
+							end
+						end
+						task.wait(Interval and Interval.Value or 8)
+					until not AutoWar.Enabled
+				end)
+			end
+		end,
+		Tooltip = 'List exact country names to war. Auto War keeps justifying (and, if enabled, declaring) on each until you are at war with them. Justification still takes the normal in-game time.'
+	})
+	Targets = AutoWar:CreateTextList({ Name = 'Targets', Tooltip = 'Exact country names to declare war on (one per entry), e.g. Poland, France.' })
+	AutoDeclare = AutoWar:CreateToggle({ Name = 'Auto Declare', Default = true, Tooltip = 'Also fire DeclareWar once justification allows it. Off = justify only.' })
+	Interval = AutoWar:CreateSlider({ Name = 'Retry', Min = 2, Max = 60, Default = 8, Suffix = 'sec', Tooltip = 'How often to retry justify/declare until you are at war.' })
+end)
