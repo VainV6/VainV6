@@ -33,17 +33,32 @@ end
 -- The game's service locator: require(ReplicatedStorage.GetService)("Network")
 -- returns the Network object that all client actions fire through. Resolve it
 -- lazily and cache it so a slow load can't break the file.
-local Network
-local function getNetwork()
-	if Network and typeof(Network) == 'table' then return Network end
-	local ok, gs = pcall(function()
-		return require(replicatedStorage:WaitForChild('GetService', 10))
-	end)
-	if ok and gs then
-		local ok2, net = pcall(gs, 'Network')
-		if ok2 then Network = net end
+-- The game's Network:FireServer round-robins four reliable RemoteEvents that sit
+-- directly in ReplicatedStorage (RemoteEvent_1 .. _4); firing ANY of them runs the
+-- same server handler. We fire one of these directly instead of
+-- require(GetService)("Network"), which doesn't resolve from the exploit context
+-- (that's why it reported NETWORK NOT FOUND).
+local actionRemote
+local function getActionRemote()
+	if actionRemote and actionRemote.Parent then return actionRemote end
+	for i = 1, 4 do
+		local r = replicatedStorage:FindFirstChild('RemoteEvent_' .. i)
+		if r and r:IsA('RemoteEvent') then actionRemote = r return r end
 	end
-	return Network
+	for _, r in replicatedStorage:GetChildren() do
+		if r:IsA('RemoteEvent') and r.Name:find('^RemoteEvent_') then actionRemote = r return r end
+	end
+	return nil
+end
+
+-- Fire a server action (e.g. "DevelopTile", tile, "Tier", true) through the game's
+-- action remote. Returns true if a remote was available.
+local function fireAction(...)
+	local r = getActionRemote()
+	if not r then return false end
+	local args = {...}
+	pcall(function() r:FireServer(unpack(args)) end)
+	return true
 end
 
 -- Every tile/region the local player owns: in workspace.Regions with a Country
@@ -76,21 +91,20 @@ run(function()
 		Name = 'Auto Upgrade',
 		Function = function(callback)
 			if callback then
-				-- one-time diagnostic so a silent failure is obvious: did we resolve
-				-- the Network, what country are we, and how many tiles do we own?
+				-- one-time diagnostic so a silent failure is obvious: did we find the
+				-- action remote, what country are we, and how many tiles do we own?
 				do
-					local net = getNetwork()
+					local remote = getActionRemote()
 					local tiles, myCountry = ownedTiles()
 					notif('Auto Upgrade',
-						(net and net.FireServer and 'Network OK' or 'NETWORK NOT FOUND')
+						(remote and 'Remote OK' or 'REMOTE NOT FOUND')
 						.. '  |  country: ' .. tostring(myCountry)
 						.. '  |  owned tiles: ' .. #tiles,
-						7, (net and net.FireServer and #tiles > 0) and nil or 'warning')
+						7, (remote and #tiles > 0) and nil or 'warning')
 				end
 				task.spawn(function()
 					repeat
-						local net = getNetwork()
-						if net and net.FireServer then
+						if getActionRemote() then
 							local cities = ownedTiles()
 							if Notify.Enabled and #cities > 0 then
 								notif('Auto Upgrade', 'Upgrading ' .. #cities .. ' tiles...', 3)
@@ -101,10 +115,10 @@ run(function()
 								-- afford and ignores it once a city is already maxed, so
 								-- re-sweeping continues progress as money comes in.
 								if UpTier.Enabled then
-									pcall(function() net:FireServer('DevelopTile', city, 'Tier', true) end)
+									fireAction('DevelopTile', city, 'Tier', true)
 								end
 								if UpDefence.Enabled then
-									pcall(function() net:FireServer('DevelopTile', city, 'Def', true) end)
+									fireAction('DevelopTile', city, 'Def', true)
 								end
 								task.wait(0.08)
 							end
@@ -150,11 +164,8 @@ run(function()
 	AutoCapture = vain.Categories.Utility:CreateModule({
 		Name = 'Auto Capture',
 		Function = function(callback)
-			local net = getNetwork()
-			if net and net.FireServer then
-				-- the game exposes a ToggleAutoCapture action; pass the desired state
-				pcall(function() net:FireServer('ToggleAutoCapture', callback) end)
-			end
+			-- the game exposes a ToggleAutoCapture action; pass the desired state
+			fireAction('ToggleAutoCapture', callback)
 		end,
 		Tooltip = "Toggles the game's built-in auto-capture (keeps expanding into adjacent tiles). If it behaves like a pure toggle in-game, flip it once to sync."
 	})
