@@ -3736,7 +3736,14 @@ run(function()
     		if callback then
     			Speed:Clean(runService.PreSimulation:Connect(function(dt)
     				if entitylib.isAlive and not Fly.Enabled and not LongJump.Enabled then
-    					local state = entitylib.character.Humanoid:GetState()
+    					local humanoid = entitylib.character.Humanoid
+    					-- In a vehicle/seat: skip player speed, or it drives the character
+    					-- (welded to the seat) at player speed and overrides the vehicle's
+    					-- own speed. Let the vehicle control its motion instead.
+    					if humanoid.Sit or (humanoid.Parent and humanoid.Parent:GetAttribute('InVehicle')) then
+    						return
+    					end
+    					local state = humanoid:GetState()
     					if state == Enum.HumanoidStateType.Climbing then
     						return
     					end
