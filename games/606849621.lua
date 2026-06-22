@@ -664,7 +664,14 @@ run(function()
 	local Range
 	local AimPart
 	local Priority
+	local AutoShoot
 	local Hooked
+	-- Auto Shoot state: the gun we're currently holding the trigger on, the saved
+	-- FireAuto per Config (so semi-autos keep firing while held; restored on stop),
+	-- and a fake mouse-down input passed to the gun's own ShootBegin/ShootEnd.
+	local triggerItem
+	local fireAutoSaved = setmetatable({}, {__mode = 'k'})
+	local autoShootInput = {UserInputType = Enum.UserInputType.MouseButton1, KeyCode = Enum.KeyCode.Unknown}
 	local AimRaycast = RaycastParams.new()
 	AimRaycast.RespectCanCollide = true
 	local inflatedRoots = {} -- [RootPart] = true, hit radii we enlarged (restore on disable)
@@ -708,6 +715,48 @@ run(function()
 			return (a.Magnitude * entHealth(a.Entity)) < (b.Magnitude * entHealth(b.Entity))
 		end,
 	}
+
+	-- ── Auto Shoot ────────────────────────────────────────────────────────────
+	-- Release the trigger on whatever gun we were holding it on.
+	local function releaseTrigger()
+		if triggerItem then
+			pcall(function() triggerItem:ShootEnd(autoShootInput) end)
+			pcall(function() rawset(triggerItem, 'IsShooting', false) end)
+			triggerItem = nil
+		end
+	end
+	-- Hold the trigger on this gun (mirrors a mouse-down): force full-auto so
+	-- semi-autos keep firing, then drive the gun's own ShootBegin. Only presses
+	-- once per gun -- the gun's Heartbeat handles cadence + server rate-limit.
+	local function pressTrigger(item)
+		if triggerItem == item then return end
+		releaseTrigger()
+		triggerItem = item
+		local cfg = item.Config
+		if cfg then
+			if fireAutoSaved[cfg] == nil then fireAutoSaved[cfg] = cfg.FireAuto end
+			cfg.FireAuto = true
+		end
+		-- ShootBegin is the method mouse-down calls; fall back to the flag if absent
+		if not pcall(function() item:ShootBegin(autoShootInput) end) then
+			pcall(function() rawset(item, 'IsShooting', true) end)
+		end
+	end
+	-- Nearest valid target inside the aimbot's Range, using the same target/part/
+	-- priority settings. Skips dead targets and friends (never a teammate).
+	local function autoShootTarget()
+		local ent = entitylib.EntityPosition({
+			Range = Range.Value,
+			Part = AimPart and AimPart.Value or 'Head',
+			Sort = sorts[Priority and Priority.Value or 'Distance'],
+			Origin = entitylib.isAlive and entitylib.character.RootPart.Position or nil,
+			Players = Target.Players.Enabled,
+			NPCs = Target.NPCs.Enabled
+		})
+		if not ent then return nil end
+		if ent.Player and (not isAliveEnt(ent) or isFriend(ent.Player)) then return nil end
+		return ent
+	end
 
 	Aimbot = vain.Categories.Combat:CreateModule({
 		Name = 'Aimbot',
@@ -798,8 +847,33 @@ run(function()
 						end
 					end
 				end))
+
+				-- AUTO SHOOT: while a valid target sits in Range, hold the trigger for
+				-- you (no clicking). Self-terminates when the Aimbot is disabled.
+				task.spawn(function()
+					repeat
+						if AutoShoot and AutoShoot.Enabled then
+							local item = jb.ItemSystemController:GetLocalEquipped()
+							-- only real guns have a BulletEmitter (taser/handcuffs excluded)
+							if item and item.BulletEmitter and autoShootTarget() then
+								pressTrigger(item)
+							else
+								releaseTrigger()
+							end
+						else
+							releaseTrigger()
+						end
+						task.wait()
+					until not Aimbot.Enabled
+					releaseTrigger()
+				end)
 			else
 				aimingAtCar = false
+				releaseTrigger()
+				for cfg, saved in fireAutoSaved do
+					pcall(function() cfg.FireAuto = saved end)
+				end
+				table.clear(fireAutoSaved)
 				jb.GunController.TransformLocalMousePosition = Hooked
 				local item = jb.ItemSystemController:GetLocalEquipped()
 				if item and item.BulletEmitter then
@@ -833,6 +907,10 @@ run(function()
 		Suffix = function(val)
 			return val == 1 and 'stud' or 'studs'
 		end
+	})
+	AutoShoot = Aimbot:CreateToggle({
+		Name = 'Auto Shoot',
+		Tooltip = 'Automatically holds the trigger whenever a valid target is within Range -- you never have to click. Uses the same Target / Aim Part / Priority settings, forces full-auto so semi-autos keep firing, and pairs with the aimbot so every shot lands. Friends and dead targets are skipped.'
 	})
 end)
 
