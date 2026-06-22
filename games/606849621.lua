@@ -1870,6 +1870,8 @@ run(function()
 	local VehicleSpeed
 	local SpeedMult
 	local SyncTurning
+	local VelocityBoost
+	local BoostSpeed
 	local baseTurn = setmetatable({}, {__mode = 'k'}) -- [chassis] = original TurnSpeed
 	VehicleSpeed = vain.Categories.Utility:CreateModule({
 		Name = 'Vehicle Speed',
@@ -1884,6 +1886,23 @@ run(function()
 							if (not SyncTurning or SyncTurning.Enabled) and type(c.TurnSpeed) == 'number' then
 								if baseTurn[c] == nil then baseTurn[c] = c.TurnSpeed end
 								c.TurnSpeed = baseTurn[c] * mult
+							end
+							-- VELOCITY BOOST: re-drive the car along its current HORIZONTAL
+							-- heading at the chosen speed and clamp the upward component, so the
+							-- energy goes into moving FORWARD instead of bouncing up and down.
+							-- Direction comes from the car's own motion, so steering / reverse
+							-- still work; we only touch magnitude + kill the vertical launch.
+							if VelocityBoost and VelocityBoost.Enabled then
+								local model = c.Model
+								local part = model and (model.PrimaryPart or model:FindFirstChildWhichIsA('BasePart', true))
+								if part then
+									local v = part.AssemblyLinearVelocity
+									local horiz = Vector3.new(v.X, 0, v.Z)
+									if horiz.Magnitude > 2 then -- only while actually driving
+										local nh = horiz.Unit * ((BoostSpeed and BoostSpeed.Value) or 200)
+										part.AssemblyLinearVelocity = Vector3.new(nh.X, math.min(v.Y, 5), nh.Z)
+									end
+								end
 							end
 						end
 						task.wait()
@@ -1912,6 +1931,18 @@ run(function()
 		Name = 'Sync Turning',
 		Default = true,
 		Tooltip = 'Scale your steering by the same multiplier so you can still swerve sharply at high speed (cancels the game\'s high-speed turn damping).'
+	})
+	VelocityBoost = VehicleSpeed:CreateToggle({
+		Name = 'Velocity Boost',
+		Tooltip = 'Fixes a car that only bounces up and down instead of going fast: pushes you along your HORIZONTAL heading at the Boost Speed and cancels upward launch, so all the power goes into forward speed. Holds the set speed while on (toggle off to brake normally). Direction follows your steering.'
+	})
+	BoostSpeed = VehicleSpeed:CreateSlider({
+		Name = 'Boost Speed',
+		Min = 50,
+		Max = 1000,
+		Default = 200,
+		Suffix = 'studs/s',
+		Tooltip = 'Target horizontal speed while Velocity Boost is on. Higher = faster, but the server validates POSITION -- very high values can get you rolled back.'
 	})
 end)
 
