@@ -2232,7 +2232,7 @@ run(function()
 				end
 				if oldnamecall then return end
 				pcall(consoleShow, true)
-				pcall(consolePush, '-- Remote Spy started. Waiting for the game to fire remotes... --')
+				pcall(consolePush, '[Remote Spy started] waiting for the game to fire remotes...')
 				notif('Remote Spy', 'Logging to the Vain console window' .. (appendfile and ' (+ remotespy.txt)' or '') .. '.', 5)
 				oldnamecall = hookmetamethod(game, '__namecall', function(...)
 					if enabled then
