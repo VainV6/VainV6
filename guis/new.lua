@@ -4174,6 +4174,19 @@ function mainapi:CreateCategory(categorysettings)
 			task.spawn(modulesettings.Function, self.Enabled)
 		end
 
+		function moduleapi:Lock(reason)
+			-- Grey out text, disable all interaction (Active=false swallows all
+			-- GuiButton events including MouseButton1Click, so Toggle is never called)
+			modulebutton.Text = '            ' .. modulesettings.Name .. '  [WIP]'
+			modulebutton.TextColor3 = color.Dark(uipallet.Text, 0.55)
+			modulebutton.AutoButtonColor = false
+			modulebutton.Active = false
+			bind.Visible = false
+			fav.Visible = false
+			dotsbutton.Active = false
+			addTooltip(modulebutton, reason or 'Not available right now.')
+		end
+
 		for i, v in components do
 			moduleapi['Create'..i] = function(_, optionsettings)
 				return v(optionsettings, modulechildren, moduleapi)

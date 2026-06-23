@@ -2773,6 +2773,8 @@ run(function()
 		Tooltip = 'Police bounty-hunter: flies your car to the highest-bounty criminal, gets out, auto-equips Handcuffs, and arrests them -- build-proof (no obfuscated remotes). Set up once: join Police, spawn a car, get in. Server-hop on empty servers + auto-join/spawn come next.'
 	})
 
+	Bot:Lock('Auto Arrest Bot is currently being reworked and is not functional.')
+
 	MinBounty = Bot:CreateSlider({ Name = 'Min Bounty', Min = 0, Max = 50000, Default = 2000, Suffix = '$',
 		Tooltip = 'Only chase criminals with at least this much bounty.' })
 	FlySpeed = Bot:CreateSlider({ Name = 'Fly Speed', Min = 50, Max = 5000, Default = 2000,
