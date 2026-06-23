@@ -2315,7 +2315,7 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
 	local Bot
-	local MinBounty, FlySpeed, ExitDist, CruiseHeight, Notify
+	local MinBounty, FlySpeed, ExitDist, CruiseHeight, StepSize, Notify
 	local httpService = cloneref(game:GetService('HttpService'))
 
 	local function teamOf(plr)
@@ -2420,9 +2420,9 @@ run(function()
 		local off = point - here
 		local d = off.Magnitude
 		local dir = d > 0.5 and off.Unit or Vector3.zero
-		-- ease off within ~speed/8 studs so we settle on the waypoint instead of
-		-- overshooting it and oscillating
-		engine.AssemblyLinearVelocity = dir * math.min(speed, d * 8)
+		-- hold full speed until ~speed/15 studs out, easing off near the target so
+		-- we settle on the waypoint instead of overshooting it and oscillating
+		engine.AssemblyLinearVelocity = dir * math.min(speed, d * 15)
 		engine.AssemblyAngularVelocity = Vector3.zero
 		return true
 	end
@@ -2505,6 +2505,27 @@ run(function()
 		return (eq and eq.__ClassName == 'Handcuffs') or false
 	end
 
+	-- auto-equip the Handcuffs: there's no exposed equip API, but the hotbar keys
+	-- work through VirtualInputManager, so tap each slot key (1..0) in turn until
+	-- the cuffs come up, and stop. Re-scans if they ever get unequipped.
+	local HOTBAR_KEYS = {
+		Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four,
+		Enum.KeyCode.Five, Enum.KeyCode.Six, Enum.KeyCode.Seven, Enum.KeyCode.Eight,
+		Enum.KeyCode.Nine, Enum.KeyCode.Zero,
+	}
+	local cuffTryAt, cuffIdx = 0, 0
+	local function equipCuffs()
+		if cuffsOut() then return true end -- already holding them; stop pressing keys
+		if tick() - cuffTryAt < 0.25 then return false end -- ~one slot per 0.25s
+		cuffTryAt = tick()
+		cuffIdx = (cuffIdx % #HOTBAR_KEYS) + 1
+		pcall(function()
+			virtualInput:SendKeyEvent(true, HOTBAR_KEYS[cuffIdx], false, game)
+			virtualInput:SendKeyEvent(false, HOTBAR_KEYS[cuffIdx], false, game)
+		end)
+		return false
+	end
+
 	local notified = {}
 	local function once(key, ...)
 		if Notify and Notify.Enabled and not notified[key] then
@@ -2561,7 +2582,7 @@ run(function()
 						if not entitylib.isAlive then
 							-- wait for respawn
 						elseif teamOf(lplr) ~= 'Police' then
-							once('team', 'Join the Police team first (spawn a car + hold Handcuffs).', 6, 'alert')
+							once('team', 'Join the Police team first, and spawn a car + get in.', 6, 'alert')
 						else
 							notified.team = nil
 							local target = bestTarget()
@@ -2596,22 +2617,36 @@ run(function()
 											task.wait(0.4)
 										elseif point then
 											local sp = (FlySpeed and FlySpeed.Value) or 300
-											if gentle then sp = math.min(sp, 110) end -- gentle climb vs anti-cheat
+											if gentle then sp = math.min(sp, 800) end -- keep the climb a bit tamer
 											if flyToward(point, sp) then
 												status(string.format('%s %s (%.0f studs)', phase, target.Name, dist))
 											else
 												status('in a car but found no part to move it by')
 											end
 										end
-									elseif cuffsOut() then
-										nearSince = nil -- out of the car now
-										status(string.format('on foot, snapping to %s', target.Name))
-										myHrp.CFrame = thrp.CFrame * CFrame.new(0, 0, 2.5)
-										callArrest(target.Name)
 									else
-										once('cuffs', 'Get in a police car, or equip Handcuffs to arrest on foot.', 5, 'alert')
+										nearSince = nil -- out of the car now, on foot
+										-- step-teleport toward the target in small hops -- one big
+										-- teleport trips the position anti-cheat, lots of small steps
+										-- per frame reads as just moving fast
+										local step = (StepSize and StepSize.Value) or 12
+										local goal = thrp.CFrame * CFrame.new(0, 0, 2.5)
+										local gap = goal.Position - myHrp.Position
+										if gap.Magnitude <= step then
+											myHrp.CFrame = goal
+										else
+											myHrp.CFrame = CFrame.new(myHrp.Position + gap.Unit * step, goal.Position)
+										end
+										if not cuffsOut() then
+											equipCuffs() -- auto-equip the cuffs while we close in
+											status(string.format('closing on %s -- equipping cuffs', target.Name))
+										elseif gap.Magnitude <= step then
+											callArrest(target.Name)
+											status(string.format('arresting %s', target.Name))
+										else
+											status(string.format('stepping to %s (%.0f studs)', target.Name, gap.Magnitude))
+										end
 									end
-									if cuffsOut() then notified.cuffs = nil end
 								end
 							end
 						end
@@ -2623,18 +2658,20 @@ run(function()
 				restoreCar()
 			end
 		end,
-		Tooltip = 'Police bounty-hunter: flies your car to the highest-bounty criminal, gets out, and arrests them -- build-proof (no obfuscated remotes). Set up once: join Police, spawn a car, get in, hold Handcuffs. Server-hop on empty servers + auto-join/spawn come next.'
+		Tooltip = 'Police bounty-hunter: flies your car to the highest-bounty criminal, gets out, auto-equips Handcuffs, and arrests them -- build-proof (no obfuscated remotes). Set up once: join Police, spawn a car, get in. Server-hop on empty servers + auto-join/spawn come next.'
 	})
 
 	MinBounty = Bot:CreateSlider({ Name = 'Min Bounty', Min = 0, Max = 50000, Default = 2000, Suffix = '$',
 		Tooltip = 'Only chase criminals with at least this much bounty.' })
-	FlySpeed = Bot:CreateSlider({ Name = 'Fly Speed', Min = 50, Max = 1000, Default = 300,
+	FlySpeed = Bot:CreateSlider({ Name = 'Fly Speed', Min = 50, Max = 5000, Default = 2000,
 		Suffix = function(v) return v == 1 and 'stud/s' or 'studs/s' end,
-		Tooltip = 'How fast the car flies to the target. Lower is safer vs the position anticheat.' })
+		Tooltip = 'How fast the car flies to the target -- crank it for faster cycles. It auto-slows as it nears the target so it does not overshoot.' })
 	ExitDist = Bot:CreateSlider({ Name = 'Exit Distance', Min = 8, Max = 80, Default = 25, Suffix = 'studs',
 		Tooltip = 'How close (horizontally) the car gets above the target before you bail out and drop on foot.' })
 	CruiseHeight = Bot:CreateSlider({ Name = 'Cruise Height', Min = 50, Max = 600, Default = 150, Suffix = 'studs',
 		Tooltip = 'How high the car climbs to clear buildings. LOWER it if climbing gets reset by the anti-cheat; raise it if you clip tall towers.' })
+	StepSize = Bot:CreateSlider({ Name = 'Step Size', Min = 2, Max = 40, Default = 12, Suffix = 'studs',
+		Tooltip = 'On-foot step-teleport hop size (per frame). Higher = reach the target faster; lower = gentler on the position anti-cheat. Drop it if you get flagged.' })
 	Notify = Bot:CreateToggle({ Name = 'Notify', Default = true,
 		Tooltip = 'Status messages (join police / equip cuffs / no targets).' })
 end)
