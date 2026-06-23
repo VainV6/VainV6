@@ -2395,21 +2395,25 @@ run(function()
 	end
 
 	-- pick the next waypoint for a flight that goes OVER buildings instead of
-	-- through them: climb to a cruise altitude, and cruise across at height. Once
-	-- we're above the target we bail out -- gravity + the on-foot teleport handle
-	-- the drop, because descending the CAR just fights the anti-cheat (it shoves
-	-- the car back and crawls). Returns (point, phase, gentle); phase 'arrived'
-	-- means eject now.
+	-- through them: climb to a cruise altitude, cruise across at height, and once
+	-- roughly above the target drop STRAIGHT down onto it. Dropping vertically
+	-- (rather than chasing a horizontal point) is what stops the car oscillating
+	-- back and forth. Returns (point, phase, gentle, horiz); phase 'arrived' means
+	-- we're on the target -- get out and arrest.
 	local function flyPlan(targetPos, exitAt)
 		local c = chassis()
 		local model = c and c.Model
 		if not model then return nil, nil end
 		local here = model:GetPivot().Position
+		if (here - targetPos).Magnitude <= exitAt then return nil, 'arrived', false, 0 end
 		local horiz = Vector3.new(targetPos.X - here.X, 0, targetPos.Z - here.Z).Magnitude
-		if horiz <= exitAt then return nil, 'arrived', false, horiz end -- above them -> bail
 		local cruiseY = targetPos.Y + ((CruiseHeight and CruiseHeight.Value) or 150)
-		if here.Y < cruiseY - 15 then
-			-- climb to clear the rooftops -- gently, fast vertical gets reset
+		if horiz <= 55 then
+			-- roughly above the target -> drop straight down onto it (mostly
+			-- vertical, so the car can't oscillate back and forth horizontally)
+			return Vector3.new(targetPos.X, targetPos.Y + 6, targetPos.Z), 'descending', false, horiz
+		elseif here.Y < cruiseY - 15 then
+			-- climb to clear the rooftops -- gently
 			return Vector3.new(here.X, cruiseY, here.Z), 'climbing', true, horiz
 		else
 			-- cruise horizontally over the target
