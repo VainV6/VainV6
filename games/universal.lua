@@ -6798,21 +6798,21 @@ run(function()
 end)
 
 run(function()
-    -- Dex is a standalone explorer/DataModel browser that builds its own window.
-    -- It's a one-shot action, so it's a BUTTON (not a toggle): clicking it loads
-    -- and opens Dex once.
     local loaded = false
-    vain.Categories.Utility:CreateButton({
+    local DexExplorer
+    DexExplorer = vain.Categories.Utility:CreateModule({
         Name = 'Dex Explorer',
-        Function = function()
-            if loaded then return end
+        Function = function(callback)
+            if not callback then return end
+            if loaded then DexExplorer:Toggle(); return end
             local suc, err = pcall(function()
                 return loadstring(game:HttpGet('https://raw.githubusercontent.com/infyiff/backup/main/dex.lua'))()
             end)
+            DexExplorer:Toggle()
             if suc then
                 loaded = true
             else
-                notif('Dex Explorer', 'Failed to load Dex: ' .. tostring(err), 6, 'warning')
+                notif('Dex Explorer', 'Failed to load: ' .. tostring(err), 6, 'warning')
             end
         end,
         Tooltip = 'Loads and opens the Dex explorer (DataModel browser) in its own window.'

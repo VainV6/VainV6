@@ -5239,6 +5239,18 @@ function mainapi:CreateLegit()
 	self.Legit = {Modules = {}, Categories = {}, Window = {Visible = false}}
 end
 
+local function restackNotifications()
+	local y = 29
+	for _, entry in ipairs(notificationStack) do
+		local n = entry.notification
+		if n and n.Parent then
+			local cur = n.Position
+			n.Position = UDim2.new(cur.X.Scale, cur.X.Offset, 1, -(y + entry.height))
+			y = y + entry.height + 3
+		end
+	end
+end
+
 function mainapi:CreateNotification(title, text, duration, type)
 	if not self.Notifications.Enabled then return end
 	local color = type == 'alert' and Color3.fromRGB(250, 50, 56) or type == 'warning' and Color3.fromRGB(236, 129, 43) or type == 'success' and Color3.fromRGB(80, 200, 100) or Color3.fromRGB(220, 220, 220)
