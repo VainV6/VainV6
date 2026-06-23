@@ -2394,27 +2394,26 @@ run(function()
 		return true
 	end
 
-	-- pick the next waypoint for a 3-phase flight that goes OVER buildings instead
-	-- of straight through them: climb to a cruise altitude, fly across at height,
-	-- and drop straight down onto the target. Returns (point, phase); a phase of
-	-- 'arrived' means we're on top of them and should get out.
+	-- pick the next waypoint for a flight that goes OVER buildings instead of
+	-- through them: climb to a cruise altitude, and cruise across at height. Once
+	-- we're above the target we bail out -- gravity + the on-foot teleport handle
+	-- the drop, because descending the CAR just fights the anti-cheat (it shoves
+	-- the car back and crawls). Returns (point, phase, gentle); phase 'arrived'
+	-- means eject now.
 	local function flyPlan(targetPos, exitAt)
 		local c = chassis()
 		local model = c and c.Model
 		if not model then return nil, nil end
 		local here = model:GetPivot().Position
-		if (here - targetPos).Magnitude <= exitAt then return nil, 'arrived' end
 		local horiz = Vector3.new(targetPos.X - here.X, 0, targetPos.Z - here.Z).Magnitude
-		local cruiseY = targetPos.Y + ((CruiseHeight and CruiseHeight.Value) or 300)
-		if horiz <= 16 then
-			-- above the target -> come straight down onto them
-			return Vector3.new(targetPos.X, targetPos.Y + 8, targetPos.Z), 'descending to'
-		elseif here.Y < cruiseY - 15 then
-			-- still low -> climb straight up first so we clear the rooftops
-			return Vector3.new(here.X, cruiseY, here.Z), 'climbing for'
+		if horiz <= exitAt then return nil, 'arrived' end -- above them -> bail out
+		local cruiseY = targetPos.Y + ((CruiseHeight and CruiseHeight.Value) or 150)
+		if here.Y < cruiseY - 15 then
+			-- climb to clear the rooftops -- gently, fast vertical gets reset
+			return Vector3.new(here.X, cruiseY, here.Z), 'climbing', true
 		else
-			-- at altitude -> cruise horizontally over the target
-			return Vector3.new(targetPos.X, cruiseY, targetPos.Z), 'cruising to'
+			-- cruise horizontally over the target
+			return Vector3.new(targetPos.X, cruiseY, targetPos.Z), 'cruising', false
 		end
 	end
 	local function restoreCar()
@@ -2518,14 +2517,16 @@ run(function()
 									local exitAt = (ExitDist and ExitDist.Value) or 25
 									local dist = (myHrp.Position - thrp.Position).Magnitude
 									if chassis() then
-										local point, phase = flyPlan(thrp.Position, exitAt)
+										local point, phase, gentle = flyPlan(thrp.Position, exitAt)
 										if phase == 'arrived' then
-											status(string.format('arrived (%.0f studs), getting out', dist))
+											status(string.format('above %s -- bailing out', target.Name))
 											restoreCar()
-											exitCar() -- get out of the car
+											exitCar() -- eject; gravity + on-foot TP finish the drop
 											task.wait(0.4)
 										elseif point then
-											if flyToward(point, (FlySpeed and FlySpeed.Value) or 300) then
+											local sp = (FlySpeed and FlySpeed.Value) or 300
+											if gentle then sp = math.min(sp, 110) end -- gentle climb vs anti-cheat
+											if flyToward(point, sp) then
 												status(string.format('%s %s (%.0f studs)', phase, target.Name, dist))
 											else
 												status('in a car but found no part to move it by')
@@ -2559,9 +2560,9 @@ run(function()
 		Suffix = function(v) return v == 1 and 'stud/s' or 'studs/s' end,
 		Tooltip = 'How fast the car flies to the target. Lower is safer vs the position anticheat.' })
 	ExitDist = Bot:CreateSlider({ Name = 'Exit Distance', Min = 8, Max = 80, Default = 25, Suffix = 'studs',
-		Tooltip = 'How close the car gets before you get out to arrest on foot.' })
-	CruiseHeight = Bot:CreateSlider({ Name = 'Cruise Height', Min = 50, Max = 600, Default = 300, Suffix = 'studs',
-		Tooltip = 'How high the car climbs before flying over to the target -- raise it if you clip buildings on the way.' })
+		Tooltip = 'How close (horizontally) the car gets above the target before you bail out and drop on foot.' })
+	CruiseHeight = Bot:CreateSlider({ Name = 'Cruise Height', Min = 50, Max = 600, Default = 150, Suffix = 'studs',
+		Tooltip = 'How high the car climbs to clear buildings. LOWER it if climbing gets reset by the anti-cheat; raise it if you clip tall towers.' })
 	Notify = Bot:CreateToggle({ Name = 'Notify', Default = true,
 		Tooltip = 'Status messages (join police / equip cuffs / no targets).' })
 end)
