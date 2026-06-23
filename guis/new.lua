@@ -5245,6 +5245,11 @@ function mainapi:CreateLegit()
 		m.CreateTextBox = function() return {Value = ''} end
 		m.CreateColorSlider = function() return {Hue=0, Sat=0, Value=0} end
 		m.CreateDropdown = function() return {Value = ''} end
+		m.CreateFont = function() return {Value = ''} end
+		m.CreateOverlay = function() return {} end
+		m.CreateTwoSlider = function() return {Value = 0, Value2 = 0} end
+		m.CreateTargets = function() return {ListEnabled = {}} end
+		m.CreateTextList = function() return {ListEnabled = {}} end
 		m.CreateButton = noop
 		return m
 	end
