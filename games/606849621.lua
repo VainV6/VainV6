@@ -2315,7 +2315,7 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
 	local Bot
-	local MinBounty, FlySpeed, ExitDist, Notify
+	local MinBounty, FlySpeed, ExitDist, CruiseHeight, Notify
 	local httpService = cloneref(game:GetService('HttpService'))
 
 	local function teamOf(plr)
@@ -2384,11 +2384,38 @@ run(function()
 			c.Traction = 0
 		end
 		local here = model:GetPivot().Position
-		local dir = point - here
-		if dir.Magnitude > 1 then dir = dir.Unit end
-		engine.AssemblyLinearVelocity = dir * speed
+		local off = point - here
+		local d = off.Magnitude
+		local dir = d > 0.5 and off.Unit or Vector3.zero
+		-- ease off within ~speed/8 studs so we settle on the waypoint instead of
+		-- overshooting it and oscillating
+		engine.AssemblyLinearVelocity = dir * math.min(speed, d * 8)
 		engine.AssemblyAngularVelocity = Vector3.zero
 		return true
+	end
+
+	-- pick the next waypoint for a 3-phase flight that goes OVER buildings instead
+	-- of straight through them: climb to a cruise altitude, fly across at height,
+	-- and drop straight down onto the target. Returns (point, phase); a phase of
+	-- 'arrived' means we're on top of them and should get out.
+	local function flyPlan(targetPos, exitAt)
+		local c = chassis()
+		local model = c and c.Model
+		if not model then return nil, nil end
+		local here = model:GetPivot().Position
+		if (here - targetPos).Magnitude <= exitAt then return nil, 'arrived' end
+		local horiz = Vector3.new(targetPos.X - here.X, 0, targetPos.Z - here.Z).Magnitude
+		local cruiseY = targetPos.Y + ((CruiseHeight and CruiseHeight.Value) or 300)
+		if horiz <= 16 then
+			-- above the target -> come straight down onto them
+			return Vector3.new(targetPos.X, targetPos.Y + 8, targetPos.Z), 'descending to'
+		elseif here.Y < cruiseY - 15 then
+			-- still low -> climb straight up first so we clear the rooftops
+			return Vector3.new(here.X, cruiseY, here.Z), 'climbing for'
+		else
+			-- at altitude -> cruise horizontally over the target
+			return Vector3.new(targetPos.X, cruiseY, targetPos.Z), 'cruising to'
+		end
 	end
 	local function restoreCar()
 		for c, was in driveSaved do pcall(function() c.LaunchSpeedMult = was end) end
@@ -2491,17 +2518,18 @@ run(function()
 									local exitAt = (ExitDist and ExitDist.Value) or 25
 									local dist = (myHrp.Position - thrp.Position).Magnitude
 									if chassis() then
-										if dist > exitAt then
-											if flyToward(thrp.Position + Vector3.new(0, 8, 0), (FlySpeed and FlySpeed.Value) or 300) then
-												status(string.format('flying to %s (%.0f studs)', target.Name, dist))
-											else
-												status('in a car but found no part to move it by')
-											end
-										else
+										local point, phase = flyPlan(thrp.Position, exitAt)
+										if phase == 'arrived' then
 											status(string.format('arrived (%.0f studs), getting out', dist))
 											restoreCar()
 											exitCar() -- get out of the car
 											task.wait(0.4)
+										elseif point then
+											if flyToward(point, (FlySpeed and FlySpeed.Value) or 300) then
+												status(string.format('%s %s (%.0f studs)', phase, target.Name, dist))
+											else
+												status('in a car but found no part to move it by')
+											end
 										end
 									elseif cuffsOut() then
 										status(string.format('on foot, snapping to %s', target.Name))
@@ -2532,6 +2560,8 @@ run(function()
 		Tooltip = 'How fast the car flies to the target. Lower is safer vs the position anticheat.' })
 	ExitDist = Bot:CreateSlider({ Name = 'Exit Distance', Min = 8, Max = 80, Default = 25, Suffix = 'studs',
 		Tooltip = 'How close the car gets before you get out to arrest on foot.' })
+	CruiseHeight = Bot:CreateSlider({ Name = 'Cruise Height', Min = 50, Max = 600, Default = 300, Suffix = 'studs',
+		Tooltip = 'How high the car climbs before flying over to the target -- raise it if you clip buildings on the way.' })
 	Notify = Bot:CreateToggle({ Name = 'Notify', Default = true,
 		Tooltip = 'Status messages (join police / equip cuffs / no targets).' })
 end)
