@@ -2438,15 +2438,21 @@ run(function()
 		return false
 	end
 	local function exitCar()
-		local specs = jb.CircleAction and jb.CircleAction.Specs
-		if type(specs) == 'table' then
-			for _, spec in specs do
-				if spec.ShouldEject and type(spec.Callback) == 'function' then
-					if pcall(function() spec:Callback(true) end) then return end
-				end
-			end
+		-- get OUT of our OWN car. (Note: the CircleAction ShouldEject specs eject
+		-- OTHER players from their vehicles -- using them here can boot the criminal
+		-- instead of us.) The game maps a jump to the get-out action (OnJump ->
+		-- GetOut), so the build-proof exit is to make our own character jump/unseat;
+		-- the exit remotes are fired as backups in case OnJump isn't state-bound.
+		local char = lplr.Character
+		local hum = char and char:FindFirstChildOfClass('Humanoid')
+		if hum then
+			pcall(function() hum.Sit = false end)
+			pcall(function() hum.Jump = true end)
+			pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
 		end
 		pcall(function() jb:FireServer('GetOut') end)
+		local c = chassis()
+		if c and c.Model then pcall(function() jb:FireServer('Eject', c.Model) end) end
 	end
 	local function cuffsOut()
 		local eq = jb.ItemSystemController:GetLocalEquipped()
