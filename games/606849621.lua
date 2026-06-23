@@ -2520,26 +2520,41 @@ run(function()
 		return (h and h.Sit) or false
 	end
 
-	-- ATTACH to the target instead of teleporting onto them each frame: a weld holds
-	-- us a few studs away so we follow them through physics (continuous motion the
-	-- anti-cheat accepts) rather than CFrame jumps (which it flags). PlatformStand
-	-- stops our Humanoid from fighting the weld.
-	local attachWeld
+	-- ATTACH to the target instead of teleporting onto them each frame. An
+	-- AlignPosition forces ONLY our own part toward an attachment on the target, so
+	-- WE follow THEM. (A weld would merge us into one assembly and -- because we own
+	-- our character client-side -- drag the TARGET onto us instead, which only moves
+	-- them on our screen.) It's springy (not rigid), so it reads as physics motion
+	-- rather than a CFrame teleport, and PlatformStand stops our Humanoid fighting it.
+	local attachParts
 	local function detach()
-		if attachWeld then pcall(function() attachWeld:Destroy() end) attachWeld = nil end
+		if attachParts then
+			pcall(function() attachParts.align:Destroy() end)
+			pcall(function() attachParts.a0:Destroy() end)
+			pcall(function() attachParts.a1:Destroy() end)
+			attachParts = nil
+		end
 		local hum = lplr.Character and lplr.Character:FindFirstChildOfClass('Humanoid')
 		if hum then pcall(function() hum.PlatformStand = false end) end
 	end
 	local function attachTo(myHrp, thrp)
-		if attachWeld and attachWeld.Parent and attachWeld.Part1 == thrp then return end
+		if attachParts and attachParts.target == thrp and attachParts.align.Parent then return end
 		detach()
-		local w = Instance.new('Weld')
-		w.Name = 'VainArrest'
-		w.Part0 = myHrp
-		w.Part1 = thrp
-		w.C0 = CFrame.new(0, 0, 3) -- ride a few studs off them, in arrest range
-		w.Parent = myHrp
-		attachWeld = w
+		local a0 = Instance.new('Attachment')
+		a0.Parent = myHrp
+		local a1 = Instance.new('Attachment')
+		a1.Position = Vector3.new(0, 0, 3) -- sit ~3 studs off them, in arrest range
+		a1.Parent = thrp
+		local align = Instance.new('AlignPosition')
+		align.Attachment0 = a0
+		align.Attachment1 = a1
+		align.RigidityEnabled = false
+		align.ApplyAtCenterOfMass = true
+		align.MaxForce = 1e6
+		align.MaxVelocity = 300 -- studs/s: fast follow, but not a teleport
+		align.Responsiveness = 120
+		align.Parent = myHrp
+		attachParts = { align = align, a0 = a0, a1 = a1, target = thrp }
 		local hum = lplr.Character and lplr.Character:FindFirstChildOfClass('Humanoid')
 		if hum then pcall(function() hum.PlatformStand = true end) end
 	end
@@ -2661,19 +2676,28 @@ run(function()
 							once('team', 'Join the Police team first, and spawn a car + get in.', 6, 'alert')
 						else
 							notified.team = nil
-							-- stay locked on one criminal for at least Hold Time seconds instead
-							-- of flip-flopping between bounties every frame
+							-- Stay locked on ONE criminal. Only drop the lock when the chase is really
+							-- over -- NOT because the target's character momentarily streamed out / lost
+							-- its Humanoid (that flicker made it hop from target to target). Hold Time is
+							-- the longest we stay on a stubborn one before giving up.
 							local hold = (HoldTime and HoldTime.Value) or 5
-							if locked and not lockValid(locked) then detach(); locked = nil end -- arrested / gone
-							if locked and tick() - lockSince > hold then
-								skipUntil[locked.UserId] = tick() + 12 -- gave it a fair shot; park them briefly
-								detach(); locked = nil
+							if locked then
+								local lchar = locked.Character
+								local cuffed = lchar and lchar:GetAttribute('HasHandcuffs')
+								local timedout = tick() - lockSince > hold
+								if (not locked.Parent) or cuffed or timedout then
+									if timedout and locked.Parent and not cuffed then
+										skipUntil[locked.UserId] = tick() + 12 -- gave it a fair shot; park briefly
+									end
+									detach(); locked = nil
+								end
+							end
+							if not locked then
+								locked = bestTarget()
+								lockSince = tick()
+								if not locked then detach() end
 							end
 							local target = locked
-							if not target then
-								target = bestTarget()
-								if target then locked, lockSince = target, tick() end
-							end
 							if not target then
 								detach()
 								once('none', 'No bounty target >= your minimum here. (Server-hop is coming next.)', 6)
