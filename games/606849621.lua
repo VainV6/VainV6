@@ -2369,21 +2369,12 @@ run(function()
 	-- chassis doesn't fight us -- same approach as the Vehicle Fly module)
 	local driveSaved = setmetatable({}, {__mode = 'k'})
 	local tractionSaved = setmetatable({}, {__mode = 'k'})
-	local flyMover
-	local function clearMover()
-		if flyMover then pcall(function() flyMover:Destroy() end) flyMover = nil end
-	end
 	local function flyToward(point, speed)
 		local c = chassis()
 		local model = c and c.Model
 		local engine = model and (model:FindFirstChild('Engine') or model.PrimaryPart
 			or model:FindFirstChildWhichIsA('BasePart', true))
-		if not engine then return nil end
-		local prevSpeed = engine.AssemblyLinearVelocity.Magnitude -- last frame's result (did it stick?)
-		-- unanchor everything so the assembly can actually be moved
-		for _, p in model:GetDescendants() do
-			if p:IsA('BasePart') and p.Anchored then p.Anchored = false end
-		end
+		if not engine then return false end
 		if type(c.LaunchSpeedMult) == 'number' then
 			if driveSaved[c] == nil then driveSaved[c] = c.LaunchSpeedMult end
 			c.LaunchSpeedMult = 0
@@ -2395,24 +2386,11 @@ run(function()
 		local here = model:GetPivot().Position
 		local dir = point - here
 		if dir.Magnitude > 1 then dir = dir.Unit end
-		-- Setting AssemblyLinearVelocity alone got re-zeroed by the chassis every
-		-- step (car 0/s). A BodyVelocity with infinite force pins the velocity no
-		-- matter what the chassis does, so the car actually flies.
-		if not flyMover or flyMover.Parent ~= engine then
-			clearMover()
-			flyMover = Instance.new('BodyVelocity')
-			flyMover.Name = 'VainFly'
-			flyMover.MaxForce = Vector3.new(1, 1, 1) * math.huge
-			flyMover.P = 12500
-			flyMover.Parent = engine
-		end
-		flyMover.Velocity = dir * speed
 		engine.AssemblyLinearVelocity = dir * speed
 		engine.AssemblyAngularVelocity = Vector3.zero
-		return prevSpeed
+		return true
 	end
 	local function restoreCar()
-		clearMover()
 		for c, was in driveSaved do pcall(function() c.LaunchSpeedMult = was end) end
 		for c, was in tractionSaved do pcall(function() c.Traction = was end) end
 		table.clear(driveSaved); table.clear(tractionSaved)
@@ -2465,6 +2443,15 @@ run(function()
 		Function = function(callback)
 			if callback then
 				table.clear(notified)
+				-- Vehicle Fly forces the car's velocity from WASD (zero when you're not
+				-- pressing keys), which overrides our flying -- turn it off if it's on.
+				do
+					local vf = vain.Modules and vain.Modules['Vehicle Fly']
+					if vf and vf.Enabled then
+						pcall(function() vf:Toggle() end)
+						notif('Auto Arrest Bot', 'Turned off Vehicle Fly (it was overriding my flying).', 5)
+					end
+				end
 				-- one-time diagnostic: confirm we can read the bounty board and how
 				-- many of those bounties are criminals actually in this server
 				do
@@ -2505,16 +2492,8 @@ run(function()
 									local dist = (myHrp.Position - thrp.Position).Magnitude
 									if chassis() then
 										if dist > exitAt then
-											-- climb to a cruise altitude above the target so we lift off
-											-- the ground and clear obstacles, blending back down as the
-											-- horizontal gap closes
-											local horiz = (Vector3.new(thrp.Position.X, 0, thrp.Position.Z)
-												- Vector3.new(myHrp.Position.X, 0, myHrp.Position.Z)).Magnitude
-											local aimY = thrp.Position.Y + math.clamp(horiz * 0.12, 8, 220)
-											local sp = flyToward(Vector3.new(thrp.Position.X, aimY, thrp.Position.Z),
-												(FlySpeed and FlySpeed.Value) or 300)
-											if sp then
-												status(string.format('flying to %s (%.0f studs, car %.0f/s)', target.Name, dist, sp))
+											if flyToward(thrp.Position + Vector3.new(0, 8, 0), (FlySpeed and FlySpeed.Value) or 300) then
+												status(string.format('flying to %s (%.0f studs)', target.Name, dist))
 											else
 												status('in a car but found no part to move it by')
 											end
