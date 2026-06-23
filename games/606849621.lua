@@ -2323,15 +2323,23 @@ run(function()
 		return (tv and tv.Value) or (plr and plr.Team and plr.Team.Name) or nil
 	end
 
-	-- bounties live in ReplicatedStorage.Bounty.BountyBoardService.Bounties (or the
-	-- BountyData JSON), each entry { UserId, Bounty }
+	-- bounties live in the BountyBoardService module's live .Bounties array, each
+	-- entry { UserId, Bounty }. Game updates reshuffle the ReplicatedStorage layout,
+	-- so don't hardcode the path -- find the module wherever it is now. Falls back to
+	-- the BountyData JSON value.
 	local function bountyEntries()
-		local ok, svc = pcall(function() return require(replicatedStorage.Bounty.BountyBoardService) end)
-		if ok and type(svc) == 'table' and type(svc.Bounties) == 'table' then return svc.Bounties end
-		local data = replicatedStorage:FindFirstChild('BountyData')
-		if data then
+		local mod = (replicatedStorage:FindFirstChild('Bounty') and replicatedStorage.Bounty:FindFirstChild('BountyBoardService'))
+			or replicatedStorage:FindFirstChild('BountyBoardService', true)
+		if mod and mod:IsA('ModuleScript') then
+			local ok, svc = pcall(require, mod)
+			if ok and type(svc) == 'table' and type(svc.Bounties) == 'table' and #svc.Bounties > 0 then
+				return svc.Bounties
+			end
+		end
+		local data = replicatedStorage:FindFirstChild('BountyData', true)
+		if data and data:IsA('ValueBase') then
 			local good, dec = pcall(function() return httpService:JSONDecode(data.Value) end)
-			if good and type(dec) == 'table' then return dec end
+			if good and type(dec) == 'table' and next(dec) ~= nil then return dec end
 		end
 		return {}
 	end
@@ -2667,7 +2675,8 @@ run(function()
 					-- when the car first got near (above) the target, so we can bail out
 					-- even if the anti-cheat jitter stops it closing the last few studs
 					local nearSince
-					local locked, lockSince -- the criminal we're committed to (>= Hold Time)
+					local locked, lockSince -- the criminal we're committed to
+					local progressAt -- last time we were CLOSE to the locked target (resets the give-up)
 					repeat
 						if not entitylib.isAlive then
 							-- wait for respawn
@@ -2684,10 +2693,10 @@ run(function()
 							if locked then
 								local lchar = locked.Character
 								local cuffed = lchar and lchar:GetAttribute('HasHandcuffs')
-								local timedout = tick() - lockSince > hold
-								if (not locked.Parent) or cuffed or timedout then
-									if timedout and locked.Parent and not cuffed then
-										skipUntil[locked.UserId] = tick() + 12 -- gave it a fair shot; park briefly
+								local stuck = tick() - (progressAt or lockSince) > hold
+								if (not locked.Parent) or cuffed or stuck then
+									if stuck and locked.Parent and not cuffed then
+										skipUntil[locked.UserId] = tick() + 12 -- could not reach them; park briefly
 									end
 									detach(); locked = nil
 								end
@@ -2695,6 +2704,7 @@ run(function()
 							if not locked then
 								locked = bestTarget()
 								lockSince = tick()
+								progressAt = tick()
 								if not locked then detach() end
 							end
 							local target = locked
@@ -2709,6 +2719,9 @@ run(function()
 								if thrp and myHrp then
 									local exitAt = (ExitDist and ExitDist.Value) or 25
 									local dist = (myHrp.Position - thrp.Position).Magnitude
+									-- we are making progress while driving in or already on them; only the
+									-- give-up timer (target unreachable on foot) should run when stuck far away
+									if dist <= 40 or chassis() then progressAt = tick() end
 									local tInVeh = inVehicle(tchar)
 									-- kick the criminal out of their car as soon as we're in range
 									-- (you can't cuff a seated player; this also stops them driving
