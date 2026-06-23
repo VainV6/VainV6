@@ -29,6 +29,5 @@ export interface WhitelistRow {
   tier: TierValue;
   created_at: number;
   updated_at: number;
-  last_seen: number | null;
 }
 
