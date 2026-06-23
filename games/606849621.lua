@@ -2307,4 +2307,189 @@ run(function()
 		Tooltip = 'Enables most doors to be walked through'
 	})
 end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
+--  AUTO ARREST BOT: fly your police car to the highest-bounty criminal, get out,
+--  and arrest them -- all build-proof (no obfuscated remote ids needed). Set up
+--  once: join Police, spawn a car, get in, and hold Handcuffs; it does the hunt.
+-- ══════════════════════════════════════════════════════════════════════════════
+run(function()
+	local Bot
+	local MinBounty, FlySpeed, ExitDist, Notify
+	local httpService = cloneref(game:GetService('HttpService'))
+
+	local function teamOf(plr)
+		local tv = plr and plr:FindFirstChild('TeamValue')
+		return (tv and tv.Value) or (plr and plr.Team and plr.Team.Name) or nil
+	end
+
+	-- bounties live in ReplicatedStorage.Bounty.BountyBoardService.Bounties (or the
+	-- BountyData JSON), each entry { UserId, Bounty }
+	local function bountyEntries()
+		local ok, svc = pcall(function() return require(replicatedStorage.Bounty.BountyBoardService) end)
+		if ok and type(svc) == 'table' and type(svc.Bounties) == 'table' then return svc.Bounties end
+		local data = replicatedStorage:FindFirstChild('BountyData')
+		if data then
+			local good, dec = pcall(function() return httpService:JSONDecode(data.Value) end)
+			if good and type(dec) == 'table' then return dec end
+		end
+		return {}
+	end
+
+	-- highest-bounty criminal at/above the threshold, alive, out of jail, not cuffed
+	local function bestTarget()
+		local min = (MinBounty and MinBounty.Value) or 0
+		local best, bestB
+		for _, e in bountyEntries() do
+			if type(e) == 'table' and e.UserId and (e.Bounty or 0) >= min then
+				local plr = playersService:GetPlayerByUserId(e.UserId)
+				local char = plr and plr ~= lplr and plr.Character
+				local hum = char and char:FindFirstChildOfClass('Humanoid')
+				local hrp = char and char:FindFirstChild('HumanoidRootPart')
+				if hrp and hum and hum.Health > 0 and teamOf(plr) == 'Criminal'
+					and not char:GetAttribute('HasHandcuffs') then
+					if not bestB or e.Bounty > bestB then best, bestB = plr, e.Bounty end
+				end
+			end
+		end
+		return best, bestB
+	end
+
+	-- local car chassis packet (nil unless you're the driver)
+	local function chassis()
+		local vc = jb.VehicleController
+		if not vc or not vc.GetLocalVehiclePacket then return nil end
+		local ok, packet = pcall(vc.GetLocalVehiclePacket)
+		if ok and type(packet) == 'table' and not packet.Passenger then return packet end
+		return nil
+	end
+
+	-- velocity-fly the car toward a world point (drive/traction neutralised so the
+	-- chassis doesn't fight us -- same approach as the Vehicle Fly module)
+	local driveSaved = setmetatable({}, {__mode = 'k'})
+	local tractionSaved = setmetatable({}, {__mode = 'k'})
+	local function flyToward(point, speed)
+		local c = chassis()
+		local model = c and c.Model
+		local engine = model and model:FindFirstChild('Engine')
+		if not engine then return false end
+		if type(c.LaunchSpeedMult) == 'number' then
+			if driveSaved[c] == nil then driveSaved[c] = c.LaunchSpeedMult end
+			c.LaunchSpeedMult = 0
+		end
+		if type(c.Traction) == 'number' then
+			if tractionSaved[c] == nil then tractionSaved[c] = c.Traction end
+			c.Traction = 0
+		end
+		local here = model:GetPivot().Position
+		local dir = point - here
+		if dir.Magnitude > 1 then dir = dir.Unit end
+		engine.AssemblyLinearVelocity = dir * speed
+		engine.AssemblyAngularVelocity = Vector3.zero
+		return true
+	end
+	local function restoreCar()
+		for c, was in driveSaved do pcall(function() c.LaunchSpeedMult = was end) end
+		for c, was in tractionSaved do pcall(function() c.Traction = was end) end
+		table.clear(driveSaved); table.clear(tractionSaved)
+	end
+
+	-- build-proof: invoke the game's OWN arrest / eject CircleAction callbacks
+	local function callArrest(name)
+		local specs = jb.CircleAction and jb.CircleAction.Specs
+		if type(specs) ~= 'table' then return false end
+		for _, spec in specs do
+			if spec.PlayerName == name and spec.ShouldArrest and type(spec.Callback) == 'function' then
+				return (pcall(function() spec:Callback(true) end))
+			end
+		end
+		return false
+	end
+	local function exitCar()
+		local specs = jb.CircleAction and jb.CircleAction.Specs
+		if type(specs) == 'table' then
+			for _, spec in specs do
+				if spec.ShouldEject and type(spec.Callback) == 'function' then
+					if pcall(function() spec:Callback(true) end) then return end
+				end
+			end
+		end
+		pcall(function() jb:FireServer('GetOut') end)
+	end
+	local function cuffsOut()
+		local eq = jb.ItemSystemController:GetLocalEquipped()
+		return (eq and eq.__ClassName == 'Handcuffs') or false
+	end
+
+	local notified = {}
+	local function once(key, ...)
+		if Notify and Notify.Enabled and not notified[key] then
+			notified[key] = true
+			notif('Auto Arrest Bot', ...)
+		end
+	end
+
+	Bot = vain.Categories.Blatant:CreateModule({
+		Name = 'Auto Arrest Bot',
+		Function = function(callback)
+			if callback then
+				table.clear(notified)
+				task.spawn(function()
+					repeat
+						if not entitylib.isAlive then
+							-- wait for respawn
+						elseif teamOf(lplr) ~= 'Police' then
+							once('team', 'Join the Police team first (spawn a car + hold Handcuffs).', 6, 'alert')
+						else
+							notified.team = nil
+							local target = bestTarget()
+							if not target then
+								once('none', 'No bounty target >= your minimum here. (Server-hop is coming next.)', 6)
+							else
+								notified.none = nil
+								local tchar = target.Character
+								local thrp = tchar and tchar:FindFirstChild('HumanoidRootPart')
+								local myHrp = entitylib.character and entitylib.character.RootPart
+								if thrp and myHrp then
+									local exitAt = (ExitDist and ExitDist.Value) or 25
+									if chassis() then
+										if (myHrp.Position - thrp.Position).Magnitude > exitAt then
+											flyToward(thrp.Position + Vector3.new(0, 8, 0), (FlySpeed and FlySpeed.Value) or 300)
+										else
+											restoreCar()
+											exitCar() -- arrived: get out of the car
+											task.wait(0.4)
+										end
+									elseif cuffsOut() then
+										-- on foot: snap onto the target and arrest until it lands
+										myHrp.CFrame = thrp.CFrame * CFrame.new(0, 0, 2.5)
+										callArrest(target.Name)
+									else
+										once('cuffs', 'Equip your Handcuffs so I can arrest.', 5, 'alert')
+									end
+									if cuffsOut() then notified.cuffs = nil end
+								end
+							end
+						end
+						runService.Heartbeat:Wait()
+					until not Bot.Enabled
+					restoreCar()
+				end)
+			else
+				restoreCar()
+			end
+		end,
+		Tooltip = 'Police bounty-hunter: flies your car to the highest-bounty criminal, gets out, and arrests them -- build-proof (no obfuscated remotes). Set up once: join Police, spawn a car, get in, hold Handcuffs. Server-hop on empty servers + auto-join/spawn come next.'
+	})
+
+	MinBounty = Bot:CreateSlider({ Name = 'Min Bounty', Min = 0, Max = 50000, Default = 2000, Suffix = '$',
+		Tooltip = 'Only chase criminals with at least this much bounty.' })
+	FlySpeed = Bot:CreateSlider({ Name = 'Fly Speed', Min = 50, Max = 1000, Default = 300,
+		Suffix = function(v) return v == 1 and 'stud/s' or 'studs/s' end,
+		Tooltip = 'How fast the car flies to the target. Lower is safer vs the position anticheat.' })
+	ExitDist = Bot:CreateSlider({ Name = 'Exit Distance', Min = 8, Max = 80, Default = 25, Suffix = 'studs',
+		Tooltip = 'How close the car gets before you get out to arrest on foot.' })
+	Notify = Bot:CreateToggle({ Name = 'Notify', Default = true,
+		Tooltip = 'Status messages (join police / equip cuffs / no targets).' })
+end)
 	
