@@ -2470,6 +2470,35 @@ run(function()
 		end
 		return false
 	end
+
+	-- eject the TARGET from their car. The game's arrest test rejects seated
+	-- players, so an in-car criminal can't be cuffed until they're kicked out.
+	-- Build-proof: fire the ShouldEject spec whose part is in their vehicle, else
+	-- the Eject alias with the vehicle model (getVehicle is the file-scope helper).
+	local lastEject = 0
+	local function ejectTarget(plr)
+		if tick() - lastEject < 0.3 then return end -- don't spam the eject remote
+		local veh = getVehicle({ Player = plr })
+		if not veh then return end
+		lastEject = tick()
+		local specs = jb.CircleAction and jb.CircleAction.Specs
+		if type(specs) == 'table' then
+			for _, spec in specs do
+				if spec.ShouldEject and type(spec.Callback) == 'function'
+					and spec.Part and spec.Part:IsDescendantOf(veh) then
+					if pcall(function() spec:Callback(true) end) then return end
+				end
+			end
+		end
+		pcall(function() jb:FireServer('Eject', veh) end)
+	end
+	-- is this character currently seated in / attributed to a vehicle?
+	local function inVehicle(char)
+		if not char then return false end
+		if char:GetAttribute('InVehicle') then return true end
+		local h = char:FindFirstChildOfClass('Humanoid')
+		return (h and h.Sit) or false
+	end
 	local virtualInput = cloneref(game:GetService('VirtualInputManager'))
 	local function exitCar()
 		-- get OUT of our OWN car. (Note: the CircleAction ShouldEject specs eject
@@ -2596,6 +2625,11 @@ run(function()
 								if thrp and myHrp then
 									local exitAt = (ExitDist and ExitDist.Value) or 25
 									local dist = (myHrp.Position - thrp.Position).Magnitude
+									local tInVeh = inVehicle(tchar)
+									-- kick the criminal out of their car as soon as we're in range
+									-- (you can't cuff a seated player; this also stops them driving
+									-- off, so the car can pin them and the on-foot hop stays tiny)
+									if tInVeh and dist <= 70 then ejectTarget(target) end
 									if chassis() then
 										local point, phase, gentle, horiz = flyPlan(thrp.Position, exitAt)
 										-- stall backstop: once we've hovered near (above) the target
@@ -2637,7 +2671,10 @@ run(function()
 										else
 											myHrp.CFrame = CFrame.new(myHrp.Position + gap.Unit * step, goal.Position)
 										end
-										if not cuffsOut() then
+										if tInVeh then
+											-- ejectTarget already fired above; wait for them to drop out
+											status(string.format('ejecting %s from their car', target.Name))
+										elseif not cuffsOut() then
 											equipCuffs() -- auto-equip the cuffs while we close in
 											status(string.format('closing on %s -- equipping cuffs', target.Name))
 										elseif gap.Magnitude <= step then
