@@ -2406,14 +2406,14 @@ run(function()
 		if not model then return nil, nil end
 		local here = model:GetPivot().Position
 		local horiz = Vector3.new(targetPos.X - here.X, 0, targetPos.Z - here.Z).Magnitude
-		if horiz <= exitAt then return nil, 'arrived' end -- above them -> bail out
+		if horiz <= exitAt then return nil, 'arrived', false, horiz end -- above them -> bail
 		local cruiseY = targetPos.Y + ((CruiseHeight and CruiseHeight.Value) or 150)
 		if here.Y < cruiseY - 15 then
 			-- climb to clear the rooftops -- gently, fast vertical gets reset
-			return Vector3.new(here.X, cruiseY, here.Z), 'climbing', true
+			return Vector3.new(here.X, cruiseY, here.Z), 'climbing', true, horiz
 		else
 			-- cruise horizontally over the target
-			return Vector3.new(targetPos.X, cruiseY, targetPos.Z), 'cruising', false
+			return Vector3.new(targetPos.X, cruiseY, targetPos.Z), 'cruising', false, horiz
 		end
 	end
 	local function restoreCar()
@@ -2498,6 +2498,9 @@ run(function()
 						(#entries > 0) and nil or 'warning')
 				end
 				task.spawn(function()
+					-- when the car first got near (above) the target, so we can bail out
+					-- even if the anti-cheat jitter stops it closing the last few studs
+					local nearSince
 					repeat
 						if not entitylib.isAlive then
 							-- wait for respawn
@@ -2517,11 +2520,23 @@ run(function()
 									local exitAt = (ExitDist and ExitDist.Value) or 25
 									local dist = (myHrp.Position - thrp.Position).Magnitude
 									if chassis() then
-										local point, phase, gentle = flyPlan(thrp.Position, exitAt)
-										if phase == 'arrived' then
-											status(string.format('above %s -- bailing out', target.Name))
+										local point, phase, gentle, horiz = flyPlan(thrp.Position, exitAt)
+										-- stall backstop: once we've hovered near (above) the target
+										-- for a bit without closing the last studs (anti-cheat jitter
+										-- on the car's altitude), bail out anyway -- the on-foot
+										-- teleport finishes it
+										if horiz and horiz <= 80 then
+											nearSince = nearSince or tick()
+										elseif not horiz or horiz > 150 then
+											nearSince = nil
+										end
+										local stalled = nearSince and (tick() - nearSince > 2.5)
+										if phase == 'arrived' or stalled then
+											status(string.format(stalled and 'over %s, close enough -- bailing out'
+												or 'above %s -- bailing out', target.Name))
 											restoreCar()
 											exitCar() -- eject; gravity + on-foot TP finish the drop
+											nearSince = nil
 											task.wait(0.4)
 										elseif point then
 											local sp = (FlySpeed and FlySpeed.Value) or 300
@@ -2533,6 +2548,7 @@ run(function()
 											end
 										end
 									elseif cuffsOut() then
+										nearSince = nil -- out of the car now
 										status(string.format('on foot, snapping to %s', target.Name))
 										myHrp.CFrame = thrp.CFrame * CFrame.new(0, 0, 2.5)
 										callArrest(target.Name)
