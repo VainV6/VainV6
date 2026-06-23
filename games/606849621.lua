@@ -2315,7 +2315,7 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
 	local Bot
-	local MinBounty, FlySpeed, ExitDist, CruiseHeight, StepSize, Notify
+	local MinBounty, FlySpeed, ExitDist, CruiseHeight, HoldTime, Notify
 	local httpService = cloneref(game:GetService('HttpService'))
 
 	local function teamOf(plr)
@@ -2361,13 +2361,18 @@ run(function()
 		return reachable
 	end
 
+	-- targets we gave up on for a while (couldn't reach / arrest in time)
+	local skipUntil = {}
+
 	-- highest-bounty criminal at/above the threshold, alive, out of jail, not cuffed,
-	-- and reachable from the air (skip ones sealed underground / under a roof)
+	-- reachable from the air, and not on the temporary skip list
 	local function bestTarget()
 		local min = (MinBounty and MinBounty.Value) or 0
+		local now = tick()
 		local cands = {}
 		for _, e in bountyEntries() do
-			if type(e) == 'table' and e.UserId and (e.Bounty or 0) >= min then
+			if type(e) == 'table' and e.UserId and (e.Bounty or 0) >= min
+				and not (skipUntil[e.UserId] and skipUntil[e.UserId] > now) then
 				local plr = playersService:GetPlayerByUserId(e.UserId)
 				local char = plr and plr ~= lplr and plr.Character
 				local hum = char and char:FindFirstChildOfClass('Humanoid')
@@ -2387,6 +2392,17 @@ run(function()
 			end
 		end
 		return nil
+	end
+
+	-- is a locked target still worth chasing? (in server, alive, criminal, uncuffed)
+	local function lockValid(plr)
+		if not plr or not plr.Parent then return false end
+		local char = plr.Character
+		local hum = char and char:FindFirstChildOfClass('Humanoid')
+		if not (char and hum and hum.Health > 0) then return false end
+		if char:GetAttribute('HasHandcuffs') then return false end
+		local tm = teamOf(plr)
+		return (tm == 'Prisoner' or tm == 'Criminal')
 	end
 
 	-- local car chassis packet (nil unless you're the driver)
@@ -2459,16 +2475,20 @@ run(function()
 		table.clear(driveSaved); table.clear(tractionSaved)
 	end
 
-	-- build-proof: invoke the game's OWN arrest / eject CircleAction callbacks
-	local function callArrest(name)
+	-- build-proof: invoke the game's OWN arrest CircleAction callback, and also fire
+	-- the Arrest alias so a target that just became arrestable is cuffed immediately
+	local function callArrest(plr)
+		local name = plr.Name
 		local specs = jb.CircleAction and jb.CircleAction.Specs
-		if type(specs) ~= 'table' then return false end
-		for _, spec in specs do
-			if spec.PlayerName == name and spec.ShouldArrest and type(spec.Callback) == 'function' then
-				return (pcall(function() spec:Callback(true) end))
+		if type(specs) == 'table' then
+			for _, spec in specs do
+				if spec.PlayerName == name and spec.ShouldArrest and type(spec.Callback) == 'function' then
+					if pcall(function() spec:Callback(true) end) then return true end
+				end
 			end
 		end
-		return false
+		pcall(function() jb:FireServer('Arrest', plr) end)
+		return true
 	end
 
 	-- eject the TARGET from their car. The game's arrest test rejects seated
@@ -2499,6 +2519,31 @@ run(function()
 		local h = char:FindFirstChildOfClass('Humanoid')
 		return (h and h.Sit) or false
 	end
+
+	-- ATTACH to the target instead of teleporting onto them each frame: a weld holds
+	-- us a few studs away so we follow them through physics (continuous motion the
+	-- anti-cheat accepts) rather than CFrame jumps (which it flags). PlatformStand
+	-- stops our Humanoid from fighting the weld.
+	local attachWeld
+	local function detach()
+		if attachWeld then pcall(function() attachWeld:Destroy() end) attachWeld = nil end
+		local hum = lplr.Character and lplr.Character:FindFirstChildOfClass('Humanoid')
+		if hum then pcall(function() hum.PlatformStand = false end) end
+	end
+	local function attachTo(myHrp, thrp)
+		if attachWeld and attachWeld.Parent and attachWeld.Part1 == thrp then return end
+		detach()
+		local w = Instance.new('Weld')
+		w.Name = 'VainArrest'
+		w.Part0 = myHrp
+		w.Part1 = thrp
+		w.C0 = CFrame.new(0, 0, 3) -- ride a few studs off them, in arrest range
+		w.Parent = myHrp
+		attachWeld = w
+		local hum = lplr.Character and lplr.Character:FindFirstChildOfClass('Humanoid')
+		if hum then pcall(function() hum.PlatformStand = true end) end
+	end
+
 	local virtualInput = cloneref(game:GetService('VirtualInputManager'))
 	local function exitCar()
 		-- get OUT of our OWN car. (Note: the CircleAction ShouldEject specs eject
@@ -2607,15 +2652,30 @@ run(function()
 					-- when the car first got near (above) the target, so we can bail out
 					-- even if the anti-cheat jitter stops it closing the last few studs
 					local nearSince
+					local locked, lockSince -- the criminal we're committed to (>= Hold Time)
 					repeat
 						if not entitylib.isAlive then
 							-- wait for respawn
 						elseif teamOf(lplr) ~= 'Police' then
+							detach()
 							once('team', 'Join the Police team first, and spawn a car + get in.', 6, 'alert')
 						else
 							notified.team = nil
-							local target = bestTarget()
+							-- stay locked on one criminal for at least Hold Time seconds instead
+							-- of flip-flopping between bounties every frame
+							local hold = (HoldTime and HoldTime.Value) or 5
+							if locked and not lockValid(locked) then detach(); locked = nil end -- arrested / gone
+							if locked and tick() - lockSince > hold then
+								skipUntil[locked.UserId] = tick() + 12 -- gave it a fair shot; park them briefly
+								detach(); locked = nil
+							end
+							local target = locked
 							if not target then
+								target = bestTarget()
+								if target then locked, lockSince = target, tick() end
+							end
+							if not target then
+								detach()
 								once('none', 'No bounty target >= your minimum here. (Server-hop is coming next.)', 6)
 							else
 								notified.none = nil
@@ -2631,6 +2691,7 @@ run(function()
 									-- off, so the car can pin them and the on-foot hop stays tiny)
 									if tInVeh and dist <= 70 then ejectTarget(target) end
 									if chassis() then
+										detach() -- not welded to anyone while we're driving
 										local point, phase, gentle, horiz = flyPlan(thrp.Position, exitAt)
 										-- stall backstop: once we've hovered near (above) the target
 										-- for a bit without closing the last studs (anti-cheat jitter
@@ -2660,28 +2721,20 @@ run(function()
 										end
 									else
 										nearSince = nil -- out of the car now, on foot
-										-- step-teleport toward the target in small hops -- one big
-										-- teleport trips the position anti-cheat, lots of small steps
-										-- per frame reads as just moving fast
-										local step = (StepSize and StepSize.Value) or 12
-										local goal = thrp.CFrame * CFrame.new(0, 0, 2.5)
-										local gap = goal.Position - myHrp.Position
-										if gap.Magnitude <= step then
-											myHrp.CFrame = goal
-										else
-											myHrp.CFrame = CFrame.new(myHrp.Position + gap.Unit * step, goal.Position)
-										end
 										if tInVeh then
-											-- ejectTarget already fired above; wait for them to drop out
+											detach() -- wait for them to drop out before sticking on
 											status(string.format('ejecting %s from their car', target.Name))
-										elseif not cuffsOut() then
-											equipCuffs() -- auto-equip the cuffs while we close in
-											status(string.format('closing on %s -- equipping cuffs', target.Name))
-										elseif gap.Magnitude <= step then
-											callArrest(target.Name)
-											status(string.format('arresting %s', target.Name))
 										else
-											status(string.format('stepping to %s (%.0f studs)', target.Name, gap.Magnitude))
+											-- ATTACH with a weld and ride along instead of CFrame-teleporting onto
+											-- them each frame -- physics following keeps the anti-cheat quiet -- cuff them
+											attachTo(myHrp, thrp)
+											if not cuffsOut() then
+												equipCuffs() -- auto-equip the cuffs
+												status(string.format('on %s -- equipping cuffs', target.Name))
+											else
+												callArrest(target)
+												status(string.format('arresting %s', target.Name))
+											end
 										end
 									end
 								end
@@ -2690,9 +2743,11 @@ run(function()
 						runService.Heartbeat:Wait()
 					until not Bot.Enabled
 					restoreCar()
+					detach()
 				end)
 			else
 				restoreCar()
+				detach()
 			end
 		end,
 		Tooltip = 'Police bounty-hunter: flies your car to the highest-bounty criminal, gets out, auto-equips Handcuffs, and arrests them -- build-proof (no obfuscated remotes). Set up once: join Police, spawn a car, get in. Server-hop on empty servers + auto-join/spawn come next.'
@@ -2707,8 +2762,8 @@ run(function()
 		Tooltip = 'How close (horizontally) the car gets above the target before you bail out and drop on foot.' })
 	CruiseHeight = Bot:CreateSlider({ Name = 'Cruise Height', Min = 50, Max = 600, Default = 150, Suffix = 'studs',
 		Tooltip = 'How high the car climbs to clear buildings. LOWER it if climbing gets reset by the anti-cheat; raise it if you clip tall towers.' })
-	StepSize = Bot:CreateSlider({ Name = 'Step Size', Min = 2, Max = 40, Default = 12, Suffix = 'studs',
-		Tooltip = 'On-foot step-teleport hop size (per frame). Higher = reach the target faster; lower = gentler on the position anti-cheat. Drop it if you get flagged.' })
+	HoldTime = Bot:CreateSlider({ Name = 'Hold Time', Min = 1, Max = 15, Default = 5, Suffix = 's',
+		Tooltip = 'Stay committed to one criminal for at least this long before giving up and moving to another (the skipped one is parked briefly so it does not instantly re-lock).' })
 	Notify = Bot:CreateToggle({ Name = 'Notify', Default = true,
 		Tooltip = 'Status messages (join police / equip cuffs / no targets).' })
 end)
