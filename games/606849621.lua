@@ -2374,7 +2374,12 @@ run(function()
 		local model = c and c.Model
 		local engine = model and (model:FindFirstChild('Engine') or model.PrimaryPart
 			or model:FindFirstChildWhichIsA('BasePart', true))
-		if not engine then return false end
+		if not engine then return nil end
+		local prevSpeed = engine.AssemblyLinearVelocity.Magnitude -- last frame's result (did it stick?)
+		-- unanchor everything so the velocity can actually move the assembly
+		for _, p in model:GetDescendants() do
+			if p:IsA('BasePart') and p.Anchored then p.Anchored = false end
+		end
 		if type(c.LaunchSpeedMult) == 'number' then
 			if driveSaved[c] == nil then driveSaved[c] = c.LaunchSpeedMult end
 			c.LaunchSpeedMult = 0
@@ -2388,7 +2393,7 @@ run(function()
 		if dir.Magnitude > 1 then dir = dir.Unit end
 		engine.AssemblyLinearVelocity = dir * speed
 		engine.AssemblyAngularVelocity = Vector3.zero
-		return true
+		return prevSpeed
 	end
 	local function restoreCar()
 		for c, was in driveSaved do pcall(function() c.LaunchSpeedMult = was end) end
@@ -2483,8 +2488,16 @@ run(function()
 									local dist = (myHrp.Position - thrp.Position).Magnitude
 									if chassis() then
 										if dist > exitAt then
-											if flyToward(thrp.Position + Vector3.new(0, 8, 0), (FlySpeed and FlySpeed.Value) or 300) then
-												status(string.format('flying to %s  (%.0f studs)', target.Name, dist))
+											-- climb to a cruise altitude above the target so we lift off
+											-- the ground and clear obstacles, blending back down as the
+											-- horizontal gap closes
+											local horiz = (Vector3.new(thrp.Position.X, 0, thrp.Position.Z)
+												- Vector3.new(myHrp.Position.X, 0, myHrp.Position.Z)).Magnitude
+											local aimY = thrp.Position.Y + math.clamp(horiz * 0.12, 8, 220)
+											local sp = flyToward(Vector3.new(thrp.Position.X, aimY, thrp.Position.Z),
+												(FlySpeed and FlySpeed.Value) or 300)
+											if sp then
+												status(string.format('flying to %s (%.0f studs, car %.0f/s)', target.Name, dist, sp))
 											else
 												status('in a car but found no part to move it by')
 											end
