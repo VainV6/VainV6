@@ -5236,7 +5236,31 @@ end
 function mainapi:CreateLegit()
 	-- Legit Mode was removed for the commercial build. Keep an inert stub so the
 	-- save/load loops and theming that still reference self.Legit stay safe.
-	self.Legit = {Modules = {}, Categories = {}, Window = {Visible = false}}
+	local noop = function() end
+	local function deadModule()
+		local m = {Enabled = false, Options = {}, Bind = {}}
+		m.Toggle = noop; m.Clean = noop
+		m.CreateToggle = function() return {Value = false} end
+		m.CreateSlider = function() return {Value = 0} end
+		m.CreateTextBox = function() return {Value = ''} end
+		m.CreateColorSlider = function() return {Hue=0, Sat=0, Value=0} end
+		m.CreateDropdown = function() return {Value = ''} end
+		m.CreateButton = noop
+		return m
+	end
+	local legit = {Modules = {}, Categories = {}, Window = {Visible = false}}
+	setmetatable(legit, {__index = function(_, k)
+		if k == 'CreateModule' then
+			return function(_, settings)
+				local m = deadModule()
+				m.Name = settings and settings.Name or ''
+				legit.Modules[m.Name] = m
+				return m
+			end
+		end
+		return noop
+	end})
+	self.Legit = legit
 end
 
 local function restackNotifications()
