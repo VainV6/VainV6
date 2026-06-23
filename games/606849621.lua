@@ -2369,6 +2369,10 @@ run(function()
 	-- chassis doesn't fight us -- same approach as the Vehicle Fly module)
 	local driveSaved = setmetatable({}, {__mode = 'k'})
 	local tractionSaved = setmetatable({}, {__mode = 'k'})
+	local flyMover
+	local function clearMover()
+		if flyMover then pcall(function() flyMover:Destroy() end) flyMover = nil end
+	end
 	local function flyToward(point, speed)
 		local c = chassis()
 		local model = c and c.Model
@@ -2376,7 +2380,7 @@ run(function()
 			or model:FindFirstChildWhichIsA('BasePart', true))
 		if not engine then return nil end
 		local prevSpeed = engine.AssemblyLinearVelocity.Magnitude -- last frame's result (did it stick?)
-		-- unanchor everything so the velocity can actually move the assembly
+		-- unanchor everything so the assembly can actually be moved
 		for _, p in model:GetDescendants() do
 			if p:IsA('BasePart') and p.Anchored then p.Anchored = false end
 		end
@@ -2391,11 +2395,24 @@ run(function()
 		local here = model:GetPivot().Position
 		local dir = point - here
 		if dir.Magnitude > 1 then dir = dir.Unit end
+		-- Setting AssemblyLinearVelocity alone got re-zeroed by the chassis every
+		-- step (car 0/s). A BodyVelocity with infinite force pins the velocity no
+		-- matter what the chassis does, so the car actually flies.
+		if not flyMover or flyMover.Parent ~= engine then
+			clearMover()
+			flyMover = Instance.new('BodyVelocity')
+			flyMover.Name = 'VainFly'
+			flyMover.MaxForce = Vector3.new(1, 1, 1) * math.huge
+			flyMover.P = 12500
+			flyMover.Parent = engine
+		end
+		flyMover.Velocity = dir * speed
 		engine.AssemblyLinearVelocity = dir * speed
 		engine.AssemblyAngularVelocity = Vector3.zero
 		return prevSpeed
 	end
 	local function restoreCar()
+		clearMover()
 		for c, was in driveSaved do pcall(function() c.LaunchSpeedMult = was end) end
 		for c, was in tractionSaved do pcall(function() c.Traction = was end) end
 		table.clear(driveSaved); table.clear(tractionSaved)
