@@ -2100,7 +2100,7 @@ run(function()
 	local RemoteSpy
 	local Verbose, BlockSpam, SpamThreshold, IgnoreList
 
-	local oldnamecall
+	local oldnamecall, oldFire, oldInvoke, installed
 	local enabled = false
 	local seen = setmetatable({}, {__mode = 'k'})     -- remote -> logged once
 	local rate = setmetatable({}, {__mode = 'k'})     -- remote -> {c = count, t = windowStart}
@@ -2221,61 +2221,100 @@ run(function()
 		pcall(function() if appendfile then appendfile('remotespy.txt', line .. '\n') end end)
 	end
 
-	RemoteSpy = vain.Categories.Utility:CreateModule({
-		Name = 'Remote Spy',
-		Function = function(callback)
-			enabled = callback
-			if callback then
-				if not (hookmetamethod and getnamecallmethod) then
-					notif('Remote Spy', 'Your executor lacks hookmetamethod / getnamecallmethod.', 8, 'alert')
-					return
+	-- Process one captured remote call. Returns true if it should be DROPPED
+	-- (spam-blocked) so the caller can skip firing the original.
+	local function handleCall(remote, method, args, n)
+		if typeof(remote) ~= 'Instance' then return false end
+		if checkcaller and checkcaller() then return false end
+		if IgnoreList and table.find(IgnoreList.ListEnabled, remote.Name) then return false end
+		if BlockSpam.Enabled and method == 'FireServer' then
+			local now = tick()
+			local r = rate[remote]
+			if not r or now - r.t >= 1 then
+				rate[remote] = { c = 1, t = now }
+				blocking[remote] = nil
+			else
+				r.c += 1
+				if r.c > SpamThreshold.Value then
+					if not blocking[remote] then
+						blocking[remote] = true
+						pcall(notif, 'Remote Spy', 'Blocking spam: ' .. remote.Name .. ' (' .. r.c .. '/s)', 4, 'warning')
+					end
+					return true -- drop this spammed call
 				end
-				if oldnamecall then return end
-				pcall(consoleShow, true)
-				pcall(consolePush, '[Remote Spy started] waiting for the game to fire remotes...')
-				notif('Remote Spy', 'Logging to the Vain console window' .. (appendfile and ' (+ remotespy.txt)' or '') .. '.', 5)
+			end
+		end
+		if Verbose.Enabled or not seen[remote] then
+			seen[remote] = true
+			pcall(logCall, remote, method, args, n)
+		end
+		return false
+	end
+
+	-- Install the hooks ONCE. We prefer hooking the FireServer / InvokeServer
+	-- FUNCTIONS so we also catch remotes fired through cached function refs (which
+	-- obfuscated games like Jailbreak use to bypass __namecall); we fall back to
+	-- __namecall. Everything is gated on `enabled`, so disabling just no-ops them.
+	local hookfn = hookfunction or replaceclosure
+	local function nc(fn) return newcclosure and newcclosure(fn) or fn end
+	local function installHooks()
+		if installed then return true end
+		if hookfn then
+			local ok = pcall(function()
+				local re = Instance.new('RemoteEvent')
+				local rf = Instance.new('RemoteFunction')
+				oldFire = hookfn(re.FireServer, nc(function(self, ...)
+					if enabled and handleCall(self, 'FireServer', { ... }, select('#', ...)) then
+						return -- spam-dropped
+					end
+					return oldFire(self, ...)
+				end))
+				oldInvoke = hookfn(rf.InvokeServer, nc(function(self, ...)
+					-- never drop a RemoteFunction (the caller yields on its return)
+					if enabled then handleCall(self, 'InvokeServer', { ... }, select('#', ...)) end
+					return oldInvoke(self, ...)
+				end))
+			end)
+			if ok and oldFire then installed = true return true end
+		end
+		if hookmetamethod and getnamecallmethod then
+			local ok = pcall(function()
 				oldnamecall = hookmetamethod(game, '__namecall', function(...)
 					if enabled then
-						local ok, method = pcall(getnamecallmethod)
-						if ok and (method == 'FireServer' or method == 'InvokeServer') then
+						local okm, method = pcall(getnamecallmethod)
+						if okm and (method == 'FireServer' or method == 'InvokeServer') then
 							local remote = ...
-							if typeof(remote) == 'Instance' and not (checkcaller and checkcaller())
-								and not table.find(IgnoreList.ListEnabled, remote.Name) then
-								-- Spam blocking: events only (blocking a RemoteFunction
-								-- would hang the caller that yields on its return).
-								if BlockSpam.Enabled and method == 'FireServer' then
-									local now = tick()
-									local r = rate[remote]
-									if not r or now - r.t >= 1 then
-										rate[remote] = {c = 1, t = now}
-										blocking[remote] = nil
-									else
-										r.c += 1
-										if r.c > SpamThreshold.Value then
-											if not blocking[remote] then
-												blocking[remote] = true
-												pcall(notif, 'Remote Spy', 'Blocking spam: ' .. remote.Name .. ' (' .. r.c .. '/s)', 4, 'warning')
-											end
-											return -- drop this spammed call
-										end
-									end
-								end
-								-- Default: one clean line per distinct remote. With Log
-								-- Arguments on, log every call with its args.
-								if Verbose.Enabled or not seen[remote] then
-									seen[remote] = true
-									pcall(logCall, remote, method, {select(2, ...)}, select('#', ...) - 1)
-								end
+							local args, n = { select(2, ...) }, select('#', ...) - 1
+							if method == 'FireServer' then
+								if handleCall(remote, method, args, n) then return end
+							else
+								handleCall(remote, method, args, n)
 							end
 						end
 					end
 					return oldnamecall(...)
 				end)
-			else
-				if oldnamecall then
-					hookmetamethod(game, '__namecall', oldnamecall)
-					oldnamecall = nil
+			end)
+			if ok and oldnamecall then installed = true return true end
+		end
+		return false
+	end
+
+	RemoteSpy = vain.Categories.Utility:CreateModule({
+		Name = 'Remote Spy',
+		Function = function(callback)
+			enabled = callback
+			if callback then
+				pcall(consoleShow, true)
+				pcall(consolePush, '[Remote Spy started] waiting for the game to fire remotes...')
+				if not installHooks() then
+					notif('Remote Spy', 'Your executor lacks hookfunction / hookmetamethod.', 8, 'alert')
+					enabled = false
+					return
 				end
+				notif('Remote Spy', 'Logging to the Vain console window' .. (appendfile and ' (+ remotespy.txt)' or '') .. '.', 5)
+			else
+				-- hooks stay installed but no-op while disabled
 				table.clear(seen)
 				table.clear(rate)
 				table.clear(blocking)
