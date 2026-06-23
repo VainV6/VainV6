@@ -24,10 +24,6 @@ async function main() {
         },
       ],
     },
-    {
-      name: 'players',
-      description: 'List whitelisted players currently injected (Premium only)',
-    },
   ];
 
   const url = GUILD_ID

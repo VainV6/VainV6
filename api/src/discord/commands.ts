@@ -1,5 +1,5 @@
 import { Env, TIER, TIER_NAME, ROLE_TIER_MAP, TierValue } from '../types';
-import { getByRoblox, upsertLink, isBlacklisted, getOnlinePlayers } from '../db/queries';
+import { getByRoblox, upsertLink, isBlacklisted } from '../db/queries';
 
 export type Interaction = {
   type: number;
@@ -103,20 +103,6 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
     }
 
     return json(err('Unknown subcommand'));
-  }
-
-  // /players — list all injected players seen in last 30s (Premium+ or Owner)
-  if (name === 'players') {
-    if (!isPremium) return json(err('You need **Premium** to use `/players`'));
-    const online = await getOnlinePlayers(env.DB);
-    if (online.length === 0) return json(embed('No players currently injected.'));
-    // Enrich each entry with their whitelist tier if they have one
-    const lines = await Promise.all(online.map(async r => {
-      const wl = await getByRoblox(env.DB, r.username);
-      const tierLabel = wl ? TIER_NAME[wl.tier] : 'Free';
-      return `• **${r.username}** — ${tierLabel}`;
-    }));
-    return json(embed(`**Injected (${online.length})**\n${lines.join('\n')}`));
   }
 
   return json(err('Unknown command'));

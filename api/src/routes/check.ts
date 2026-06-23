@@ -1,11 +1,9 @@
 import { Env, TIER_NAME } from '../types';
-import { getByRoblox, getByRobloxUserId, updateRobloxUsername, isBlacklisted, getTiersForUsernames, getOnlinePlayers } from '../db/queries';
+import { getByRoblox, getByRobloxUserId, updateRobloxUsername, isBlacklisted, getTiersForUsernames } from '../db/queries';
 
-// POST /tiers  body: { usernames: string[] }
-//   -> { tiers: { "<lowername>": tier }, injected: ["<Username>", ...] }
-// Lets the client resolve other injected Vain users' tiers in one request (to
-// protect higher-tier players) AND learn which of those players are currently
-// injected (seen polling within the last 60s) for the in-game player list.
+// POST /tiers  body: { usernames: string[] }  ->  { tiers: { "<lowername>": tier } }
+// Lets the client resolve other Vain users' tiers in one request so lower-tier
+// users can't target higher-tier ones in game.
 export async function handleTiers(request: Request, env: Env): Promise<Response> {
   if (request.headers.get('x-vain-secret') !== env.BOT_SECRET) return jsonErr('Unauthorized', 401);
 
@@ -15,13 +13,7 @@ export async function handleTiers(request: Request, env: Env): Promise<Response>
     : [];
 
   const tiers = await getTiersForUsernames(env.DB, list);
-
-  // Which of the requested players are currently injected (recently seen polling)?
-  const wanted = new Set(list.map(u => u.toLowerCase()));
-  const online = await getOnlinePlayers(env.DB, 60_000);
-  const injected = online.map(r => r.username).filter(u => wanted.has(u.toLowerCase()));
-
-  return json({ tiers, injected });
+  return json({ tiers });
 }
 
 export async function handleCheck(request: Request, env: Env): Promise<Response> {

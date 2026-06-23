@@ -79,7 +79,7 @@ export async function handleListProfiles(request: Request, env: Env): Promise<Re
 
 // GET /profiles/:id  — read-only inspect; returns the profile incl. its data
 // WITHOUT counting an install.
-export async function handleGetProfile(request: Request, env: Env, id: string): Promise<Response> {
+export async function handleGetProfile(_request: Request, env: Env, id: string): Promise<Response> {
   const profile = await env.DB.prepare(
     'SELECT id, author_roblox_username, game_id, name, description, data, installs, created_at, updated_at FROM global_profiles WHERE id = ?'
   ).bind(id).first<Omit<ProfileRow, 'author_discord_id'>>();
