@@ -22,12 +22,6 @@ export const ROLE_TIER_MAP: Record<string, TierValue> = {
   'Owner':   2,
 };
 
-export const COMMANDS = [
-  'kick', 'kill', 'freeze', 'crash', 'expose',
-  'fling', 'spin', 'loopkill', 'annoy', 'grief', 'notify',
-] as const;
-export type Command = typeof COMMANDS[number];
-
 export interface WhitelistRow {
   discord_id: string;
   roblox_username: string | null;
@@ -38,13 +32,3 @@ export interface WhitelistRow {
   last_seen: number | null;
 }
 
-export interface CommandRow {
-  id: string;
-  from_discord_id: string;
-  from_roblox_username: string;
-  target_roblox_username: string;
-  command: string;
-  args: string | null;
-  issued_at: number;
-  expires_at: number;
-}

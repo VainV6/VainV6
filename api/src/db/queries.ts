@@ -1,4 +1,4 @@
-import { WhitelistRow, CommandRow, TierValue } from '../types';
+import { WhitelistRow, TierValue } from '../types';
 
 export async function getByDiscordId(db: D1Database, discordId: string): Promise<WhitelistRow | null> {
   return db.prepare('SELECT * FROM whitelist WHERE discord_id = ?')
@@ -51,20 +51,6 @@ export async function removeLink(db: D1Database, discordId: string): Promise<boo
   return (result.meta.changes ?? 0) > 0;
 }
 
-export async function touchLastSeen(db: D1Database, username: string): Promise<void> {
-  const now = Date.now();
-  // Update whitelist last_seen if they're whitelisted
-  await db.prepare(
-    'UPDATE whitelist SET last_seen = ? WHERE LOWER(roblox_username) = LOWER(?)'
-  ).bind(now, username).run();
-  // Always upsert into player_seen for /players visibility
-  await db.prepare(
-    'INSERT INTO player_seen (username, last_seen) VALUES (?, ?) ON CONFLICT(username) DO UPDATE SET last_seen = excluded.last_seen'
-  ).bind(username, now).run();
-}
-
-export interface PlayerSeenRow { username: string; last_seen: number; }
-
 // Resolve tiers for a batch of usernames. Returns a lowercase-username -> tier map.
 // Usernames not in the whitelist are simply absent (caller treats them as Free/0).
 export async function getTiersForUsernames(
@@ -86,43 +72,4 @@ export async function getTiersForUsernames(
     map[row.roblox_username.toLowerCase()] = row.tier;
   }
   return map;
-}
-
-export async function getOnlinePlayers(db: D1Database, windowMs = 30_000): Promise<PlayerSeenRow[]> {
-  const cutoff = Date.now() - windowMs;
-  const res = await db.prepare(
-    'SELECT username, last_seen FROM player_seen WHERE last_seen >= ? ORDER BY last_seen DESC'
-  ).bind(cutoff).all<PlayerSeenRow>();
-  return res.results;
-}
-
-export async function peekCommand(db: D1Database, targetRoblox: string): Promise<CommandRow | null> {
-  const now = Date.now();
-  return db.prepare(`
-    SELECT * FROM command_queue
-    WHERE LOWER(target_roblox_username) = LOWER(?) AND expires_at > ?
-    ORDER BY issued_at ASC LIMIT 1
-  `).bind(targetRoblox, now).first<CommandRow>();
-}
-
-export async function deleteCommand(db: D1Database, id: string): Promise<void> {
-  await db.prepare('DELETE FROM command_queue WHERE id = ?').bind(id).run();
-}
-
-export async function queueCommand(
-  db: D1Database,
-  id: string,
-  fromDiscordId: string,
-  fromRoblox: string,
-  targetRoblox: string,
-  command: string,
-  args: string | null,
-): Promise<void> {
-  const now = Date.now();
-  await db.prepare(`
-    INSERT INTO command_queue (id, from_discord_id, from_roblox_username, target_roblox_username, command, args, issued_at, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, fromDiscordId, fromRoblox, targetRoblox, command, args, now, now + 30_000).run();
-  // Prune expired rows on every write — cheap and keeps the table tiny
-  await db.prepare('DELETE FROM command_queue WHERE expires_at <= ?').bind(now).run();
 }
