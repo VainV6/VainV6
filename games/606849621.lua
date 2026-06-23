@@ -2346,7 +2346,8 @@ run(function()
 				local char = plr and plr ~= lplr and plr.Character
 				local hum = char and char:FindFirstChildOfClass('Humanoid')
 				local hrp = char and char:FindFirstChild('HumanoidRootPart')
-				if hrp and hum and hum.Health > 0 and teamOf(plr) == 'Criminal'
+				local tm = plr and teamOf(plr)
+				if hrp and hum and hum.Health > 0 and (tm == 'Prisoner' or tm == 'Criminal')
 					and not char:GetAttribute('HasHandcuffs') then
 					if not bestB or e.Bounty > bestB then best, bestB = plr, e.Bounty end
 				end
@@ -2434,6 +2435,24 @@ run(function()
 		Function = function(callback)
 			if callback then
 				table.clear(notified)
+				-- one-time diagnostic: confirm we can read the bounty board and how
+				-- many of those bounties are criminals actually in this server
+				do
+					local entries = bountyEntries()
+					local inServer, crims = 0, 0
+					for _, e in entries do
+						if type(e) == 'table' and e.UserId then
+							local plr = playersService:GetPlayerByUserId(e.UserId)
+							if plr then
+								inServer += 1
+								local tm = teamOf(plr)
+								if tm == 'Prisoner' or tm == 'Criminal' then crims += 1 end
+							end
+						end
+					end
+					notif('Auto Arrest Bot', string.format('bounties: %d | in server: %d | criminals: %d | you: %s',
+						#entries, inServer, crims, tostring(teamOf(lplr))), 8, (#entries > 0) and nil or 'warning')
+				end
 				task.spawn(function()
 					repeat
 						if not entitylib.isAlive then
