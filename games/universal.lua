@@ -2124,11 +2124,100 @@ run(function()
 		return table.concat(parts, ', ')
 	end
 
+	-- ── Vain console window (logs render here, NOT the Roblox console) ───────────
+	local consoleGui, consoleScroll
+	local consoleLines, consoleText, consoleSeq = {}, {}, 0
+	local MAX_LINES = 300
+
+	local function mk(class, props, parent)
+		local o = Instance.new(class)
+		for k, v in props do o[k] = v end
+		o.Parent = parent
+		return o
+	end
+
+	local function buildConsole()
+		if consoleGui then return end
+		local parent = (gethui and gethui()) or game:GetService('CoreGui')
+		consoleGui = mk('ScreenGui', { Name = 'VainRemoteSpy', ResetOnSpawn = false,
+			ZIndexBehavior = Enum.ZIndexBehavior.Sibling, DisplayOrder = 99999 }, parent)
+		local frame = mk('Frame', { Size = UDim2.fromOffset(580, 320), Position = UDim2.fromOffset(90, 120),
+			BackgroundColor3 = Color3.fromRGB(16, 16, 20), BorderSizePixel = 0, Active = true }, consoleGui)
+		mk('UICorner', { CornerRadius = UDim.new(0, 6) }, frame)
+		mk('UIStroke', { Color = Color3.fromRGB(60, 60, 72), Thickness = 1 }, frame)
+		local bar = mk('TextLabel', { Size = UDim2.new(1, 0, 0, 30), BackgroundColor3 = Color3.fromRGB(26, 26, 32),
+			BorderSizePixel = 0, Text = '   Vain  -  Remote Spy', TextXAlignment = Enum.TextXAlignment.Left,
+			TextColor3 = Color3.fromRGB(235, 235, 245), Font = Enum.Font.GothamMedium, TextSize = 14 }, frame)
+		mk('UICorner', { CornerRadius = UDim.new(0, 6) }, bar)
+		consoleScroll = mk('ScrollingFrame', { Size = UDim2.new(1, -10, 1, -40), Position = UDim2.fromOffset(5, 35),
+			BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 5,
+			ScrollBarImageColor3 = Color3.fromRGB(80, 80, 95), CanvasSize = UDim2.new(),
+			AutomaticCanvasSize = Enum.AutomaticSize.Y }, frame)
+		mk('UIListLayout', { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 2) }, consoleScroll)
+		mk('UIPadding', { PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 4) }, consoleScroll)
+		local function tbtn(text, xoff, col, cb)
+			local b = mk('TextButton', { Size = UDim2.fromOffset(text == 'X' and 22 or 52, 22),
+				Position = UDim2.new(1, xoff, 0, 4), BackgroundColor3 = col, BorderSizePixel = 0, Text = text,
+				TextColor3 = Color3.fromRGB(232, 232, 240), Font = Enum.Font.Gotham, TextSize = 12 }, bar)
+			mk('UICorner', { CornerRadius = UDim.new(0, 4) }, b)
+			b.MouseButton1Click:Connect(cb)
+		end
+		tbtn('Clear', -116, Color3.fromRGB(40, 40, 48), function()
+			for _, l in consoleLines do l:Destroy() end
+			table.clear(consoleLines); table.clear(consoleText)
+		end)
+		tbtn('Copy', -60, Color3.fromRGB(40, 40, 48), function()
+			pcall(setclipboard, table.concat(consoleText, '\n'))
+			pcall(notif, 'Remote Spy', 'Copied ' .. #consoleText .. ' lines.', 3)
+		end)
+		tbtn('X', -26, Color3.fromRGB(120, 45, 45), function() consoleGui.Enabled = false end)
+		local dragging, dragStart, startPos
+		bar.InputBegan:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+				dragging, dragStart, startPos = true, i.Position, frame.Position
+			end
+		end)
+		bar.InputEnded:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = false end
+		end)
+		inputService.InputChanged:Connect(function(i)
+			if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+				local delta = i.Position - dragStart
+				frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+			end
+		end)
+	end
+
+	local function consoleShow(state)
+		if state then buildConsole() end
+		if consoleGui then consoleGui.Enabled = state end
+	end
+
+	local function consolePush(line)
+		buildConsole()
+		consoleGui.Enabled = true
+		consoleSeq += 1
+		table.insert(consoleText, line)
+		local lbl = mk('TextLabel', { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundTransparency = 1, Text = line, TextXAlignment = Enum.TextXAlignment.Left,
+			TextYAlignment = Enum.TextYAlignment.Top, TextWrapped = true, TextColor3 = Color3.fromRGB(205, 212, 225),
+			Font = Enum.Font.Code, TextSize = 13, LayoutOrder = consoleSeq }, consoleScroll)
+		table.insert(consoleLines, lbl)
+		while #consoleLines > MAX_LINES do
+			local old = table.remove(consoleLines, 1)
+			if old then old:Destroy() end
+			table.remove(consoleText, 1)
+		end
+		task.defer(function()
+			if consoleScroll then consoleScroll.CanvasPosition = Vector2.new(0, consoleScroll.AbsoluteCanvasSize.Y) end
+		end)
+	end
+
 	local function logCall(remote, method, args, n)
 		local path = tostring(remote)
 		pcall(function() path = remote:GetFullName() end)
-		local line = '[RemoteSpy] ' .. method .. '  ' .. path .. '   args: { ' .. fmtArgs(args, n) .. ' }'
-		print(line)
+		local line = method .. '  ' .. path .. '   { ' .. fmtArgs(args, n) .. ' }'
+		pcall(consolePush, line)
 		pcall(function() if appendfile then appendfile('remotespy.txt', line .. '\n') end end)
 	end
 
@@ -2142,7 +2231,8 @@ run(function()
 					return
 				end
 				if oldnamecall then return end
-				notif('Remote Spy', 'Logging remotes to the console' .. (appendfile and ' and remotespy.txt' or '') .. '.', 5)
+				consoleShow(true)
+				notif('Remote Spy', 'Logging to the Vain console window' .. (appendfile and ' (+ remotespy.txt)' or '') .. '.', 5)
 				oldnamecall = hookmetamethod(game, '__namecall', function(...)
 					if enabled then
 						local ok, method = pcall(getnamecallmethod)
@@ -2190,7 +2280,7 @@ run(function()
 				table.clear(blocking)
 			end
 		end,
-		Tooltip = 'Logs every remote the game fires (FireServer / InvokeServer) to the console (and remotespy.txt) so you can see what it calls. Turn on Log Arguments for full detail. Block Spam drops remote events firing faster than the threshold.'
+		Tooltip = 'Logs every remote the game fires (FireServer / InvokeServer) into its own draggable Vain console window (Clear / Copy / X buttons) -- no Roblox console needed. Turn on Log Arguments for full detail. Block Spam drops remote events firing faster than the threshold.'
 	})
 
 	Verbose = RemoteSpy:CreateToggle({
