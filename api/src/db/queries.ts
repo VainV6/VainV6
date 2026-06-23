@@ -1,10 +1,5 @@
 import { WhitelistRow, TierValue } from '../types';
 
-export async function getByDiscordId(db: D1Database, discordId: string): Promise<WhitelistRow | null> {
-  return db.prepare('SELECT * FROM whitelist WHERE discord_id = ?')
-    .bind(discordId).first<WhitelistRow>();
-}
-
 export async function getByRoblox(db: D1Database, username: string): Promise<WhitelistRow | null> {
   return db.prepare('SELECT * FROM whitelist WHERE LOWER(roblox_username) = LOWER(?)')
     .bind(username).first<WhitelistRow>();
@@ -43,12 +38,6 @@ export async function upsertLink(
       tier            = excluded.tier,
       updated_at      = excluded.updated_at
   `).bind(discordId, robloxUsername, robloxUserId, tier, now, now).run();
-}
-
-export async function removeLink(db: D1Database, discordId: string): Promise<boolean> {
-  const result = await db.prepare('DELETE FROM whitelist WHERE discord_id = ?')
-    .bind(discordId).run();
-  return (result.meta.changes ?? 0) > 0;
 }
 
 // Resolve tiers for a batch of usernames. Returns a lowercase-username -> tier map.
