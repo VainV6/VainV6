@@ -2528,43 +2528,26 @@ run(function()
 		return (h and h.Sit) or false
 	end
 
-	-- ATTACH to the target instead of teleporting onto them each frame. An
-	-- AlignPosition forces ONLY our own part toward an attachment on the target, so
-	-- WE follow THEM. (A weld would merge us into one assembly and -- because we own
-	-- our character client-side -- drag the TARGET onto us instead, which only moves
-	-- them on our screen.) It's springy (not rigid), so it reads as physics motion
-	-- rather than a CFrame teleport, and PlatformStand stops our Humanoid fighting it.
-	local attachParts
+	-- FOLLOW the target by setting OUR OWN velocity toward them each frame, with
+	-- PlatformStand so the Humanoid doesn't fight it. This is the same velocity
+	-- mechanism the car uses (which the anti-cheat doesn't flag), and it actually
+	-- moves US to THEM -- a weld dragged the target onto us, and AlignPosition didn't
+	-- move us at all. Re-applied every frame from the loop; detach() lets go.
 	local function detach()
-		if attachParts then
-			pcall(function() attachParts.align:Destroy() end)
-			pcall(function() attachParts.a0:Destroy() end)
-			pcall(function() attachParts.a1:Destroy() end)
-			attachParts = nil
-		end
-		local hum = lplr.Character and lplr.Character:FindFirstChildOfClass('Humanoid')
+		local char = lplr.Character
+		local hum = char and char:FindFirstChildOfClass('Humanoid')
 		if hum then pcall(function() hum.PlatformStand = false end) end
 	end
 	local function attachTo(myHrp, thrp)
-		if attachParts and attachParts.target == thrp and attachParts.align.Parent then return end
-		detach()
-		local a0 = Instance.new('Attachment')
-		a0.Parent = myHrp
-		local a1 = Instance.new('Attachment')
-		a1.Position = Vector3.new(0, 0, 3) -- sit ~3 studs off them, in arrest range
-		a1.Parent = thrp
-		local align = Instance.new('AlignPosition')
-		align.Attachment0 = a0
-		align.Attachment1 = a1
-		align.RigidityEnabled = false
-		align.ApplyAtCenterOfMass = true
-		align.MaxForce = 1e6
-		align.MaxVelocity = 300 -- studs/s: fast follow, but not a teleport
-		align.Responsiveness = 120
-		align.Parent = myHrp
-		attachParts = { align = align, a0 = a0, a1 = a1, target = thrp }
 		local hum = lplr.Character and lplr.Character:FindFirstChildOfClass('Humanoid')
 		if hum then pcall(function() hum.PlatformStand = true end) end
+		local goal = (thrp.CFrame * CFrame.new(0, 0, 3)).Position -- ~3 studs off, in range
+		local off = goal - myHrp.Position
+		local d = off.Magnitude
+		local dir = d > 1 and off.Unit or Vector3.zero
+		-- ease off near them so we settle on the spot instead of overshooting
+		myHrp.AssemblyLinearVelocity = dir * math.min(500, d * 12)
+		myHrp.AssemblyAngularVelocity = Vector3.zero
 	end
 
 	local virtualInput = cloneref(game:GetService('VirtualInputManager'))
