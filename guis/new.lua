@@ -4174,17 +4174,15 @@ function mainapi:CreateCategory(categorysettings)
 			task.spawn(modulesettings.Function, self.Enabled)
 		end
 
+		moduleapi.Locked = false
 		function moduleapi:Lock(reason)
-			-- Grey out text, disable all interaction (Active=false swallows all
-			-- GuiButton events including MouseButton1Click, so Toggle is never called)
+			moduleapi.Locked = true
 			modulebutton.Text = '            ' .. modulesettings.Name .. '  [WIP]'
-			modulebutton.TextColor3 = color.Dark(uipallet.Text, 0.55)
-			modulebutton.AutoButtonColor = false
-			modulebutton.Active = false
+			modulebutton.TextColor3 = color.Dark(uipallet.Text, 0.43)
 			bind.Visible = false
 			fav.Visible = false
-			dotsbutton.Active = false
-			addTooltip(modulebutton, reason or 'Not available right now.')
+			dotsbutton.Visible = false
+			addTooltip(modulebutton, '[Work In Progress] ' .. (reason or 'Not available right now.'))
 		end
 
 		for i, v in components do
@@ -4240,6 +4238,7 @@ function mainapi:CreateCategory(categorysettings)
 			modulechildren.Visible = not modulechildren.Visible
 		end)
 		modulebutton.MouseEnter:Connect(function()
+			if moduleapi.Locked then return end
 			hovered = true
 			if not moduleapi.Enabled and not modulechildren.Visible then
 				modulebutton.TextColor3 = uipallet.Text
@@ -4249,6 +4248,7 @@ function mainapi:CreateCategory(categorysettings)
 			fav.Visible = moduleapi.Favourite or hovered or modulechildren.Visible
 		end)
 		modulebutton.MouseLeave:Connect(function()
+			if moduleapi.Locked then return end
 			hovered = false
 			if not moduleapi.Enabled and not modulechildren.Visible then
 				modulebutton.TextColor3 = color.Dark(uipallet.Text, 0.16)
@@ -4258,6 +4258,7 @@ function mainapi:CreateCategory(categorysettings)
 			fav.Visible = moduleapi.Favourite or hovered or modulechildren.Visible
 		end)
 		modulebutton.MouseButton1Click:Connect(function()
+			if moduleapi.Locked then return end
 			moduleapi:Toggle()
 		end)
 		modulebutton.MouseButton2Click:Connect(function()
