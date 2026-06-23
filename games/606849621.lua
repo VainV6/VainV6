@@ -2336,10 +2336,36 @@ run(function()
 		return {}
 	end
 
-	-- highest-bounty criminal at/above the threshold, alive, out of jail, not cuffed
+	-- is there open sky above this point, or is it sealed under a roof / ground
+	-- (bank vault, tunnels, inside a building)? Cached ~1s so we don't raycast every
+	-- frame. A low overhang within ~8 studs (e.g. a car roof) still counts as open.
+	local reachCache = {}
+	local function reachableFromAbove(uid, pos)
+		local now = tick()
+		local cached = reachCache[uid]
+		if cached and now - cached.t < 1 then return cached.ok end
+		local ok, res = pcall(function()
+			local filter = {}
+			for _, p in playersService:GetPlayers() do
+				if p.Character then filter[#filter + 1] = p.Character end
+			end
+			local params = RaycastParams.new()
+			params.FilterType = Enum.RaycastFilterType.Exclude
+			params.FilterDescendantsInstances = filter
+			params.IgnoreWater = true
+			return workspace:Raycast(pos + Vector3.new(0, 300, 0), Vector3.new(0, -294, 0), params)
+		end)
+		-- if the raycast fails for any reason, don't filter the target out
+		local reachable = (not ok) or (not res) or (res.Position.Y <= pos.Y + 8)
+		reachCache[uid] = { t = now, ok = reachable }
+		return reachable
+	end
+
+	-- highest-bounty criminal at/above the threshold, alive, out of jail, not cuffed,
+	-- and reachable from the air (skip ones sealed underground / under a roof)
 	local function bestTarget()
 		local min = (MinBounty and MinBounty.Value) or 0
-		local best, bestB
+		local cands = {}
 		for _, e in bountyEntries() do
 			if type(e) == 'table' and e.UserId and (e.Bounty or 0) >= min then
 				local plr = playersService:GetPlayerByUserId(e.UserId)
@@ -2349,11 +2375,18 @@ run(function()
 				local tm = plr and teamOf(plr)
 				if hrp and hum and hum.Health > 0 and (tm == 'Prisoner' or tm == 'Criminal')
 					and not char:GetAttribute('HasHandcuffs') then
-					if not bestB or e.Bounty > bestB then best, bestB = plr, e.Bounty end
+					cands[#cands + 1] = { plr = plr, bounty = e.Bounty or 0, hrp = hrp }
 				end
 			end
 		end
-		return best, bestB
+		-- highest bounty first, and take the first one we can actually drop onto
+		table.sort(cands, function(a, b) return a.bounty > b.bounty end)
+		for _, cd in cands do
+			if reachableFromAbove(cd.plr.UserId, cd.hrp.Position) then
+				return cd.plr, cd.bounty
+			end
+		end
+		return nil
 	end
 
 	-- local car chassis packet (nil unless you're the driver)
@@ -2437,19 +2470,32 @@ run(function()
 		end
 		return false
 	end
+	local virtualInput = cloneref(game:GetService('VirtualInputManager'))
 	local function exitCar()
 		-- get OUT of our OWN car. (Note: the CircleAction ShouldEject specs eject
 		-- OTHER players from their vehicles -- using them here can boot the criminal
-		-- instead of us.) The game maps a jump to the get-out action (OnJump ->
-		-- GetOut), so the build-proof exit is to make our own character jump/unseat;
-		-- the exit remotes are fired as backups in case OnJump isn't state-bound.
+		-- instead of us, so we don't touch them.)
 		local char = lplr.Character
 		local hum = char and char:FindFirstChildOfClass('Humanoid')
 		if hum then
 			pcall(function() hum.Sit = false end)
 			pcall(function() hum.Jump = true end)
 			pcall(function() hum:ChangeState(Enum.HumanoidStateType.Jumping) end)
+			-- break the seat weld directly in case the seat re-grabs us
+			local seat = hum.SeatPart
+			if seat then
+				local weld = seat:FindFirstChild('SeatWeld')
+				if weld then pcall(function() weld:Destroy() end) end
+			end
 		end
+		-- Jailbreak's get-out is bound to the Space KEY (OnJump), not the Humanoid
+		-- state, so tap Space through the real input path -- this is the build-proof
+		-- exit (it makes the game fire its own live GetOut remote)
+		pcall(function()
+			virtualInput:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+			virtualInput:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+		end)
+		-- and fire the exit remotes directly as a final backup
 		pcall(function() jb:FireServer('GetOut') end)
 		local c = chassis()
 		if c and c.Model then pcall(function() jb:FireServer('Eject', c.Model) end) end
