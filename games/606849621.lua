@@ -2372,7 +2372,8 @@ run(function()
 	local function flyToward(point, speed)
 		local c = chassis()
 		local model = c and c.Model
-		local engine = model and model:FindFirstChild('Engine')
+		local engine = model and (model:FindFirstChild('Engine') or model.PrimaryPart
+			or model:FindFirstChildWhichIsA('BasePart', true))
 		if not engine then return false end
 		if type(c.LaunchSpeedMult) == 'number' then
 			if driveSaved[c] == nil then driveSaved[c] = c.LaunchSpeedMult end
@@ -2429,6 +2430,13 @@ run(function()
 			notif('Auto Arrest Bot', ...)
 		end
 	end
+	local lastStatus = 0
+	local function status(msg)
+		if Notify and Notify.Enabled and tick() - lastStatus > 1.5 then
+			lastStatus = tick()
+			notif('Auto Arrest Bot', msg, 2)
+		end
+	end
 
 	Bot = vain.Categories.Blatant:CreateModule({
 		Name = 'Auto Arrest Bot',
@@ -2450,8 +2458,9 @@ run(function()
 							end
 						end
 					end
-					notif('Auto Arrest Bot', string.format('bounties: %d | in server: %d | criminals: %d | you: %s',
-						#entries, inServer, crims, tostring(teamOf(lplr))), 8, (#entries > 0) and nil or 'warning')
+					notif('Auto Arrest Bot', string.format('bounties: %d | criminals: %d | you: %s | in car: %s',
+						#entries, crims, tostring(teamOf(lplr)), chassis() and 'yes' or 'no'), 8,
+						(#entries > 0) and nil or 'warning')
 				end
 				task.spawn(function()
 					repeat
@@ -2471,20 +2480,26 @@ run(function()
 								local myHrp = entitylib.character and entitylib.character.RootPart
 								if thrp and myHrp then
 									local exitAt = (ExitDist and ExitDist.Value) or 25
+									local dist = (myHrp.Position - thrp.Position).Magnitude
 									if chassis() then
-										if (myHrp.Position - thrp.Position).Magnitude > exitAt then
-											flyToward(thrp.Position + Vector3.new(0, 8, 0), (FlySpeed and FlySpeed.Value) or 300)
+										if dist > exitAt then
+											if flyToward(thrp.Position + Vector3.new(0, 8, 0), (FlySpeed and FlySpeed.Value) or 300) then
+												status(string.format('flying to %s  (%.0f studs)', target.Name, dist))
+											else
+												status('in a car but found no part to move it by')
+											end
 										else
+											status(string.format('arrived (%.0f studs), getting out', dist))
 											restoreCar()
-											exitCar() -- arrived: get out of the car
+											exitCar() -- get out of the car
 											task.wait(0.4)
 										end
 									elseif cuffsOut() then
-										-- on foot: snap onto the target and arrest until it lands
+										status(string.format('on foot, snapping to %s', target.Name))
 										myHrp.CFrame = thrp.CFrame * CFrame.new(0, 0, 2.5)
 										callArrest(target.Name)
 									else
-										once('cuffs', 'Equip your Handcuffs so I can arrest.', 5, 'alert')
+										once('cuffs', 'Get in a police car, or equip Handcuffs to arrest on foot.', 5, 'alert')
 									end
 									if cuffsOut() then notified.cuffs = nil end
 								end
