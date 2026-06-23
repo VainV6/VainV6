@@ -2131,7 +2131,7 @@ run(function()
 
 	local function mk(class, props, parent)
 		local o = Instance.new(class)
-		for k, v in props do o[k] = v end
+		for k, v in props do pcall(function() o[k] = v end) end
 		o.Parent = parent
 		return o
 	end
@@ -2198,7 +2198,7 @@ run(function()
 		consoleGui.Enabled = true
 		consoleSeq += 1
 		table.insert(consoleText, line)
-		local lbl = mk('TextLabel', { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y,
+		local lbl = mk('TextLabel', { Size = UDim2.new(1, 0, 0, 18), AutomaticSize = Enum.AutomaticSize.Y,
 			BackgroundTransparency = 1, Text = line, TextXAlignment = Enum.TextXAlignment.Left,
 			TextYAlignment = Enum.TextYAlignment.Top, TextWrapped = true, TextColor3 = Color3.fromRGB(205, 212, 225),
 			Font = Enum.Font.Code, TextSize = 13, LayoutOrder = consoleSeq }, consoleScroll)
@@ -2231,7 +2231,8 @@ run(function()
 					return
 				end
 				if oldnamecall then return end
-				consoleShow(true)
+				pcall(consoleShow, true)
+				pcall(consolePush, '-- Remote Spy started. Waiting for the game to fire remotes... --')
 				notif('Remote Spy', 'Logging to the Vain console window' .. (appendfile and ' (+ remotespy.txt)' or '') .. '.', 5)
 				oldnamecall = hookmetamethod(game, '__namecall', function(...)
 					if enabled then
