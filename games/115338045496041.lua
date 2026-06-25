@@ -531,73 +531,87 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 --  AUTO DEFENSE  (garrison borders + reinforce tiles under attack)
 -- ══════════════════════════════════════════════════════════════════════════════
+-- Confirmed from the place file:
+--   * tiles live in workspace.Regions (cached as _G.regionsChildren). Owned when
+--     GetAttribute('Country') == MyCountry. CANNOT spawn on a tile whose
+--     'OccupiedFrom' attribute is set (server rejects it -> "occupied territory").
+--   * geometry is the tile's GeneratedRegion model (pivot = tile centre).
+--   * soldiers live in workspace.SoldiersFolder, each has a 'Country' attribute and
+--     a 'LastFightTick' that updates while it is in combat.
+--   * spawn: Network:FireServer('CreateArmyOnTile', tileInstance, unitTypeString, count)
 run(function()
-	local AutoDefense, UnitType, Garrison, DefendBattles, MoneyReserve, ManpowerReserve, Interval, Notify
+	local AutoDefense, UnitType, Garrison, ReinforceAmt, DefendBattles, MoneyReserve, ManpowerReserve, Interval, Cooldown, Notify
+
+	-- the exact list the game iterates, with a fallback if it hasn't populated yet
+	local function regionTiles()
+		if type(_G.regionsChildren) == 'table' and #_G.regionsChildren > 0 then
+			return _G.regionsChildren
+		end
+		local r = workspace:FindFirstChild('Regions')
+		return r and r:GetChildren() or {}
+	end
+	local function soldiersFolder() return workspace:FindFirstChild('SoldiersFolder') end
 
 	local function tilePos(t)
 		local geo = t:FindFirstChild('GeneratedRegion') or t
 		local ok, p = pcall(function() return geo:GetPivot().Position end)
 		if ok and p then return p end
-		if geo:IsA('BasePart') then return geo.Position end
-		local pp = geo:FindFirstChildWhichIsA('BasePart', true)
-		return pp and pp.Position or nil
+		local bp = (geo:IsA('BasePart') and geo) or geo:FindFirstChildWhichIsA('BasePart', true)
+		return bp and bp.Position or nil
+	end
+	-- I own it and it is not occupied (occupied tiles can't have armies spawned)
+	local function spawnable(t, mine)
+		return t:GetAttribute('Country') == mine and t:GetAttribute('OccupiedFrom') == nil
 	end
 
-	local function borderTiles(myCountry)
-		local regions = workspace:FindFirstChild('Regions')
-		if not (regions and myCountry) then return {} end
+	-- typical tile spacing = median nearest-neighbour distance. Computed once and
+	-- cached; used as the adjacency threshold for "is this an enemy border".
+	local adjDist
+	local function adjacencyDist(snapshot)
+		if adjDist then return adjDist end
+		local nn = {}
+		for i = 1, #snapshot do
+			local best
+			for j = 1, #snapshot do
+				if i ~= j then
+					local d = (snapshot[i].pos - snapshot[j].pos).Magnitude
+					if not best or d < best then best = d end
+				end
+			end
+			if best then table.insert(nn, best) end
+		end
+		if #nn == 0 then return 60 end
+		table.sort(nn)
+		adjDist = nn[math.ceil(#nn / 2)]
+		return adjDist
+	end
+
+	-- snapshot every tile once per sweep: position, ownership, spawnability
+	local function snapshotTiles(mine)
 		local all = {}
-		for _, t in regions:GetChildren() do
+		for _, t in regionTiles() do
 			local p = tilePos(t)
 			if p then
-				table.insert(all, { tile = t, pos = p, mine = t:GetAttribute('Country') == myCountry })
+				table.insert(all, {
+					tile = t, pos = p,
+					mine = t:GetAttribute('Country') == mine,
+					canSpawn = spawnable(t, mine),
+				})
 			end
 		end
-		local borders = {}
-		for _, o in all do
-			if o.mine then
-				local dAny, dEnemy = math.huge, math.huge
-				for _, x in all do
-					if x ~= o then
-						local d = (o.pos - x.pos).Magnitude
-						if d < dAny then dAny = d end
-						if not x.mine and d < dEnemy then dEnemy = d end
-					end
-				end
-				if dEnemy <= dAny * 1.5 then table.insert(borders, o.tile) end
-			end
-		end
-		return borders
+		return all
 	end
 
-	-- Soldiers live in workspace.SoldiersFolder. A soldier under attack has
-	-- LastFightTick set recently (within ~5s). Map them back to nearest owned tile.
-	local function attackedTiles(myCountry)
-		local out, seen = {}, {}
-		local sf = workspace:FindFirstChild('SoldiersFolder')
-		local regions = workspace:FindFirstChild('Regions')
-		if not (sf and regions and myCountry) then return out end
-		local owned = {}
-		for _, t in regions:GetChildren() do
-			if t:GetAttribute('Country') == myCountry then
-				local p = tilePos(t)
-				if p then table.insert(owned, { tile = t, pos = p }) end
-			end
-		end
-		local now = tick()
-		for _, s in sf:GetChildren() do
-			local sc = s:GetAttribute('Country')
-			if sc == myCountry then
-				local lastFight = s:GetAttribute('LastFightTick')
-				if type(lastFight) == 'number' and now - lastFight < 5 then
-					local ok, sp = pcall(function() return s:GetPivot().Position end)
-					if ok and sp then
-						local best, bestD
-						for _, o in owned do
-							local d = (o.pos - sp).Magnitude
-							if not bestD or d < bestD then bestD, best = d, o.tile end
-						end
-						if best and not seen[best] then seen[best] = true; table.insert(out, best) end
+	-- my spawnable tiles that sit next to a tile I don't own (the frontier)
+	local function borderTiles(all)
+		local thresh = adjacencyDist(all) * 1.5
+		local out = {}
+		for _, o in all do
+			if o.canSpawn then
+				for _, x in all do
+					if not x.mine and (o.pos - x.pos).Magnitude <= thresh then
+						table.insert(out, o.tile)
+						break
 					end
 				end
 			end
@@ -605,38 +619,82 @@ run(function()
 		return out
 	end
 
+	-- my spawnable tiles that are under attack: an enemy soldier is sitting on/next
+	-- to them, OR one of my soldiers there is currently fighting (LastFightTick).
+	local function attackedTiles(all, mine)
+		local sf = soldiersFolder()
+		if not sf then return {} end
+		local thresh = adjacencyDist(all)
+		local now = tick()
+		local threats = {}  -- positions of enemy or actively-fighting soldiers
+		for _, s in sf:GetChildren() do
+			local sc = s:GetAttribute('Country')
+			local enemy = sc and sc ~= mine
+			local lf = s:GetAttribute('LastFightTick')
+			local fighting = type(lf) == 'number' and (now - lf) < 6
+			if enemy or fighting then
+				local ok, sp = pcall(function() return s:GetPivot().Position end)
+				if ok and sp then table.insert(threats, sp) end
+			end
+		end
+		if #threats == 0 then return {} end
+		local out = {}
+		for _, o in all do
+			if o.canSpawn then
+				for _, tp in threats do
+					if (o.pos - tp).Magnitude <= thresh * 1.2 then
+						table.insert(out, o.tile)
+						break
+					end
+				end
+			end
+		end
+		return out
+	end
+
+	-- don't re-spend on the same tile every single sweep
+	local lastSpawn = {}
+
 	local function sweep()
-		local myCountry = lplr:GetAttribute('MyCountry')
-		if not (myCountry and getActionRemote()) then return end
+		local mine = lplr:GetAttribute('MyCountry')
+		if not (mine and getActionRemote()) then return end
 		local moneyReserve = (MoneyReserve.Value or 0) * 1e6
-		local mpReserve = (ManpowerReserve.Value or 0) * 1e3
-		local unit = (UnitType and UnitType.Value) or 'Soldier'
+		local mpReserve    = (ManpowerReserve.Value or 0) * 1e3
+		local unit     = (UnitType and UnitType.Value) or 'Soldier'
 		local garrison = math.floor(Garrison.Value)
+		local reinAmt  = math.floor(ReinforceAmt.Value)
+		local cd       = Cooldown and Cooldown.Value or 20
 		local reinforced, garrisoned = 0, 0
 
 		local function canSpend()
-			local m, p = getBalance(myCountry)
+			local m, p = getBalance(mine)
 			if m and m <= moneyReserve then return false end
 			if p and p <= mpReserve then return false end
 			return true
 		end
-		local function spawn(tile, count)
-			if tile:GetAttribute('SpawningArmy') ~= nil then return false end
+		local function spawn(tile, count, force)
+			local now = tick()
+			if not force and lastSpawn[tile] and (now - lastSpawn[tile]) < cd then return false end
 			if not canSpend() then return false end
+			lastSpawn[tile] = now
 			fireAction('CreateArmyOnTile', tile, unit, count)
 			task.wait(0.15)
 			return true
 		end
 
+		local all = snapshotTiles(mine)
+
+		-- 1) emergency reinforce: tiles under attack (ignores cooldown, bigger batch)
 		if DefendBattles.Enabled then
-			for _, t in attackedTiles(myCountry) do
+			for _, t in attackedTiles(all, mine) do
 				if not AutoDefense.Enabled then break end
-				if spawn(t, garrison) then reinforced += 1 end
+				if spawn(t, reinAmt, true) then reinforced += 1 end
 			end
 		end
-		for _, t in borderTiles(myCountry) do
+		-- 2) garrison the frontier (respects cooldown)
+		for _, t in borderTiles(all) do
 			if not AutoDefense.Enabled then break end
-			if spawn(t, garrison) then garrisoned += 1 end
+			if spawn(t, garrison, false) then garrisoned += 1 end
 		end
 
 		if Notify.Enabled and (reinforced + garrisoned) > 0 then
@@ -649,32 +707,42 @@ run(function()
 		Name = 'Auto Defense',
 		Function = function(callback)
 			if callback then
-				local myCountry = lplr:GetAttribute('MyCountry')
-				local sf = workspace:FindFirstChild('SoldiersFolder')
-				notif('Auto Defense', string.format('%s | SoldiersFolder: %s | border tiles: %d',
+				local mine = lplr:GetAttribute('MyCountry')
+				local all  = snapshotTiles(mine)
+				local owned, spawnTiles = 0, 0
+				for _, o in all do
+					if o.mine then owned += 1 end
+					if o.canSpawn then spawnTiles += 1 end
+				end
+				notif('Auto Defense', string.format('%s | tiles %d | mine %d | spawnable %d | borders %d | soldiers %s',
 					getActionRemote() and 'Remote OK' or 'NO REMOTE',
-					sf and 'found' or 'NOT FOUND',
-					#borderTiles(myCountry)), 7,
-					(getActionRemote() and myCountry) and nil or 'warning')
+					#all, owned, spawnTiles, #borderTiles(all),
+					soldiersFolder() and 'OK' or 'MISSING'), 8,
+					(getActionRemote() and mine and spawnTiles > 0) and nil or 'warning')
 				task.spawn(function()
 					repeat
 						sweep()
-						task.wait(Interval and Interval.Value or 12)
+						task.wait(Interval and Interval.Value or 8)
 					until not AutoDefense.Enabled
 				end)
 			end
 		end,
-		Tooltip = 'Garrisons your border tiles every interval and emergency-reinforces any tile under attack. Never moves onto enemy land.'
+		Tooltip = 'Stations troops on your border tiles and emergency-reinforces any owned tile under attack. Only spawns on tiles you actually own (skips occupied territory) and never moves onto enemy land.'
 	})
 	UnitType = AutoDefense:CreateDropdown({ Name = 'Unit',
 		List = { 'Soldier', 'Tank', 'Artillery', 'AntiAircraft' }, Default = 'Soldier' })
 	Garrison = AutoDefense:CreateSlider({ Name = 'Garrison Size', Min = 1, Max = 500, Default = 10,
-		Tooltip = 'Units to spawn per border tile each pass.' })
+		Tooltip = 'Units to keep on each border tile.' })
+	ReinforceAmt = AutoDefense:CreateSlider({ Name = 'Reinforce Size', Min = 1, Max = 500, Default = 25,
+		Tooltip = 'Units to rush to a tile that is under attack.' })
 	DefendBattles = AutoDefense:CreateToggle({ Name = 'Reinforce Battles', Default = true,
-		Tooltip = 'Also spawn on tiles where your soldiers are actively fighting.' })
+		Tooltip = 'Rush reinforcements to any owned tile with an enemy soldier on it or active combat.' })
 	MoneyReserve = AutoDefense:CreateSlider({ Name = 'Money Reserve', Min = 0, Max = 500, Default = 5, Suffix = 'M' })
 	ManpowerReserve = AutoDefense:CreateSlider({ Name = 'Manpower Reserve', Min = 0, Max = 1000, Default = 20, Suffix = 'K' })
-	Interval = AutoDefense:CreateSlider({ Name = 'Interval', Min = 2, Max = 60, Default = 12, Suffix = 'sec' })
+	Interval = AutoDefense:CreateSlider({ Name = 'Interval', Min = 1, Max = 60, Default = 8, Suffix = 'sec',
+		Tooltip = 'How often to re-check borders and battles.' })
+	Cooldown = AutoDefense:CreateSlider({ Name = 'Re-garrison Cooldown', Min = 0, Max = 120, Default = 20, Suffix = 'sec',
+		Tooltip = 'Minimum time before topping up the same border tile again (battles ignore this).' })
 	Notify = AutoDefense:CreateToggle({ Name = 'Notify', Default = false })
 end)
 
@@ -684,21 +752,30 @@ end)
 run(function()
 	local AutoTrain, UnitType, BatchSize, ManpowerReserve, MoneyReserve, Interval, Notify
 
-	-- pick the best tile to spawn on: prefer a city (CityInfo child), then capital
-	-- attribute, then any owned tile. Re-evaluated each sweep.
+	-- the canonical tile list the game iterates, with a fallback
+	local function regionTiles()
+		if type(_G.regionsChildren) == 'table' and #_G.regionsChildren > 0 then
+			return _G.regionsChildren
+		end
+		local r = workspace:FindFirstChild('Regions')
+		return r and r:GetChildren() or {}
+	end
+
+	-- Pick a tile we can actually spawn on: owned (Country==mine) and NOT occupied
+	-- ('OccupiedFrom' set means the server rejects the spawn). Prefer Capital, then a
+	-- Core tile, then any valid owned tile. Re-evaluated each sweep.
 	local function spawnTile()
-		local regions = workspace:FindFirstChild('Regions')
 		local mine = lplr:GetAttribute('MyCountry')
-		if not (regions and mine) then return nil end
-		local anyTile, capital, city = nil, nil, nil
-		for _, tile in regions:GetChildren() do
-			if tile:GetAttribute('Country') == mine then
-				anyTile = anyTile or tile
+		if not mine then return nil end
+		local capital, core, any
+		for _, tile in regionTiles() do
+			if tile:GetAttribute('Country') == mine and tile:GetAttribute('OccupiedFrom') == nil then
+				any = any or tile
+				if tile:GetAttribute('Core') then core = core or tile end
 				if tile:GetAttribute('Capital') or tile:GetAttribute('IsCapital') then capital = tile end
-				if tile:FindFirstChild('CityInfo') then city = city or tile end
 			end
 		end
-		return city or capital or anyTile
+		return capital or core or any
 	end
 
 	local function sweep()
