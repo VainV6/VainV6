@@ -386,14 +386,23 @@ run(function()
 		return false
 	end
 
-	-- all country names currently in CountryRegistry except ours
+	-- countries that still have at least one tile NOT owned by us (i.e. not conquered)
 	local function allCountries()
 		local reg = replicatedStorage:FindFirstChild('CountryRegistry')
 		local out = {}
 		if not reg then return out end
 		local mine = lplr:GetAttribute('MyCountry')
+		local regions = workspace:FindFirstChild('Regions')
+		-- build a set of countries that still own at least one tile
+		local stillExist = {}
+		if regions then
+			for _, tile in regions:GetChildren() do
+				local c = tile:GetAttribute('Country')
+				if c and c ~= mine then stillExist[c] = true end
+			end
+		end
 		for _, cf in reg:GetChildren() do
-			if cf.Name ~= mine then
+			if cf.Name ~= mine and stillExist[cf.Name] then
 				table.insert(out, cf.Name)
 			end
 		end
@@ -646,4 +655,86 @@ run(function()
 	ManpowerReserve = AutoDefense:CreateSlider({ Name = 'Manpower Reserve', Min = 0, Max = 1000, Default = 20, Suffix = 'K', Tooltip = 'Never spend manpower below this.' })
 	Interval = AutoDefense:CreateSlider({ Name = 'Interval', Min = 2, Max = 60, Default = 12, Suffix = 'sec', Tooltip = 'How often to reinforce borders and battles.' })
 	Notify = AutoDefense:CreateToggle({ Name = 'Notify', Default = false, Tooltip = 'Notify each pass how many tiles were reinforced/garrisoned.' })
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
+--  AUTO TRAIN UNIT  (spawn a chosen unit on your capital/chosen tile repeatedly)
+-- ══════════════════════════════════════════════════════════════════════════════
+run(function()
+	local AutoTrain, UnitType, BatchSize, ManpowerReserve, MoneyReserve, Interval, Notify
+
+	-- pick the best tile to spawn on: capital first, then any owned tile
+	local function spawnTile()
+		local regions = workspace:FindFirstChild('Regions')
+		local mine = lplr:GetAttribute('MyCountry')
+		if not (regions and mine) then return nil end
+		local fallback = nil
+		for _, tile in regions:GetChildren() do
+			if tile:GetAttribute('Country') == mine then
+				if tile:GetAttribute('Capital') then return tile end
+				fallback = fallback or tile
+			end
+		end
+		return fallback
+	end
+
+	local function sweep()
+		local mine = lplr:GetAttribute('MyCountry')
+		if not (mine and getActionRemote()) then return end
+		local moneyReserve = (MoneyReserve.Value or 0) * 1e6
+		local mpReserve    = (ManpowerReserve.Value or 0) * 1e3
+		local unit  = (UnitType and UnitType.Value) or 'Soldier'
+		local batch = math.floor(BatchSize and BatchSize.Value or 10)
+		local tile  = spawnTile()
+		if not tile then
+			if Notify.Enabled then notif('Auto Train', 'No owned tile found to spawn on.', 4, 'warning') end
+			return
+		end
+		local money, mp = getBalance(mine)
+		if money and money <= moneyReserve then return end
+		if mp    and mp    <= mpReserve    then return end
+		fireAction('CreateArmyOnTile', tile, unit, batch)
+		if Notify.Enabled then
+			notif('Auto Train', string.format('Trained %d %s on %s', batch, unit, tile.Name), 3)
+		end
+	end
+
+	AutoTrain = vain.Categories.Utility:CreateModule({
+		Name = 'Auto Train Unit',
+		Function = function(callback)
+			if callback then
+				local tile = spawnTile()
+				local mine = lplr:GetAttribute('MyCountry')
+				local money, mp = getBalance(mine)
+				notif('Auto Train', string.format('Remote: %s | Tile: %s | Money: %s | MP: %s',
+					getActionRemote() and 'OK' or 'NOT FOUND',
+					tile and tile.Name or 'none',
+					money and string.format('%.1fm', money/1e6) or '?',
+					mp and tostring(math.floor(mp)) or '?'), 6,
+					(getActionRemote() and tile) and nil or 'warning')
+				task.spawn(function()
+					repeat
+						sweep()
+						task.wait(Interval and Interval.Value or 5)
+					until not AutoTrain.Enabled
+				end)
+			end
+		end,
+		Tooltip = 'Automatically trains your chosen unit on your capital (or any owned tile) every interval, as long as you can afford it and stay above your reserves.'
+	})
+	UnitType = AutoTrain:CreateDropdown({
+		Name = 'Unit Type',
+		List = { 'Soldier', 'Tank', 'Artillery', 'AntiAircraft', 'Plane', 'Battleship', 'Missile Launcher', 'Aircraft Carrier' },
+		Tooltip = 'Which unit to train each interval.'
+	})
+	BatchSize = AutoTrain:CreateSlider({ Name = 'Batch Size', Min = 1, Max = 500, Default = 10,
+		Tooltip = 'How many units to spawn per interval.' })
+	MoneyReserve = AutoTrain:CreateSlider({ Name = 'Money Reserve', Min = 0, Max = 500, Default = 5, Suffix = 'M',
+		Tooltip = 'Never spend money below this.' })
+	ManpowerReserve = AutoTrain:CreateSlider({ Name = 'Manpower Reserve', Min = 0, Max = 1000, Default = 20, Suffix = 'K',
+		Tooltip = 'Never spend manpower below this.' })
+	Interval = AutoTrain:CreateSlider({ Name = 'Interval', Min = 1, Max = 60, Default = 5, Suffix = 'sec',
+		Tooltip = 'How often to train a batch.' })
+	Notify = AutoTrain:CreateToggle({ Name = 'Notify', Default = false,
+		Tooltip = 'Show a notification each time a batch is trained.' })
 end)
