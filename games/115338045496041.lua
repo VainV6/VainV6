@@ -237,17 +237,84 @@ run(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
---  AUTO CAPTURE  (toggle the game's built-in auto-capture)
+--  AUTO CAPTURE  (enable auto-capture on every one of your soldiers)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
-	local AutoCapture
+	local AutoCapture, Mode
+
+	-- find the workspace folder that holds soldier models
+	local function soldierCountry(m) return m:GetAttribute('Country') or m:GetAttribute('COUNTRY') end
+	local function isSoldier(m)
+		return m:IsA('Model') and soldierCountry(m) ~= nil
+			and (m:GetAttribute('Type') ~= nil or m:GetAttribute('MOVING') ~= nil
+				or m:GetAttribute('Fighting') ~= nil or m:FindFirstChildWhichIsA('Humanoid') ~= nil)
+	end
+	local soldierContainer = nil
+	local function getSoldierContainer()
+		if soldierContainer and soldierContainer.Parent then return soldierContainer end
+		for _, name in {'Misc', 'WorldCenter', 'Units', 'Soldiers', 'Armies', 'Military'} do
+			local f = workspace:FindFirstChild(name)
+			if f then
+				for _, m in f:GetChildren() do
+					if isSoldier(m) then soldierContainer = f return f end
+				end
+			end
+		end
+		for _, m in workspace:GetDescendants() do
+			if isSoldier(m) then soldierContainer = m.Parent return m.Parent end
+		end
+		return nil
+	end
+
+	local function toggleAll(state)
+		local mine = lplr:GetAttribute('MyCountry')
+		if not mine then return end
+		local cont = getSoldierContainer()
+		if not cont then return end
+		local modeVal = (Mode and Mode.Value) or 'Capture'
+		for _, m in cont:GetChildren() do
+			if soldierCountry(m) == mine then
+				if modeVal == 'Attack' then
+					fireAction('ToggleAutoCapture', m, state, 'Attack')
+				else
+					fireAction('ToggleAutoCapture', m, state)
+				end
+				task.wait(0.05)
+			end
+		end
+	end
+
 	AutoCapture = vain.Categories.Utility:CreateModule({
 		Name = 'Auto Capture',
 		Function = function(callback)
-			-- the game exposes a ToggleAutoCapture action; pass the desired state
-			fireAction('ToggleAutoCapture', callback)
+			if callback then
+				local mine = lplr:GetAttribute('MyCountry')
+				local cont = getSoldierContainer()
+				local count = 0
+				if cont then
+					for _, m in cont:GetChildren() do
+						if soldierCountry(m) == mine then count += 1 end
+					end
+				end
+				notif('Auto Capture', string.format('Remote: %s | Soldiers found: %d',
+					getActionRemote() and 'OK' or 'NOT FOUND', count), 5,
+					(getActionRemote() and count > 0) and nil or 'warning')
+				toggleAll(true)
+				-- re-apply every 10s to catch newly spawned soldiers
+				task.spawn(function()
+					repeat task.wait(10) if AutoCapture.Enabled then toggleAll(true) end
+					until not AutoCapture.Enabled
+				end)
+			else
+				toggleAll(false)
+			end
 		end,
-		Tooltip = "Toggles the game's built-in auto-capture (keeps expanding into adjacent tiles). If it behaves like a pure toggle in-game, flip it once to sync."
+		Tooltip = 'Enables auto-capture on all your soldiers so they keep expanding into adjacent tiles automatically. Re-applies every 10s to catch new units.'
+	})
+	Mode = AutoCapture:CreateDropdown({
+		Name = 'Mode',
+		List = { 'Capture', 'Attack' },
+		Tooltip = 'Capture - expand into neutral/owned tiles\nAttack - also attack enemy tiles'
 	})
 end)
 
@@ -587,7 +654,7 @@ run(function()
 		if not (myCountry and getActionRemote()) then return end
 		local moneyReserve = (MoneyReserve.Value or 0) * 1e6
 		local mpReserve = (ManpowerReserve.Value or 0) * 1e3
-		local unit = (UnitType and UnitType.Value) or 'Infantry'
+		local unit = (UnitType and UnitType.Value) or 'Soldier'
 		local garrison = math.floor(Garrison.Value)
 		local reinforced, garrisoned = 0, 0
 
@@ -607,7 +674,7 @@ run(function()
 
 		-- 1) emergency: reinforce any owned tile under attack
 		if DefendBattles.Enabled then
-			for _, t in fightingTiles(myCountry) do
+			for _, t in attackedTiles(myCountry) do
 				if not AutoDefense.Enabled then break end
 				if spawn(t, garrison) then reinforced = reinforced + 1 end
 			end
@@ -632,7 +699,7 @@ run(function()
 					local myCountry = lplr:GetAttribute('MyCountry')
 					notif('Auto Defense', string.format('%s  |  border tiles: %d  |  under attack: %d',
 						getActionRemote() and 'Remote OK' or 'NO REMOTE',
-						#borderTiles(myCountry), #fightingTiles(myCountry)), 7,
+						#borderTiles(myCountry), #attackedTiles(myCountry)), 7,
 						(getActionRemote() and myCountry) and nil or 'warning')
 				end
 				task.spawn(function()
@@ -646,7 +713,7 @@ run(function()
 		Tooltip = 'Purely defensive: garrisons your border tiles and emergency-reinforces any tile under attack. Only ever spawns troops on tiles you own -- never moves onto enemy land and never declares war. Respects your money/manpower reserve.'
 	})
 	UnitType = AutoDefense:CreateDropdown({
-		Name = 'Unit', List = { 'Infantry', 'Tank', 'Artillery', 'AntiAircraft' }, Default = 'Infantry',
+		Name = 'Unit', List = { 'Soldier', 'Tank', 'Artillery', 'AntiAircraft' }, Default = 'Soldier',
 		Tooltip = 'Which unit to defend with. Infantry is cheapest; Tank/Artillery hit harder but cost more.'
 	})
 	Garrison = AutoDefense:CreateSlider({ Name = 'Garrison Size', Min = 1, Max = 50, Default = 5, Tooltip = 'How many units to (re)spawn per tile each pass.' })
@@ -663,19 +730,21 @@ end)
 run(function()
 	local AutoTrain, UnitType, BatchSize, ManpowerReserve, MoneyReserve, Interval, Notify
 
-	-- pick the best tile to spawn on: capital first, then any owned tile
+	-- pick the best tile to spawn on: prefer a city (CityInfo child), then capital
+	-- attribute, then any owned tile. Re-evaluated each sweep.
 	local function spawnTile()
 		local regions = workspace:FindFirstChild('Regions')
 		local mine = lplr:GetAttribute('MyCountry')
 		if not (regions and mine) then return nil end
-		local fallback = nil
+		local anyTile, capital, city = nil, nil, nil
 		for _, tile in regions:GetChildren() do
 			if tile:GetAttribute('Country') == mine then
-				if tile:GetAttribute('Capital') then return tile end
-				fallback = fallback or tile
+				anyTile = anyTile or tile
+				if tile:GetAttribute('Capital') or tile:GetAttribute('IsCapital') then capital = tile end
+				if tile:FindFirstChild('CityInfo') then city = city or tile end
 			end
 		end
-		return fallback
+		return city or capital or anyTile
 	end
 
 	local function sweep()
@@ -687,12 +756,14 @@ run(function()
 		local batch = math.floor(BatchSize and BatchSize.Value or 10)
 		local tile  = spawnTile()
 		if not tile then
-			if Notify.Enabled then notif('Auto Train', 'No owned tile found to spawn on.', 4, 'warning') end
+			notif('Auto Train', 'No owned tile found to spawn on.', 4, 'warning')
 			return
 		end
 		local money, mp = getBalance(mine)
 		if money and money <= moneyReserve then return end
 		if mp    and mp    <= mpReserve    then return end
+		-- the server sets SpawningArmy=true while processing; skip only if it's literally true
+		if tile:GetAttribute('SpawningArmy') == true then return end
 		fireAction('CreateArmyOnTile', tile, unit, batch)
 		if Notify.Enabled then
 			notif('Auto Train', string.format('Trained %d %s on %s', batch, unit, tile.Name), 3)
