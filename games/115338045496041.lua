@@ -346,46 +346,110 @@ run(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
---  AUTO WAR  (justify + declare war on the countries you list)
+--  AUTO WAR  (justify + declare war on the countries you list, or everyone)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
-	local AutoWar, Targets, AutoDeclare, Interval
+	local AutoWar, Targets, TargetAll, AutoDeclare, Interval
 
+	local myCountry = lplr:GetAttribute('MyCountry')
+
+	-- Check if WE are already at war with a specific country by looking at our
+	-- own JustifyingWars / InWarWith data on the CountryRegistry entry for us.
+	-- Fallback: if our country entry has an InWarWith child listing them, or their
+	-- entry lists us. If nothing found, assume not at war so we keep trying.
 	local function atWarWith(name)
-		-- best-effort: the target's AtWar attribute flips once a war involving it begins
 		local reg = replicatedStorage:FindFirstChild('CountryRegistry')
-		local cf = reg and reg:FindFirstChild(name)
-		return (cf and cf:GetAttribute('AtWar') == true) or false
+		if not reg then return false end
+		-- check our own entry's war list
+		local myCf = reg:FindFirstChild(myCountry or '')
+		if myCf then
+			local inWarWith = myCf:FindFirstChild('InWarWith')
+			if inWarWith then
+				for _, v in inWarWith:GetChildren() do
+					if v.Value == name or v.Name == name then return true end
+				end
+			end
+			-- some versions store it as an attribute table
+			local attr = myCf:GetAttribute('InWarWith')
+			if type(attr) == 'string' and attr:find(name) then return true end
+		end
+		-- check their entry
+		local theirCf = reg:FindFirstChild(name)
+		if theirCf then
+			local inWarWith = theirCf:FindFirstChild('InWarWith')
+			if inWarWith then
+				for _, v in inWarWith:GetChildren() do
+					if v.Value == myCountry or v.Name == myCountry then return true end
+				end
+			end
+		end
+		return false
+	end
+
+	-- all country names currently in CountryRegistry except ours
+	local function allCountries()
+		local reg = replicatedStorage:FindFirstChild('CountryRegistry')
+		local out = {}
+		if not reg then return out end
+		local mine = lplr:GetAttribute('MyCountry')
+		for _, cf in reg:GetChildren() do
+			if cf.Name ~= mine then
+				table.insert(out, cf.Name)
+			end
+		end
+		return out
+	end
+
+	local function sweep()
+		if not getActionRemote() then return end
+		myCountry = lplr:GetAttribute('MyCountry')
+		local targets = TargetAll and TargetAll.Enabled
+			and allCountries()
+			or (Targets and Targets.ListEnabled or {})
+
+		for _, name in targets do
+			if not AutoWar.Enabled then break end
+			if name == '' or name == myCountry then continue end
+			if atWarWith(name) then continue end
+			fireAction('JustifyWar', name)
+			task.wait(0.4)
+			if AutoDeclare and AutoDeclare.Enabled then
+				fireAction('DeclareWar', name)
+				task.wait(0.4)
+			end
+		end
 	end
 
 	AutoWar = vain.Categories.Utility:CreateModule({
 		Name = 'Auto War',
 		Function = function(callback)
 			if callback then
+				-- one-time diagnostic
+				myCountry = lplr:GetAttribute('MyCountry')
+				local reg = replicatedStorage:FindFirstChild('CountryRegistry')
+				notif('Auto War', string.format('Remote: %s | Country: %s | Registry countries: %d',
+					getActionRemote() and 'OK' or 'NOT FOUND',
+					tostring(myCountry),
+					reg and #reg:GetChildren() or 0), 6,
+					(getActionRemote() and myCountry) and nil or 'warning')
 				task.spawn(function()
 					repeat
-						if getActionRemote() then
-							for _, name in (Targets and Targets.ListEnabled or {}) do
-								if not AutoWar.Enabled then break end
-								if name ~= '' and not atWarWith(name) then
-									fireAction('JustifyWar', name)
-									task.wait(0.3)
-									if AutoDeclare.Enabled then
-										fireAction('DeclareWar', name)
-									end
-								end
-							end
-						end
+						sweep()
 						task.wait(Interval and Interval.Value or 8)
 					until not AutoWar.Enabled
 				end)
 			end
 		end,
-		Tooltip = 'List exact country names to war. Auto War keeps justifying (and, if enabled, declaring) on each until you are at war with them. Justification still takes the normal in-game time.'
+		Tooltip = 'Justifies and declares war on every country in your target list (or everyone on the server with Target All). Keeps retrying on the interval until all targets are at war.'
 	})
-	Targets = AutoWar:CreateTextList({ Name = 'Targets', Tooltip = 'Exact country names to declare war on (one per entry), e.g. Poland, France.' })
-	AutoDeclare = AutoWar:CreateToggle({ Name = 'Auto Declare', Default = true, Tooltip = 'Also fire DeclareWar once justification allows it. Off = justify only.' })
-	Interval = AutoWar:CreateSlider({ Name = 'Retry', Min = 2, Max = 60, Default = 8, Suffix = 'sec', Tooltip = 'How often to retry justify/declare until you are at war.' })
+	TargetAll = AutoWar:CreateToggle({ Name = 'Target All', Default = false,
+		Tooltip = 'Ignore the target list and justify+declare on EVERY other country currently in the server.' })
+	Targets = AutoWar:CreateTextList({ Name = 'Targets',
+		Tooltip = 'Exact country names to war (one per entry). Ignored when Target All is on.' })
+	AutoDeclare = AutoWar:CreateToggle({ Name = 'Auto Declare', Default = true,
+		Tooltip = 'Also fire DeclareWar immediately after justifying. Turn off to only justify.' })
+	Interval = AutoWar:CreateSlider({ Name = 'Retry', Min = 2, Max = 60, Default = 8, Suffix = 'sec',
+		Tooltip = 'How often to re-sweep and retry any targets not yet at war.' })
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
