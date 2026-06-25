@@ -759,14 +759,14 @@ run(function()
 			notif('Auto Train', 'No owned tile found to spawn on.', 4, 'warning')
 			return
 		end
+		-- SpawningArmy is a STRING (the unit type) when a spawn is queued, nil when free
+		if tile:GetAttribute('SpawningArmy') ~= nil then return end
 		local money, mp = getBalance(mine)
 		if money and money <= moneyReserve then return end
 		if mp    and mp    <= mpReserve    then return end
-		-- the server sets SpawningArmy=true while processing; skip only if it's literally true
-		if tile:GetAttribute('SpawningArmy') == true then return end
 		fireAction('CreateArmyOnTile', tile, unit, batch)
 		if Notify.Enabled then
-			notif('Auto Train', string.format('Trained %d %s on %s', batch, unit, tile.Name), 3)
+			notif('Auto Train', string.format('Queued %d %s on %s', batch, unit, tile.Name), 3)
 		end
 	end
 
@@ -804,8 +804,8 @@ run(function()
 		Tooltip = 'Never spend money below this.' })
 	ManpowerReserve = AutoTrain:CreateSlider({ Name = 'Manpower Reserve', Min = 0, Max = 1000, Default = 20, Suffix = 'K',
 		Tooltip = 'Never spend manpower below this.' })
-	Interval = AutoTrain:CreateSlider({ Name = 'Interval', Min = 1, Max = 60, Default = 5, Suffix = 'sec',
-		Tooltip = 'How often to train a batch.' })
+	Interval = AutoTrain:CreateSlider({ Name = 'Interval', Min = 1, Max = 60, Default = 1, Suffix = 'sec',
+		Tooltip = 'How often to check if the tile is free and queue the next batch. Keep at 1s to re-queue instantly after the previous spawn finishes.' })
 	Notify = AutoTrain:CreateToggle({ Name = 'Notify', Default = false,
 		Tooltip = 'Show a notification each time a batch is trained.' })
 end)
