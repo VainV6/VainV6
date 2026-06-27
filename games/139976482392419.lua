@@ -941,6 +941,106 @@ run(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
+--  AUTO SHOVEL  (Pirate class -- auto-dig for buried treasure off cooldown)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- Decoded from the place file (pirateShovelButton -> u253, Line ~2001): a dig is
+-- only valid when you are a Pirate, NOT in the shop, and the server cooldown has
+-- elapsed. The cooldown is the LocalPlayer attribute "PirateShovelNextAt" compared
+-- against workspace:GetServerTimeNow(). The dig itself equips the "Shovel" Tool and
+-- fires its child RemoteEvent "Remote" with "LeftDown" (falling back to :Activate()).
+-- We replay exactly that, so the server accepts it like a normal click.
+run(function()
+	local AutoShovel, Interval, AutoEquip, ReEquip
+
+	-- find the Shovel tool in the character (equipped) or backpack
+	local function findShovel()
+		local char = lplr.Character
+		if char then
+			for _, t in ipairs(char:GetChildren()) do
+				if t:IsA('Tool') and t.Name == 'Shovel' then return t, true end
+			end
+		end
+		local bp = lplr:FindFirstChildOfClass('Backpack')
+		if bp then
+			for _, t in ipairs(bp:GetChildren()) do
+				if t:IsA('Tool') and t.Name == 'Shovel' then return t, false end
+			end
+		end
+		return nil
+	end
+
+	-- replicate the game's own dig (u253): cooldown-gated, equips + fires Remote
+	local function digOnce()
+		if not aliveLocal() then return false end
+		local class = lplr:FindFirstChild('PlayerClass')
+		if not (class and class.Value == 'Pirate') then return false end
+		-- can't dig while in the shop
+		local inShop = replicatedStorage:FindFirstChild('IsInShop')
+		if inShop and inShop.Value == true then return false end
+		-- respect the server dig cooldown
+		local nextAt = lplr:GetAttribute('PirateShovelNextAt')
+		if nextAt and workspace:GetServerTimeNow() < nextAt then return false end
+
+		local shovel, equipped = findShovel()
+		if not shovel then return false end
+		local char = lplr.Character
+		local hum = char and char:FindFirstChildOfClass('Humanoid')
+		if not hum then return false end
+
+		pcall(function()
+			if AutoEquip.Enabled and not equipped then
+				-- the game unequips everything then equips the shovel so the dig lands
+				hum:UnequipTools()
+				local bp = lplr:FindFirstChildOfClass('Backpack')
+				if bp and shovel.Parent ~= bp and shovel.Parent ~= char then
+					shovel.Parent = bp
+				end
+				hum:EquipTool(shovel)
+				task.wait(0.12)
+			end
+			local remote = shovel:FindFirstChild('Remote')
+			if remote and remote:IsA('RemoteEvent') then
+				remote:FireServer('LeftDown')
+			else
+				shovel:Activate()
+			end
+			-- optionally swap back to your previous weapon between digs so AutoFarm/
+			-- combat still works; the next dig will re-equip the shovel.
+			if ReEquip.Enabled then
+				task.wait(0.05)
+				hum:UnequipTools()
+			end
+		end)
+		return true
+	end
+
+	AutoShovel = vain.Categories.Utility:CreateModule({
+		Name = 'Auto Shovel',
+		Function = function(callback)
+			if callback then
+				-- one immediate diagnostic so you know why nothing is happening
+				local class = lplr:FindFirstChild('PlayerClass')
+				if not (class and class.Value == 'Pirate') then
+					notif('Auto Shovel', 'You are not a Pirate -- only the Pirate class can dig. Switch class first.', 6, 'warning')
+				elseif not findShovel() then
+					notif('Auto Shovel', 'No "Shovel" tool found in your character or backpack.', 6, 'warning')
+				end
+				task.spawn(function()
+					repeat
+						digOnce()
+						task.wait(Interval and Interval.Value or 0.3)
+					until not AutoShovel.Enabled
+				end)
+			end
+		end,
+		Tooltip = 'Auto-digs for buried treasure (Pirate class only). Replays the exact in-game shovel dig, respecting the server cooldown -- equips the Shovel and fires its dig remote whenever the cooldown is up.'
+	})
+	Interval = AutoShovel:CreateSlider({Name = 'Check Rate', Min = 0.1, Max = 2, Default = 0.3, Decimal = 100, Suffix = 'sec', Tooltip = 'How often to check if the dig cooldown is up. Lower = digs the instant it is ready.'})
+	AutoEquip = AutoShovel:CreateToggle({Name = 'Auto Equip', Default = true, Tooltip = 'Equip the Shovel before digging (matches the game). Turn off only if you keep it equipped yourself.'})
+	ReEquip = AutoShovel:CreateToggle({Name = 'Unequip After', Default = false, Tooltip = 'Unequip the Shovel right after each dig so you can keep using your weapon between digs (e.g. alongside AutoFarm).'})
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
 --  BOW AIMBOT  (lead the nearest enemy when firing a bow/ranged weapon)
 -- ══════════════════════════════════════════════════════════════════════════════
 run(function()
