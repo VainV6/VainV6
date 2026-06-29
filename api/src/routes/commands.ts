@@ -1,5 +1,5 @@
 import { Env, COMMANDS } from '../types';
-import { getByRoblox, getByCommandToken, peekCommand, deleteCommand, queueCommand } from '../db/queries';
+import { getByRoblox, getByCommandToken, peekCommand, deleteCommand, queueCommand, getPresenceInJob } from '../db/queries';
 
 // GET /commands/poll?token=XXX
 // Long-polls: holds open up to 25s, returns the instant a command is queued for
@@ -35,7 +35,7 @@ export async function handleLongPoll(request: Request, env: Env): Promise<Respon
 // client-supplied `from` to forge. A sender may only target a user ranked
 // STRICTLY BELOW themselves.
 export async function handleQueue(request: Request, env: Env): Promise<Response> {
-  let body: { token?: string; target?: string; command?: string; args?: string };
+  let body: { token?: string; target?: string; command?: string; args?: string; jobId?: string };
   try { body = await request.json() as typeof body; }
   catch { return jsonErr('Invalid JSON', 400); }
 
@@ -48,8 +48,27 @@ export async function handleQueue(request: Request, env: Env): Promise<Response>
   if (!senderRow || !senderRow.roblox_username) return jsonErr('Invalid token', 403);
   if (senderRow.tier < 1) return jsonErr('You must be whitelisted to use commands', 403);
 
-  // Target tier defaults to 0 (Free) when not in the DB — any rank can be
-  // commanded as long as it is strictly below the sender's rank.
+  // target "all": fan the command out to every Vain user currently injected in
+  // YOUR server (same jobId) who is ranked strictly below you. Only injected
+  // users can receive a command anyway, so this is the full set it can hit.
+  if (target.toLowerCase() === 'all') {
+    const jobId = (body.jobId ?? '').trim();
+    const peers = await getPresenceInJob(env.DB, jobId, senderRow.roblox_username);
+    let count = 0;
+    for (const p of peers) {
+      if (p.tier < senderRow.tier) {
+        await queueCommand(
+          env.DB, crypto.randomUUID(), senderRow.discord_id,
+          senderRow.roblox_username, p.username, command, args ?? null,
+        );
+        count++;
+      }
+    }
+    return json({ ok: true, count });
+  }
+
+  // Single target: tier defaults to 0 (Free) when not in the DB — any rank can
+  // be commanded as long as it is strictly below the sender's rank.
   const targetRow = await getByRoblox(env.DB, target);
   const targetTier = targetRow?.tier ?? 0;
   if (targetTier >= senderRow.tier) return jsonErr('You can only command players ranked below you', 403);

