@@ -2890,6 +2890,149 @@ function mainapi:CreateGUI()
 		return optionapi
 	end
 
+	-- A little command console: type "<command> <player>" (e.g. kill bob) with
+	-- ghost-text autocomplete for both the command and the player name. Tab
+	-- accepts the suggestion, Enter runs it through the Vain command relay.
+	function categoryapi:CreateConsole()
+		local Players = cloneref(game:GetService('Players'))
+		local COMMANDS = {'kick','kill','freeze','crash','expose','fling','spin','loopkill','annoy','grief','notify'}
+
+		local console = Instance.new('Frame')
+		console.Name = 'CommandConsole'
+		console.Size = UDim2.fromOffset(220, 40)
+		console.BackgroundColor3 = uipallet.Main
+		console.BorderSizePixel = 0
+		console.Parent = settingschildren
+		addTooltip(console, 'Run a command on a player ranked below you. Type "<command> <player>", e.g. kill bob. Tab = accept suggestion, Enter = run.')
+
+		local bkg = Instance.new('Frame')
+		bkg.Name = 'BKG'
+		bkg.Size = UDim2.new(1, -20, 0, 28)
+		bkg.Position = UDim2.fromOffset(10, 6)
+		bkg.BackgroundColor3 = color.Light(uipallet.Main, 0.02)
+		bkg.BorderSizePixel = 0
+		bkg.Parent = console
+		addCorner(bkg, UDim.new(0, 4))
+		local pad = Instance.new('UIPadding')
+		pad.PaddingLeft = UDim.new(0, 8)
+		pad.PaddingRight = UDim.new(0, 8)
+		pad.Parent = bkg
+
+		-- dim suggestion that renders right after whatever you've typed
+		local ghost = Instance.new('TextLabel')
+		ghost.Name = 'Ghost'
+		ghost.Size = UDim2.fromScale(1, 1)
+		ghost.BackgroundTransparency = 1
+		ghost.Text = ''
+		ghost.TextXAlignment = Enum.TextXAlignment.Left
+		ghost.TextColor3 = color.Dark(uipallet.Text, 0.42)
+		ghost.TextSize = 12
+		ghost.FontFace = uipallet.Font
+		ghost.TextTruncate = Enum.TextTruncate.AtEnd
+		ghost.Parent = bkg
+
+		local box = Instance.new('TextBox')
+		box.Name = 'Input'
+		box.Size = UDim2.fromScale(1, 1)
+		box.BackgroundTransparency = 1
+		box.Text = ''
+		box.PlaceholderText = 'command player...'
+		box.PlaceholderColor3 = color.Dark(uipallet.Text, 0.31)
+		box.TextXAlignment = Enum.TextXAlignment.Left
+		box.TextColor3 = color.Dark(uipallet.Text, 0.16)
+		box.TextSize = 12
+		box.FontFace = uipallet.Font
+		box.ClearTextOnFocus = false
+		box.Parent = bkg
+
+		-- first command/player whose name starts with `typed` (case-insensitive)
+		local function matchCommand(typed)
+			local low = typed:lower()
+			for _, c in ipairs(COMMANDS) do
+				if #c > #low and c:sub(1, #low) == low then return c end
+			end
+		end
+		local function matchPlayer(typed)
+			local low = typed:lower()
+			for _, plr in ipairs(Players:GetPlayers()) do
+				if plr ~= Players.LocalPlayer and #plr.Name >= #low and plr.Name:lower():sub(1, #low) == low then
+					return plr.Name
+				end
+			end
+		end
+
+		local suffix = ''  -- the ghost remainder currently shown
+		local function refresh()
+			suffix = ''
+			ghost.Text = ''
+			local text = box.Text
+			if text == '' then return end
+			local words = {}
+			for w in text:gmatch('%S+') do table.insert(words, w) end
+			local trailing = text:sub(-1) == ' '
+			local full
+			if #words == 1 and not trailing then
+				full = matchCommand(words[1])
+				if full then suffix = full:sub(#words[1] + 1) end
+			elseif #words == 2 and not trailing then
+				full = matchPlayer(words[2])
+				if full and #full > #words[2] then suffix = full:sub(#words[2] + 1) end
+			end
+			if suffix ~= '' then
+				ghost.Position = UDim2.fromOffset(getfontsize(text, box.TextSize, uipallet.Font).X, 0)
+				ghost.Text = suffix
+			end
+		end
+		box:GetPropertyChangedSignal('Text'):Connect(refresh)
+
+		local function accept()
+			if suffix ~= '' then
+				box.Text = box.Text .. suffix
+				box.CursorPosition = #box.Text + 1
+				refresh()
+			end
+		end
+		inputService.InputBegan:Connect(function(input)
+			if input.KeyCode == Enum.KeyCode.Tab and box:IsFocused() then
+				accept()
+			end
+		end)
+
+		box.FocusLost:Connect(function(enter)
+			if not enter then return end
+			local words = {}
+			for w in box.Text:gmatch('%S+') do table.insert(words, w) end
+			if #words < 2 then
+				mainapi:CreateNotification('Commands', 'Usage: <command> <player>  (e.g. kill bob)', 4, 'alert')
+				return
+			end
+			-- exact command wins, else expand a prefix (e.g. "ki" -> "kill")
+			local typedCmd = words[1]:lower()
+			local cmdFull
+			for _, c in ipairs(COMMANDS) do if c == typedCmd then cmdFull = c break end end
+			cmdFull = cmdFull or matchCommand(typedCmd)
+			if not cmdFull then
+				mainapi:CreateNotification('Commands', 'Unknown command: ' .. words[1], 4, 'alert')
+				return
+			end
+			local target = matchPlayer(words[2]) or words[2]
+			local args = #words > 2 and table.concat(words, ' ', 3) or nil
+			local runner = getgenv().vainRunCommand
+			if not runner then
+				mainapi:CreateNotification('Commands', 'Command system not loaded in this game.', 5, 'alert')
+				return
+			end
+			local ok, err = pcall(runner, cmdFull, target, args)
+			if not ok then
+				mainapi:CreateNotification('Commands', 'Failed: ' .. tostring(err), 5, 'alert')
+			end
+			box.Text = ''
+			ghost.Text = ''
+		end)
+
+		return {}
+	end
+
 	function categoryapi:CreateButton(categorysettings)
 		local optionapi = {
 			Enabled = false,
@@ -7087,6 +7230,7 @@ mainapi.GUIColor = mainapi.Categories.Main:CreateGUISlider({
 	end
 })
 mainapi.Categories.Main:CreateBind()
+mainapi.Categories.Main:CreateConsole()
 
 --[[
 	Text GUI
