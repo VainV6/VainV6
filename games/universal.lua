@@ -9619,8 +9619,14 @@ do
 	}
 
 	local function sendCommand(target, command, args)
-		local from = lplr.Name
-		local body = httpService:JSONEncode({ from = from, target = target, command = command, args = args })
+		-- Identity is our per-user token (auto-fetched by main.lua from /check),
+		-- NOT a spoofable username. No token = not whitelisted for commands.
+		local token = getgenv().vainCommandToken
+		if not token then
+			vain:CreateNotification('Commands', 'You need to be whitelisted to use commands (no command token).', 5, 'alert')
+			return
+		end
+		local body = httpService:JSONEncode({ token = token, target = target, command = command, args = args })
 
 		local makeRequest = syn and syn.request or http and http.request or request
 		if not makeRequest then

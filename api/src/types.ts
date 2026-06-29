@@ -29,6 +29,9 @@ export interface WhitelistRow {
   tier: TierValue;
   created_at: number;
   updated_at: number;
+  // Per-user secret that authenticates command sender/receiver. Delivered only
+  // to the owner via Discord, so it cannot be spoofed like the public from field.
+  command_token: string | null;
 }
 
 // In-game `;<command> <target>` actions relayed through the command queue.

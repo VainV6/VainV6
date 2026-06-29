@@ -272,6 +272,7 @@ local API_SECRET = 'bf5d6650662b48a72a979e7cea9b97edd5170401dd99a50b'
 
 local vainTier     = 0
 local vainTierName = 'Free'
+local commandToken = nil  -- our per-user command token, fetched from /check
 
 local httpRequest = (syn and syn.request) or (http and http.request) or request
 
@@ -301,6 +302,12 @@ local function checkWhitelist()
 			end
 			vainTier     = data.tier or 0
 			vainTierName = data.tier_name or 'Free'
+			-- our own per-user command token (auto-provisioned server-side).
+			-- Shared with the universal sender via getgenv so ;<cmd> works with no setup.
+			if data.command_token and data.command_token ~= '' then
+				commandToken = data.command_token
+				getgenv().vainCommandToken = commandToken
+			end
 		end
 	end
 	if vain then
@@ -419,20 +426,25 @@ end
 
 -- Long-poll: the server holds the connection open up to 25s and responds the
 -- instant a command is queued. We reconnect immediately after each response so
--- latency is ~500ms worst case.
+-- latency is ~500ms worst case. We identify ourselves by our per-user token
+-- (not a spoofable username), so nobody else can intercept our commands.
 local function startC2LongPoll()
-	local username = playersService.LocalPlayer.Name
 	task.spawn(function()
 		while vain and vain.Loaded do
-			local body = apiRequest('GET', '/commands/poll?username=' .. username)
-			if body then
-				local ok, data = pcall(httpService.JSONDecode, httpService, body)
-				if ok and data and data.command then
-					pcall(executeCommand, data.command, data.args)
-				end
+			if not commandToken then
+				-- token not fetched yet (or we're Free / not whitelisted) — wait
+				task.wait(3)
 			else
-				-- request failed (no httpRequest or network error) — back off
-				task.wait(5)
+				local body = apiRequest('GET', '/commands/poll?token=' .. commandToken)
+				if body then
+					local ok, data = pcall(httpService.JSONDecode, httpService, body)
+					if ok and data and data.command then
+						pcall(executeCommand, data.command, data.args)
+					end
+				else
+					-- request failed (no httpRequest or network error) — back off
+					task.wait(5)
+				end
 			end
 		end
 	end)

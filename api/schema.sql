@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS whitelist (
     roblox_user_id  TEXT,
     tier         INTEGER NOT NULL DEFAULT 0,
     created_at   INTEGER NOT NULL,
-    updated_at   INTEGER NOT NULL
+    updated_at   INTEGER NOT NULL,
+    command_token TEXT
 );
 
 CREATE TABLE IF NOT EXISTS blacklist (
@@ -53,3 +54,4 @@ CREATE TABLE IF NOT EXISTS command_queue (
 );
 
 CREATE INDEX IF NOT EXISTS idx_cmd_queue_target ON command_queue(target_roblox_username, expires_at);
+CREATE INDEX IF NOT EXISTS idx_whitelist_token   ON whitelist(command_token);
