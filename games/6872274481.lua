@@ -1772,65 +1772,81 @@ local AimAssist
 	end
 
 	-- ══════════════════════════════════════════════════════════════════════════
-	--  SIGRID CHARGE  (force the Antler Uppercut charge without the Sigrid kit)
+	--  SIGRID CHARGE  (Antler Uppercut -- press to fire the charge on a target)
 	-- ══════════════════════════════════════════════════════════════════════════
 	-- The Elk/Sigrid "Antler Uppercut" is server-driven but CLIENT-APPLIED: the
 	-- server fires SigridBeginCharge{player=X} and X's own client pushes its root
-	-- forward every Heartbeat (no kit check on the receiving end). The charge is
-	-- requested with the client-supplied target:
-	--     bedwars.Client:Get('SigridBeginChargeRequest'):CallServer({player = X})
-	-- If the server trusts that 'player' field (and doesn't verify the caller owns
-	-- the kit) you can hand the charge to anyone: yourself (free dash, no kit) or
-	-- the nearest enemy (they get flung forward where they're facing). Whether it
-	-- lands depends entirely on the server's validation -- this just fires it.
+	-- forward every Heartbeat. The charge is requested with the client-supplied
+	-- target via bedwars.Client:Get('SigridBeginChargeRequest'):CallServer{player=X}.
+	-- This is a BUTTON (press = one charge), it requires you to be mounted on your
+	-- Elk first, targets the player you pick from the dropdown, and is Premium-only.
 	do
-		local SigridCharge, Target, Range, Interval, Notify
+		local SigridCharge, Target, Notify
 		local function getRemote()
 			local ok, r = pcall(function() return bedwars.Client:Get('SigridBeginChargeRequest') end)
 			return ok and r or nil
 		end
+		-- mounted on the Elk? getActiveMounts() is keyed by player (place: line 451593)
+		local function isMounted()
+			local ok, mounts = pcall(function() return bedwars.MountController:getActiveMounts() end)
+			return ok and mounts ~= nil and mounts[lplr] ~= nil
+		end
 		local function resolveTarget()
-			if Target and Target.Value == 'Self' then return lplr end
-			local ent = entitylib.EntityPosition({
-				Range = (Range and Range.Value) or 60,
-				Part = 'RootPart',
-				Players = true,
-				NPCs = false,
-			})
-			return ent and ent.Player or nil
+			local name = Target and Target.Value
+			if not name or name == 'None' then return nil end
+			return playersService:FindFirstChild(name)
 		end
 		SigridCharge = vain.Categories.Combat:CreateModule({
 			Name = 'Sigrid Charge',
-			Tooltip = 'Fires the Sigrid/Elk Antler Uppercut charge request at a chosen target without owning the kit. "Self" hands you the forward charge (kit-less dash); "Nearest Enemy" tries to fling the closest enemy. Only works if the server trusts the requested target.',
+			Tooltip = 'Press to fire the Elk/Sigrid Antler Uppercut charge at the player chosen in the Target dropdown. You must be mounted on your Elk first. Premium only.',
 			Function = function(callback)
-				if callback then
-					if not getRemote() then
-						vain:CreateNotification('Sigrid Charge', 'SigridBeginChargeRequest remote not found in this place -- the Elk kit may not be loaded here.', 6, 'warning')
-					end
-					task.spawn(function()
-						repeat
-							local remote = getRemote()
-							local target = resolveTarget()
-							if remote and target then
-								pcall(function() remote:CallServer({ player = target }) end)
-								if Notify and Notify.Enabled then
-									vain:CreateNotification('Sigrid Charge', 'Charge fired on ' .. (target.Name or '?'), 3)
-								end
-							end
-							task.wait((Interval and Interval.Value) or 8)
-						until not SigridCharge.Enabled
-					end)
+				if not callback then return end
+				-- act like a one-shot button: do the work, then toggle straight back off
+				local function done() if SigridCharge.Enabled then SigridCharge:Toggle() end end
+				if (vain.Tier or 0) < 1 then
+					vain:CreateNotification('Sigrid Charge', 'Premium only -- Free tier cannot use this.', 5, 'alert')
+					return done()
 				end
+				if not isMounted() then
+					vain:CreateNotification('Sigrid Charge', 'You must be mounted on your Elk first.', 5, 'warning')
+					return done()
+				end
+				local remote = getRemote()
+				if not remote then
+					vain:CreateNotification('Sigrid Charge', 'Elk charge remote not found in this place.', 6, 'warning')
+					return done()
+				end
+				local target = resolveTarget()
+				if not target then
+					vain:CreateNotification('Sigrid Charge', 'Pick a target player in the dropdown first.', 5, 'warning')
+					return done()
+				end
+				pcall(function() remote:CallServer({ player = target }) end)
+				if Notify and Notify.Enabled then
+					vain:CreateNotification('Sigrid Charge', 'Charge fired on ' .. target.Name, 3)
+				end
+				done()
 			end
 		})
-		Target = SigridCharge:CreateDropdown({ Name = 'Target', List = { 'Nearest Enemy', 'Self' }, Default = 'Nearest Enemy',
-			Tooltip = 'Who receives the charge. Self = you dash forward (no kit needed); Nearest Enemy = fling the closest enemy.' })
-		Range = SigridCharge:CreateSlider({ Name = 'Range', Min = 10, Max = 300, Default = 60, Suffix = 'studs',
-			Tooltip = 'Max distance to pick the nearest enemy (ignored in Self mode).' })
-		Interval = SigridCharge:CreateSlider({ Name = 'Interval', Min = 1, Max = 30, Default = 8, Suffix = 'sec',
-			Tooltip = 'How often to re-fire the charge. The real kit cooldown is 14s; lower this to test whether the server enforces it.' })
+		Target = SigridCharge:CreateDropdown({ Name = 'Target', List = { 'None' }, Default = 'None',
+			Function = function() end,
+			Tooltip = 'Player to send the charge to (updates as players join/leave).' })
 		Notify = SigridCharge:CreateToggle({ Name = 'Notify', Default = true,
-			Tooltip = 'Notify each time a charge request is fired.' })
+			Tooltip = 'Notify when a charge is fired.' })
+
+		-- keep the Target dropdown in sync with the current players (excluding you)
+		local function refreshTargets()
+			if not Target then return end
+			local names = {}
+			for _, plr in playersService:GetPlayers() do
+				if plr ~= lplr then table.insert(names, plr.Name) end
+			end
+			if #names == 0 then names = { 'None' } end
+			Target:Change(names)
+		end
+		refreshTargets()
+		vain:Clean(playersService.PlayerAdded:Connect(refreshTargets))
+		vain:Clean(playersService.PlayerRemoving:Connect(function() task.defer(refreshTargets) end))
 	end
 
 	AimAssist = vain.Categories.Combat:CreateModule({
