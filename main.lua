@@ -22,13 +22,29 @@ end
 local playersService = cloneref(game:GetService('Players'))
 local httpService = cloneref(game:GetService('HttpService'))
 
+local delfile = delfile or function(file) writefile(file, '') end
+-- GitHub raw serves error bodies as short plain text ("400: Invalid request",
+-- "404: Not Found", "429: ..."). Caching those as code is what produced the
+-- [string "entitylibrary"]:2: ... got '400' error, so never write a "NNN: ..." body.
+local function isHttpError(res)
+	return type(res) ~= 'string' or res == '' or res:match('^%s*%d%d%d:%s') ~= nil
+end
 local function downloadFile(path, func)
+	-- self-heal a previously-cached error body
+	if isfile(path) and path:find('%.lua') then
+		local cached = readfile(path)
+		if cached:match('^%s*%d%d%d:%s') or cached:match('^%-%-This watermark[^\n]*\n%s*%d%d%d:%s') then
+			delfile(path)
+		end
+	end
 	if not isfile(path) then
+		local commit = (readfile('vain/profiles/commit.txt') or ''):match('^%s*(.-)%s*$')
+		if commit == '' then commit = 'main' end
 		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('vain/profiles/commit.txt')..'/'..select(1, path:gsub('vain/', '')), true)
+			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..commit..'/'..select(1, path:gsub('vain/', '')), true)
 		end)
-		if not suc or res == '404: Not Found' then
-			error(res)
+		if not suc or isHttpError(res) then
+			error('Vain failed to download '..path..' (ref '..commit..'): '..tostring(res))
 		end
 		if path:find('.lua') then
 			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vain updates.\n'..res
