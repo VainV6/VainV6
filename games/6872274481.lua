@@ -1860,8 +1860,9 @@ local AimAssist
 	-- tab-list, re-applying on a loop since the tab-list is Roact and re-renders.
 	do
 		local TablistWinstreak
-		local cache = {}      -- userId -> winstreak number, or false once fetched with none
+		local fetched = {}    -- userId -> true once fetched (dedupe)
 		local fetching = {}   -- userId -> true while a request is in flight
+		local streaks = {}    -- lowercased name -> winstreak number (persists after they leave)
 
 		local function displayNameOf(plr)
 			local ok, dn = pcall(function() return bedwars.GamePlayer.getGamePlayer(plr):getDisplayName() end)
@@ -1871,22 +1872,25 @@ local AimAssist
 
 		local function fetchWinstreak(plr)
 			local uid = plr.UserId
-			if cache[uid] ~= nil or fetching[uid] then return end
+			if fetched[uid] or fetching[uid] then return end
 			fetching[uid] = true
+			local dn, nm = displayNameOf(plr):lower(), plr.Name:lower()
 			task.spawn(function()
 				-- full profile (works for any player, like the "view profile" UI) so we
 				-- can read the CURRENT-gamemode streak, not the global/highest one.
 				local ok, profile = pcall(function()
 					return bedwars.Client:Get('RequestProfileData'):CallServerAsync(plr):expect()
 				end)
-				local ws = false
+				local ws
 				if ok and profile and profile.queues then
 					local qt = bedwars.Store:getState().Game.queueType
 					local q = qt and profile.queues[qt]
-					if q then ws = tonumber(q.currentWinStreak) or false end
+					if q then ws = tonumber(q.currentWinStreak) end
 				end
-				cache[uid] = ws
+				fetched[uid] = true
 				fetching[uid] = nil
+				-- key by name so it still matches the row after the player leaves
+				if ws and ws > 0 then streaks[dn] = ws; streaks[nm] = ws end
 			end)
 		end
 
@@ -1904,35 +1908,40 @@ local AimAssist
 		end
 
 		local function paint()
-			-- name(lower) -> winstreak; queue ONE fetch per pass to stay rate-safe
-			local entries, queued = {}, false
+			-- queue ONE fetch per pass for an un-fetched online player (rate-safe)
+			local queued = false
 			for _, plr in playersService:GetPlayers() do
-				local uid = plr.UserId
-				if not queued and cache[uid] == nil and not fetching[uid] then
+				if not queued and not fetched[plr.UserId] and not fetching[plr.UserId] then
 					fetchWinstreak(plr); queued = true
 				end
-				local ws = cache[uid]
-				if ws and ws > 0 then
-					entries[displayNameOf(plr):lower()] = ws
-					entries[plr.Name:lower()] = ws
-				end
 			end
-			if not next(entries) then return end
+			if not next(streaks) then return end
 
-			-- scope STRICTLY to the tab-list app GUI. AppController mounts each app
-			-- into PlayerGui named by its appId ("TabList"); scanning all of
-			-- PlayerGui also hit the kill feed, which is why the streak showed there.
+			-- Name-agnostic targeting: instead of guessing the leaderboard's GUI
+			-- name, pick the top-level PlayerGui child with the MOST matching player
+			-- names. The leaderboard has one row per player (many matches); the kill
+			-- feed only has a couple, so it loses. This also catches left players,
+			-- since their row name still matches the persisted streak.
 			local pg = lplr:FindFirstChild('PlayerGui')
-			local root = pg and pg:FindFirstChild('TabList')
-			if not root then return end  -- tab-list not open
-			for _, gui in root:GetDescendants() do
-				if gui:IsA('TextLabel') and not gui:GetAttribute('VainWS') then
-					local ws = entries[clean(gui.Text)]
-					if ws then
-						gui:SetAttribute('VainWS', true)
-						gui.RichText = true
-						gui.Text = gui.Text .. "  <font color='#FFD24D'>" .. ws .. "\u{1F525}</font>"
+			if not pg then return end
+			local bestLabels, bestCount = nil, 0
+			for _, top in pg:GetChildren() do
+				local labels, count = {}, 0
+				for _, gui in top:GetDescendants() do
+					if gui:IsA('TextLabel') then
+						local ws = streaks[clean(gui.Text)]
+						if ws then count += 1; labels[#labels + 1] = { gui, ws } end
 					end
+				end
+				if count > bestCount then bestCount, bestLabels = count, labels end
+			end
+			if not bestLabels then return end
+			for _, e in bestLabels do
+				local gui, ws = e[1], e[2]
+				if not gui:GetAttribute('VainWS') then
+					gui:SetAttribute('VainWS', true)
+					gui.RichText = true
+					gui.Text = gui.Text .. "  <font color='#FFD24D'>" .. ws .. "\u{1F525}</font>"
 				end
 			end
 		end
@@ -1942,8 +1951,9 @@ local AimAssist
 			Tooltip = "Shows each player's winstreak next to their name in the tab-list (Tab key). Fetches each player's stats once and caches them, then re-applies as the list updates.",
 			Function = function(callback)
 				if callback then
-					table.clear(cache)
+					table.clear(fetched)
 					table.clear(fetching)
+					table.clear(streaks)
 					task.spawn(function()
 						repeat
 							pcall(paint)
