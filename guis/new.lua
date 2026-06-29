@@ -4333,10 +4333,25 @@ function mainapi:CreateCategory(categorysettings)
 		-- Gold "PREMIUM" badge after the name. Purely cosmetic (does NOT block
 		-- clicks) -- the actual Premium gate lives in the module's own logic.
 		function moduleapi:MarkPremium()
-			modulebutton.RichText = true
-			-- size 10 matches the NEW/UPD update badges so they sit on the same
-			-- baseline (default 14 made PREMIUM look bigger / vertically offset).
-			modulebutton.Text = '            ' .. modulesettings.Name .. "  <font color='#FFC53D' size='10'><b>PREMIUM</b></font>"
+			-- A separate, vertically-centered child label instead of inline
+			-- RichText: mixing a smaller <font size> span on the same line as the
+			-- 14px name made the badge sit off the baseline. AnchorPoint .5 + a
+			-- centered Y position guarantees it lines up no matter the size.
+			local nameText = '            ' .. modulesettings.Name
+			modulebutton.Text = nameText
+			local badge = modulebutton:FindFirstChild('PremiumBadge') or Instance.new('TextLabel')
+			badge.Name = 'PremiumBadge'
+			badge.AutomaticSize = Enum.AutomaticSize.X
+			badge.BackgroundTransparency = 1
+			badge.AnchorPoint = Vector2.new(0, 0.5)
+			badge.Position = UDim2.new(0, getfontsize(nameText, 14, uipallet.Font).X + 6, 0.5, 0)
+			badge.Size = UDim2.fromOffset(0, 16)
+			badge.Text = 'PREMIUM'
+			badge.FontFace = uipallet.Font
+			badge.TextColor3 = Color3.fromRGB(255, 197, 61)
+			badge.TextSize = 11
+			badge.ZIndex = modulebutton.ZIndex + 1
+			badge.Parent = modulebutton
 		end
 
 		for i, v in components do
