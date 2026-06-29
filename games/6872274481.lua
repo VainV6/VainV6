@@ -1850,6 +1850,96 @@ local AimAssist
 		vain:Clean(playersService.PlayerRemoving:Connect(function() task.defer(refreshTargets) end))
 	end
 
+	-- ══════════════════════════════════════════════════════════════════════════
+	--  TABLIST WINSTREAK  (show each player's winstreak next to their tab-list name)
+	-- ══════════════════════════════════════════════════════════════════════════
+	-- BedWars uses a custom tab-list (the default PlayerList is disabled) and a
+	-- player's winstreak isn't replicated. NametagController:requestNametagData(plr)
+	-- returns any player's { winstreak, rankDivision }, so we fetch it once per
+	-- player (staggered + cached) and paint it onto the matching name label in the
+	-- tab-list, re-applying on a loop since the tab-list is Roact and re-renders.
+	do
+		local TablistWinstreak
+		local cache = {}      -- userId -> winstreak number, or false once fetched with none
+		local fetching = {}   -- userId -> true while a request is in flight
+		local tablistRoot     -- cached ScreenGui once located, to scope the scan
+
+		local function displayNameOf(plr)
+			local ok, dn = pcall(function() return bedwars.GamePlayer.getGamePlayer(plr):getDisplayName() end)
+			if ok and type(dn) == 'string' and dn ~= '' then return dn end
+			return (plr.DisplayName ~= '' and plr.DisplayName) or plr.Name
+		end
+
+		local function fetchWinstreak(plr)
+			local uid = plr.UserId
+			if cache[uid] ~= nil or fetching[uid] then return end
+			fetching[uid] = true
+			task.spawn(function()
+				local ok, data = pcall(function()
+					return bedwars.NametagController:requestNametagData(plr):expect()
+				end)
+				cache[uid] = (ok and data and tonumber(data.winstreak)) or false
+				fetching[uid] = nil
+			end)
+		end
+
+		local function stripTags(s)
+			return (s:gsub('<[^>]->', ''))
+		end
+
+		local function paint()
+			-- map current players' shown names -> winstreak; queue ONE fetch per pass
+			local byName, queued = {}, false
+			for _, plr in playersService:GetPlayers() do
+				local uid = plr.UserId
+				if not queued and cache[uid] == nil and not fetching[uid] then
+					fetchWinstreak(plr); queued = true
+				end
+				local ws = cache[uid]
+				if ws and ws > 0 then
+					byName[displayNameOf(plr):lower()] = ws
+					byName[plr.Name:lower()] = ws
+				end
+			end
+			if not next(byName) then return end
+
+			-- scan the tab-list (cached root once found) for name labels to tag
+			local root = (tablistRoot and tablistRoot.Parent) and tablistRoot or lplr:FindFirstChild('PlayerGui')
+			if not root then return end
+			for _, gui in root:GetDescendants() do
+				if gui:IsA('TextLabel') and not gui:GetAttribute('VainWS') then
+					local ws = byName[stripTags(gui.Text):lower()]
+					if ws then
+						gui:SetAttribute('VainWS', true)
+						gui.RichText = true
+						gui.Text = gui.Text .. "  <font color='#FFD24D'>" .. ws .. "\u{1F525}</font>"
+						if not tablistRoot then
+							tablistRoot = gui:FindFirstAncestorWhichIsA('ScreenGui')
+						end
+					end
+				end
+			end
+		end
+
+		TablistWinstreak = vain.Categories.Render:CreateModule({
+			Name = 'Tablist Winstreak',
+			Tooltip = "Shows each player's winstreak next to their name in the tab-list (Tab key). Fetches each player's stats once and caches them, then re-applies as the list updates.",
+			Function = function(callback)
+				if callback then
+					table.clear(cache)
+					table.clear(fetching)
+					tablistRoot = nil
+					task.spawn(function()
+						repeat
+							pcall(paint)
+							task.wait(1)
+						until not TablistWinstreak.Enabled
+					end)
+				end
+			end
+		})
+	end
+
 	AimAssist = vain.Categories.Combat:CreateModule({
 		Name = 'AimAssist',
 		Tooltip = 'Smoothly deflects your camera toward nearby enemies',
