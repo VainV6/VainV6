@@ -1874,10 +1874,18 @@ local AimAssist
 			if cache[uid] ~= nil or fetching[uid] then return end
 			fetching[uid] = true
 			task.spawn(function()
-				local ok, data = pcall(function()
-					return bedwars.NametagController:requestNametagData(plr):expect()
+				-- full profile (works for any player, like the "view profile" UI) so we
+				-- can read the CURRENT-gamemode streak, not the global/highest one.
+				local ok, profile = pcall(function()
+					return bedwars.Client:Get('RequestProfileData'):CallServerAsync(plr):expect()
 				end)
-				cache[uid] = (ok and data and tonumber(data.winstreak)) or false
+				local ws = false
+				if ok and profile and profile.queues then
+					local qt = bedwars.Store:getState().Game.queueType
+					local q = qt and profile.queues[qt]
+					if q then ws = tonumber(q.currentWinStreak) or false end
+				end
+				cache[uid] = ws
 				fetching[uid] = nil
 			end)
 		end
