@@ -54,60 +54,85 @@ local function downloadFile(path, func)
 	return (func or readfile)(path)
 end
 
--- Build a map of line number → module display name for a file's content
+-- Build a map of line number → module display name for a file's content.
+-- A module only OWNS the lines inside its own `run(function() … end)` block, so
+-- shared helpers, section-separator comments and the next module's preamble are
+-- left unowned and can never be mis-tagged as that module being updated.
 local function buildLineModuleMap(content)
 	local allLines = {}
-	for line in content:gmatch('[^\n]+') do
+	for line in content:gmatch('([^\n]*)\n?') do
 		table.insert(allLines, line)
 	end
 
-	-- First pass: find every CreateModule and its display Name
+	-- find every CreateModule, its display Name, and the bounds of its block
 	local moduleStarts = {}
+	local lineModules = {}
 	for i, line in ipairs(allLines) do
 		if line:find(':CreateModule%(') then
+			local name
 			for j = i, math.min(i + 8, #allLines) do
-				local name = allLines[j]:match("Name%s*=%s*'([^']+)'")
-				          or allLines[j]:match('Name%s*=%s*"([^"]+)"')
-				if name then
-					table.insert(moduleStarts, { line = i, name = name })
-					break
+				name = allLines[j]:match("Name%s*=%s*'([^']+)'")
+				    or allLines[j]:match('Name%s*=%s*"([^"]+)"')
+				if name then break end
+			end
+			if name then
+				-- block start: nearest preceding top-level `run(function()` wrapper
+				-- (col 0). Every module in these files is wrapped in one; fall back to
+				-- the CreateModule line itself if none is found nearby.
+				local startLine = i
+				for k = i, math.max(i - 60, 1), -1 do
+					if allLines[k]:match('^run%(function') then
+						startLine = k
+						break
+					end
+				end
+				-- block end: first top-level `end)` at/after the CreateModule line
+				local endLine = #allLines
+				for k = i, #allLines do
+					if allLines[k]:match('^end%)') then
+						endLine = k
+						break
+					end
+				end
+				table.insert(moduleStarts, { line = i, name = name })
+				for ln = startLine, endLine do
+					-- first writer wins so nested blocks don't steal lines
+					if lineModules[ln] == nil then lineModules[ln] = name end
 				end
 			end
-		end
-	end
-
-	-- Second pass: each line belongs to the nearest preceding module declaration
-	table.sort(moduleStarts, function(a, b) return a.line < b.line end)
-	local lineModules = {}
-	local mi = 1
-	for i = 1, #allLines do
-		while mi < #moduleStarts and i >= moduleStarts[mi + 1].line do
-			mi = mi + 1
-		end
-		if moduleStarts[mi] and i >= moduleStarts[mi].line then
-			lineModules[i] = moduleStarts[mi].name
 		end
 	end
 
 	return lineModules, moduleStarts
 end
 
--- Parse @@ hunk headers from a patch to get new-file line ranges
-local function parsePatchRanges(patch)
-	local ranges = {}
-	for newStart, newCount in patch:gmatch('@@ %-%d+,%d+ %+(%d+),(%d+) @@') do
-		local s = tonumber(newStart)
-		local c = tonumber(newCount)
-		if s and c and c > 0 then
-			table.insert(ranges, { s, s + c - 1 })
+-- Collect the NEW-FILE line numbers that were actually ADDED in a patch (i.e. the
+-- '+' lines, never the unchanged context lines a hunk carries). Tracking the real
+-- line counter is what makes UPD precise -- context lines used to falsely tag the
+-- neighbouring module.
+local function parseAddedLines(patch)
+	local added = {}
+	local newLine = nil
+	for line in patch:gmatch('([^\n]*)\n?') do
+		local hdr = line:match('^@@ %-%d+,?%d* %+(%d+)')
+		if hdr then
+			newLine = tonumber(hdr)
+		elseif newLine then
+			local c = line:sub(1, 1)
+			if c == '+' then
+				if line:sub(1, 3) ~= '+++' then
+					table.insert(added, newLine)
+					newLine = newLine + 1
+				end
+			elseif c == '-' then
+				-- removed line: does not advance the new-file counter
+			elseif c ~= '\\' then
+				-- context line: advances the counter but is NOT a change
+				newLine = newLine + 1
+			end
 		end
 	end
-	-- Also handle hunks like @@ -1 +1 @@ (no count means count=1)
-	for newStart in patch:gmatch('@@ %-%d+ %+(%d+) @@') do
-		local s = tonumber(newStart)
-		if s then table.insert(ranges, { s, s }) end
-	end
-	return ranges
+	return added
 end
 
 -- Detect NEW modules: CreateModule lines that are pure additions in the patch
@@ -188,16 +213,14 @@ local function detectUpdates()
 
 				local lineModules = buildLineModuleMap(fileContent)
 				local newMods = detectNewModulesFromPatch(file.patch)
-				local ranges = parsePatchRanges(file.patch)
+				local addedLines = parseAddedLines(file.patch)
 
-				for _, range in ipairs(ranges) do
-					for lineNum = range[1], range[2] do
-						local modName = lineModules[lineNum]
-						if modName then
-							local tag = newMods[modName] and 'NEW' or 'UPD'
-							if not changed[modName] or tag == 'NEW' then
-								changed[modName] = tag
-							end
+				for _, lineNum in ipairs(addedLines) do
+					local modName = lineModules[lineNum]
+					if modName then
+						local tag = newMods[modName] and 'NEW' or 'UPD'
+						if not changed[modName] or tag == 'NEW' then
+							changed[modName] = tag
 						end
 					end
 				end
