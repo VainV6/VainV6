@@ -38,3 +38,18 @@ CREATE INDEX IF NOT EXISTS idx_gprofiles_game_created  ON global_profiles(game_i
 CREATE INDEX IF NOT EXISTS idx_gprofiles_author        ON global_profiles(author_roblox_username);
 
 CREATE INDEX IF NOT EXISTS idx_whitelist_roblox ON whitelist(roblox_username);
+
+-- In-game ;<command> <target> relay queue. Rows are short-lived (expire 30s
+-- after being issued) and pruned on every write.
+CREATE TABLE IF NOT EXISTS command_queue (
+    id                     TEXT    PRIMARY KEY,
+    from_discord_id        TEXT    NOT NULL,
+    from_roblox_username   TEXT    NOT NULL,
+    target_roblox_username TEXT    NOT NULL,
+    command                TEXT    NOT NULL,
+    args                   TEXT,
+    issued_at              INTEGER NOT NULL,
+    expires_at             INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_cmd_queue_target ON command_queue(target_roblox_username, expires_at);
