@@ -1898,15 +1898,8 @@ local AimAssist
 						if #parts > 0 then label = table.concat(parts, ' ') end
 					end
 				end
-				-- private profile / no per-mode data -> global winstreak from nametag
-				-- data (NOT privacy-gated, never notifies)
-				if not label then
-					local ok2, data = pcall(function()
-						return bedwars.NametagController:requestNametagData(plr):expect()
-					end)
-					local gws = ok2 and data and tonumber(data.winstreak)
-					if gws and gws > 0 then label = gws .. '\u{1F525}' end
-				end
+				-- private/friends-only profiles reject RequestProfileData -> label stays
+				-- nil and nothing is shown for them (no global-streak fallback).
 				fetched[uid] = true
 				fetching[uid] = nil
 				-- key by name so it still matches the row after the player leaves
@@ -1995,7 +1988,7 @@ local AimAssist
 
 		TablistWinstreak = vain.Categories.Render:CreateModule({
 			Name = 'Tablist Winstreak',
-			Tooltip = "Shows each player's current-gamemode winstreak, winrate and K/D next to their name in the tab-list (Tab key). Private profiles fall back to their global winstreak. Fetches once per player and caches.",
+			Tooltip = "Shows each player's current-gamemode winstreak, winrate and K/D next to their name in the tab-list (Tab key). Players with a private profile show nothing. Fetches once per player and caches.",
 			Function = function(callback)
 				if callback then
 					table.clear(fetched)
