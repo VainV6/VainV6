@@ -9706,34 +9706,32 @@ end
 -- ── End in-game commands ─────────────────────────────────────────────────────
 
 -- ══════════════════════════════════════════════════════════════════════════════
---  VAIN DETECTOR  (alert when a player ranked below you is in the server)
+--  VAIN DETECTOR  (alert when a lower-ranked Vain user is injected in your server)
 -- ══════════════════════════════════════════════════════════════════════════════
--- Uses the tier sync (getgenv().getAccountTier, populated from the API) to spot
--- players whose rank is lower than yours -- i.e. the people you can run commands
--- on. Notifies once per player. "Whitelisted Only" (default) keeps it to actual
--- Vain Premium/Owner users below you; turn it off to flag every lower-rank
--- player (every command target) in the server.
+-- Reads getgenv().vainInjectedUsers (the presence list main.lua fetches from the
+-- API: the OTHER Vain users currently injected in THIS server, with their tier)
+-- and notifies you once for each whose rank is below yours -- i.e. the injected
+-- people you can run commands on.
 run(function()
 	local TIER_NAMES = {[0] = 'Free', [1] = 'Premium', [2] = 'Owner'}
-	local VainDetector, WhitelistedOnly
+	local VainDetector
 	local seen = {}
 
-	local function myTier()  return (vain and vain.Tier) or 0 end
-	local function tierOf(plr)
-		local f = getgenv().getAccountTier
-		return (f and f(plr)) or 0
-	end
+	local function myTier() return (vain and vain.Tier) or 0 end
 
-	local function check(plr)
+	local function scan()
 		if not (VainDetector and VainDetector.Enabled) then return end
-		if plr == playersService.LocalPlayer or seen[plr.UserId] then return end
-		local their = tierOf(plr)
-		if their >= myTier() then return end                 -- not ranked below you
-		if WhitelistedOnly.Enabled and their < 1 then return end -- skip non-Vain (Free) players
-		seen[plr.UserId] = true
-		vain:CreateNotification('Vain Detector',
-			plr.Name .. ' is in your server — ' .. (TIER_NAMES[their] or ('Tier ' .. their))
-			.. ' (you can command them)', 7)
+		local list = getgenv().vainInjectedUsers
+		if type(list) ~= 'table' then return end
+		for _, u in ipairs(list) do
+			local name, their = u.username, u.tier or 0
+			if name and their < myTier() and not seen[name:lower()] then
+				seen[name:lower()] = true
+				vain:CreateNotification('Vain Detector',
+					name .. ' is injected in your server — ' .. (TIER_NAMES[their] or ('Tier ' .. their))
+					.. ' (you can command them)', 7)
+			end
+		end
 	end
 
 	VainDetector = vain.Categories.Utility:CreateModule({
@@ -9741,21 +9739,14 @@ run(function()
 		Function = function(callback)
 			if callback then
 				table.clear(seen)
-				local conn = playersService.PlayerAdded:Connect(function(plr)
-					-- tiers resolve a few seconds after join (async /tiers sync)
-					task.delay(6, function() check(plr) end)
-				end)
 				task.spawn(function()
 					repeat
-						for _, plr in ipairs(playersService:GetPlayers()) do check(plr) end
+						scan()
 						task.wait(5)
 					until not VainDetector.Enabled
-					conn:Disconnect()
 				end)
 			end
 		end,
-		Tooltip = 'Notifies you once when a player ranked below you joins/is in the server (someone you can run commands on). Whitelisted Only keeps it to real Vain users below you.'
+		Tooltip = 'Notifies you once when another Vain user ranked below you is currently injected in your server (someone you can run commands on).'
 	})
-	WhitelistedOnly = VainDetector:CreateToggle({Name = 'Whitelisted Only', Default = true,
-		Tooltip = 'Only alert for whitelisted Vain users ranked below you. Turn off to flag every lower-ranked player (all command targets).'})
 end)
