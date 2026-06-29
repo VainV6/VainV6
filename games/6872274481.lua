@@ -1781,7 +1781,7 @@ local AimAssist
 	-- This is a BUTTON (press = one charge), it requires you to be mounted on your
 	-- Elk first, targets the player you pick from the dropdown, and is Premium-only.
 	do
-		local SigridCharge, Target, Notify, AutoMount
+		local SigridCharge, Target, Notify, AutoMount, SkipMount
 		local function getRemote()
 			local ok, r = pcall(function() return bedwars.Client:Get('SigridBeginChargeRequest') end)
 			return ok and r or nil
@@ -1820,14 +1820,17 @@ local AimAssist
 					vain:CreateNotification('Sigrid Charge', 'Premium only -- Free tier cannot use this.', 5, 'alert')
 					return done()
 				end
-				if not isMounted() then
+				-- Skip Mount Check: fire the request regardless of mount/character
+				-- state (for spectator use / testing whether the server validates the
+				-- requester). If it lands, the server only trusts the target field.
+				if not (SkipMount and SkipMount.Enabled) and not isMounted() then
 					if AutoMount and AutoMount.Enabled then
 						if not ensureMounted() then
 							vain:CreateNotification('Sigrid Charge', 'Could not mount the Elk (do you have the Sigrid kit?).', 5, 'warning')
 							return done()
 						end
 					else
-						vain:CreateNotification('Sigrid Charge', 'You must be mounted on your Elk first (or enable Auto Mount).', 5, 'warning')
+						vain:CreateNotification('Sigrid Charge', 'You must be mounted on your Elk first (or enable Auto Mount / Skip Mount Check).', 5, 'warning')
 						return done()
 					end
 				end
@@ -1853,6 +1856,8 @@ local AimAssist
 			Tooltip = 'Player to send the charge to (updates as players join/leave).' })
 		AutoMount = SigridCharge:CreateToggle({ Name = 'Auto Mount', Default = false,
 			Tooltip = 'If you are not on your Elk when you press, summon it first (uses the ELK_SUMMON ability) and wait for the mount before charging. Requires the Sigrid kit.' })
+		SkipMount = SigridCharge:CreateToggle({ Name = 'Skip Mount Check', Default = false,
+			Tooltip = 'Fire the charge even when not mounted (e.g. as a SPECTATOR). Only works if the server trusts the request without checking the sender is a mounted Sigrid -- test it and see.' })
 		Notify = SigridCharge:CreateToggle({ Name = 'Notify', Default = true,
 			Tooltip = 'Notify when a charge is fired.' })
 		if SigridCharge.MarkPremium then SigridCharge:MarkPremium() end
