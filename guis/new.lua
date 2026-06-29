@@ -2895,7 +2895,7 @@ function mainapi:CreateGUI()
 	-- accepts the suggestion, Enter runs it through the Vain command relay.
 	function categoryapi:CreateConsole()
 		local Players = cloneref(game:GetService('Players'))
-		local COMMANDS = {'kick','kill','freeze','crash','expose','fling','spin','loopkill','annoy','grief','notify'}
+		local COMMANDS = {'kick','kill','freeze','crash','expose','fling','spin','loopkill','annoy','grief','notify','spam'}
 
 		local console = Instance.new('Frame')
 		console.Name = 'CommandConsole'
@@ -2954,6 +2954,8 @@ function mainapi:CreateGUI()
 		end
 		local function matchPlayer(typed)
 			local low = typed:lower()
+			-- "all" targets everyone injected below you; suggest it for short prefixes
+			if #low >= 1 and #low <= 3 and ('all'):sub(1, #low) == low then return 'all' end
 			for _, plr in ipairs(Players:GetPlayers()) do
 				if plr ~= Players.LocalPlayer and #plr.Name >= #low and plr.Name:lower():sub(1, #low) == low then
 					return plr.Name
@@ -4326,6 +4328,13 @@ function mainapi:CreateCategory(categorysettings)
 			fav.Visible = false
 			dotsbutton.Visible = false
 			addTooltip(modulebutton, '[Work In Progress] ' .. (reason or 'Not available right now.'))
+		end
+
+		-- Gold "PREMIUM" badge after the name. Purely cosmetic (does NOT block
+		-- clicks) -- the actual Premium gate lives in the module's own logic.
+		function moduleapi:MarkPremium()
+			modulebutton.RichText = true
+			modulebutton.Text = '            ' .. modulesettings.Name .. "  <font color='#FFC53D'><b>PREMIUM</b></font>"
 		end
 
 		for i, v in components do
