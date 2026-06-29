@@ -4334,7 +4334,9 @@ function mainapi:CreateCategory(categorysettings)
 		-- clicks) -- the actual Premium gate lives in the module's own logic.
 		function moduleapi:MarkPremium()
 			modulebutton.RichText = true
-			modulebutton.Text = '            ' .. modulesettings.Name .. "  <font color='#FFC53D'><b>PREMIUM</b></font>"
+			-- size 10 matches the NEW/UPD update badges so they sit on the same
+			-- baseline (default 14 made PREMIUM look bigger / vertically offset).
+			modulebutton.Text = '            ' .. modulesettings.Name .. "  <font color='#FFC53D' size='10'><b>PREMIUM</b></font>"
 		end
 
 		for i, v in components do

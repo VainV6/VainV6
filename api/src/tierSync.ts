@@ -30,6 +30,15 @@ async function memberTier(env: Env, discordId: string, roleMap: Map<string, stri
   return highest;
 }
 
+// Live tier for a single user (fetches its own role map). Used by /check so an
+// injecting user always loads with their CURRENT rank, without waiting for the
+// 5-minute cron. Returns null on a transient failure (caller keeps existing).
+export async function resolveDiscordTier(env: Env, discordId: string): Promise<TierValue | null> {
+  const roleMap = await fetchGuildRoleMap(env);
+  if (roleMap.size === 0) return null;
+  return memberTier(env, discordId, roleMap);
+}
+
 // Re-resolve every whitelisted user's tier from their live Discord roles and
 // write back any changes. This is what keeps an in-game rank from getting stuck
 // after a Discord role is removed. Safe under Discord outages: if the role list

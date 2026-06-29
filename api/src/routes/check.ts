@@ -1,5 +1,6 @@
 import { Env, TIER_NAME } from '../types';
 import { getByRoblox, getByRobloxUserId, updateRobloxUsername, isBlacklisted, getTiersForUsernames, setCommandToken } from '../db/queries';
+import { resolveDiscordTier } from '../tierSync';
 
 // POST /tiers  body: { usernames: string[] }  ->  { tiers: { "<lowername>": tier } }
 // Lets the client resolve other Vain users' tiers in one request so lower-tier
@@ -39,6 +40,15 @@ export async function handleCheck(request: Request, env: Env): Promise<Response>
 
   if (!row) {
     return json({ blacklisted: false, tier: 0, tier_name: 'Free' });
+  }
+
+  // Live rank: re-resolve from the user's CURRENT Discord roles every load, so
+  // removing a role drops their rank immediately (not just after the 5m cron).
+  const live = await resolveDiscordTier(env, row.discord_id);
+  if (live !== null && live !== row.tier) {
+    await env.DB.prepare('UPDATE whitelist SET tier = ?, updated_at = ? WHERE discord_id = ?')
+      .bind(live, Date.now(), row.discord_id).run();
+    row.tier = live;
   }
 
   // Hand the user their own command token so in-game commands work automatically
