@@ -20,14 +20,31 @@ downloader.Font = Enum.Font.Arial
 downloader.Text = ''
 downloader.Parent = Instance.new('ScreenGui', gethui and gethui() or cloneref(game:GetService('CoreGui')))
 
+-- GitHub raw serves error bodies as short plain text ("400: Invalid request",
+-- "404: Not Found", "429: ..."). They must NEVER be cached as code -- doing so
+-- writes e.g. "400: Invalid request" into entity.lua and every later inject dies
+-- with [string "entitylibrary"]:2: ... got '400'. Reject any "NNN: ..." body.
+local function isHttpError(res)
+	return type(res) ~= 'string' or res == '' or res:match('^%s*%d%d%d:%s') ~= nil
+end
 local function downloadFile(path, func)
+	-- self-heal: if a previous run cached an error body, drop it so we refetch
+	if isfile(path) and path:find('%.lua') then
+		local cached = readfile(path)
+		if cached:match('^%s*%d%d%d:%s') or cached:match('^%-%-This watermark[^\n]*\n%s*%d%d%d:%s') then
+			delfile(path)
+		end
+	end
 	if not isfile(path) then
 		downloader.Text = 'Downloading '.. path
+		-- trim the ref: a stray newline/space turns "<sha>" into an invalid ref -> 400
+		local commit = (readfile('vain/profiles/commit.txt') or ''):match('^%s*(.-)%s*$')
+		if commit == '' then commit = 'main' end
 		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('vain/profiles/commit.txt')..'/'..select(1, path:gsub('vain/', '')), true)
+			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..commit..'/'..select(1, path:gsub('vain/', '')), true)
 		end)
-		if not suc or res == '404: Not Found' then
-			error(res)
+		if not suc or isHttpError(res) then
+			error('Vain failed to download '..path..' (ref '..commit..'): '..tostring(res))
 		end
 		if path:find('.lua') then
 			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vain updates.\n'..res
