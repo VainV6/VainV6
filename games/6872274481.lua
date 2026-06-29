@@ -1771,6 +1771,68 @@ local AimAssist
 		return angle < math.rad(AngleSlider.Value / 2)
 	end
 
+	-- ══════════════════════════════════════════════════════════════════════════
+	--  SIGRID CHARGE  (force the Antler Uppercut charge without the Sigrid kit)
+	-- ══════════════════════════════════════════════════════════════════════════
+	-- The Elk/Sigrid "Antler Uppercut" is server-driven but CLIENT-APPLIED: the
+	-- server fires SigridBeginCharge{player=X} and X's own client pushes its root
+	-- forward every Heartbeat (no kit check on the receiving end). The charge is
+	-- requested with the client-supplied target:
+	--     bedwars.Client:Get('SigridBeginChargeRequest'):CallServer({player = X})
+	-- If the server trusts that 'player' field (and doesn't verify the caller owns
+	-- the kit) you can hand the charge to anyone: yourself (free dash, no kit) or
+	-- the nearest enemy (they get flung forward where they're facing). Whether it
+	-- lands depends entirely on the server's validation -- this just fires it.
+	do
+		local SigridCharge, Target, Range, Interval, Notify
+		local function getRemote()
+			local ok, r = pcall(function() return bedwars.Client:Get('SigridBeginChargeRequest') end)
+			return ok and r or nil
+		end
+		local function resolveTarget()
+			if Target and Target.Value == 'Self' then return lplr end
+			local ent = entitylib.EntityPosition({
+				Range = (Range and Range.Value) or 60,
+				Part = 'RootPart',
+				Players = true,
+				NPCs = false,
+			})
+			return ent and ent.Player or nil
+		end
+		SigridCharge = vain.Categories.Combat:CreateModule({
+			Name = 'Sigrid Charge',
+			Tooltip = 'Fires the Sigrid/Elk Antler Uppercut charge request at a chosen target without owning the kit. "Self" hands you the forward charge (kit-less dash); "Nearest Enemy" tries to fling the closest enemy. Only works if the server trusts the requested target.',
+			Function = function(callback)
+				if callback then
+					if not getRemote() then
+						vain:CreateNotification('Sigrid Charge', 'SigridBeginChargeRequest remote not found in this place -- the Elk kit may not be loaded here.', 6, 'warning')
+					end
+					task.spawn(function()
+						repeat
+							local remote = getRemote()
+							local target = resolveTarget()
+							if remote and target then
+								pcall(function() remote:CallServer({ player = target }) end)
+								if Notify and Notify.Enabled then
+									vain:CreateNotification('Sigrid Charge', 'Charge fired on ' .. (target.Name or '?'), 3)
+								end
+							end
+							task.wait((Interval and Interval.Value) or 8)
+						until not SigridCharge.Enabled
+					end)
+				end
+			end
+		})
+		Target = SigridCharge:CreateDropdown({ Name = 'Target', List = { 'Nearest Enemy', 'Self' }, Default = 'Nearest Enemy',
+			Tooltip = 'Who receives the charge. Self = you dash forward (no kit needed); Nearest Enemy = fling the closest enemy.' })
+		Range = SigridCharge:CreateSlider({ Name = 'Range', Min = 10, Max = 300, Default = 60, Suffix = 'studs',
+			Tooltip = 'Max distance to pick the nearest enemy (ignored in Self mode).' })
+		Interval = SigridCharge:CreateSlider({ Name = 'Interval', Min = 1, Max = 30, Default = 8, Suffix = 'sec',
+			Tooltip = 'How often to re-fire the charge. The real kit cooldown is 14s; lower this to test whether the server enforces it.' })
+		Notify = SigridCharge:CreateToggle({ Name = 'Notify', Default = true,
+			Tooltip = 'Notify each time a charge request is fired.' })
+	end
+
 	AimAssist = vain.Categories.Combat:CreateModule({
 		Name = 'AimAssist',
 		Tooltip = 'Smoothly deflects your camera toward nearby enemies',
