@@ -1796,7 +1796,7 @@ local AimAssist
 			if not name or name == 'None' then return nil end
 			return playersService:FindFirstChild(name)
 		end
-		SigridCharge = vain.Categories.Combat:CreateModule({
+		SigridCharge = vain.Categories.Kits:CreateModule({
 			Name = 'Sigrid Charge',
 			Tooltip = 'Press to fire the Elk/Sigrid Antler Uppercut charge at the player chosen in the Target dropdown. You must be mounted on your Elk first. Premium only.',
 			Function = function(callback)
