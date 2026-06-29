@@ -4,6 +4,7 @@ import { handleCommand } from './discord/commands';
 import { handleCheck, handleTiers } from './routes/check';
 import { handleLongPoll, handleQueue } from './routes/commands';
 import { handlePresence } from './routes/presence';
+import { resyncAllTiers } from './tierSync';
 import {
   handleListProfiles, handleGetProfile, handleCreateProfile, handleUpdateProfile,
   handleDeleteProfile, handleInstallProfile,
@@ -47,6 +48,12 @@ export default {
     }
 
     return new Response('Not found', { status: 404 });
+  },
+
+  // Cron (*/5 * * * *): keep every whitelisted user's tier in sync with their
+  // live Discord roles, so removing a role actually drops their in-game rank.
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(resyncAllTiers(env));
   },
 };
 
