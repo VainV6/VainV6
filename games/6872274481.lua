@@ -1876,21 +1876,41 @@ local AimAssist
 			fetching[uid] = true
 			local dn, nm = displayNameOf(plr):lower(), plr.Name:lower()
 			task.spawn(function()
-				-- full profile (works for any player, like the "view profile" UI) so we
-				-- can read the CURRENT-gamemode streak, not the global/highest one.
+				local label
+				-- Full profile -> per-CURRENT-gamemode stats (winstreak, winrate, K/D).
+				-- Privacy-gated: private/friends-only users reject it; we suppress the
+				-- resulting notification (see installNotifFilter) and fall back below.
 				local ok, profile = pcall(function()
 					return bedwars.Client:Get('RequestProfileData'):CallServerAsync(plr):expect()
 				end)
-				local ws
 				if ok and profile and profile.queues then
 					local qt = bedwars.Store:getState().Game.queueType
 					local q = qt and profile.queues[qt]
-					if q then ws = tonumber(q.currentWinStreak) end
+					if q then
+						local ws = tonumber(q.currentWinStreak) or 0
+						local wins, losses = tonumber(q.wins) or 0, tonumber(q.losses) or 0
+						local kills, deaths = tonumber(q.kills) or 0, tonumber(q.deaths) or 0
+						local parts = {}
+						if ws > 0 then parts[#parts + 1] = ws .. '\u{1F525}' end
+						if wins + losses > 0 then parts[#parts + 1] = math.floor(wins / (wins + losses) * 100 + 0.5) .. '%' end
+						if deaths > 0 then parts[#parts + 1] = string.format('%.1f', kills / deaths) .. 'kd'
+						elseif kills > 0 then parts[#parts + 1] = kills .. 'kd' end
+						if #parts > 0 then label = table.concat(parts, ' ') end
+					end
+				end
+				-- private profile / no per-mode data -> global winstreak from nametag
+				-- data (NOT privacy-gated, never notifies)
+				if not label then
+					local ok2, data = pcall(function()
+						return bedwars.NametagController:requestNametagData(plr):expect()
+					end)
+					local gws = ok2 and data and tonumber(data.winstreak)
+					if gws and gws > 0 then label = gws .. '\u{1F525}' end
 				end
 				fetched[uid] = true
 				fetching[uid] = nil
 				-- key by name so it still matches the row after the player leaves
-				if ws and ws > 0 then streaks[dn] = ws; streaks[nm] = ws end
+				if label then streaks[dn] = label; streaks[nm] = label end
 			end)
 		end
 
@@ -1908,12 +1928,11 @@ local AimAssist
 		end
 
 		local function paint()
-			-- queue ONE fetch per pass for an un-fetched online player (rate-safe)
-			local queued = false
+			-- fetch everyone at once (each request is cached, so a player is only
+			-- ever requested a single time -> the private-profile notif, which we
+			-- also suppress, can fire at most once and we batch them away instantly)
 			for _, plr in playersService:GetPlayers() do
-				if not queued and not fetched[plr.UserId] and not fetching[plr.UserId] then
-					fetchWinstreak(plr); queued = true
-				end
+				fetchWinstreak(plr)
 			end
 			if not next(streaks) then return end
 
@@ -1937,28 +1956,58 @@ local AimAssist
 			end
 			if not bestLabels then return end
 			for _, e in bestLabels do
-				local gui, ws = e[1], e[2]
+				local gui, label = e[1], e[2]
 				if not gui:GetAttribute('VainWS') then
 					gui:SetAttribute('VainWS', true)
 					gui.RichText = true
-					gui.Text = gui.Text .. "  <font color='#FFD24D'>" .. ws .. "\u{1F525}</font>"
+					gui.Text = gui.Text .. "  <font color='#FFD24D'>" .. label .. "</font>"
 				end
 			end
 		end
 
+		-- Drop the "profile visibility set to Private/Friends Only" spam that
+		-- RequestProfileData triggers for private players. All notifications go
+		-- through NotificationController.sendNotification, so we wrap it and drop
+		-- any whose payload mentions "visibility", restoring it when disabled.
+		local notifCtrl, origSendNotif
+		local function installNotifFilter()
+			if origSendNotif then return end
+			local ok, ctrl = pcall(function()
+				return Flamework.resolveDependency('@easy-games/game-core:client/controllers/notification-controller@NotificationController')
+			end)
+			if not ok or not ctrl or type(ctrl.sendNotification) ~= 'function' then return end
+			notifCtrl, origSendNotif = ctrl, ctrl.sendNotification
+			ctrl.sendNotification = function(selfc, payload, ...)
+				if type(payload) == 'table' then
+					for _, v in pairs(payload) do
+						if type(v) == 'string' and v:lower():find('visibility') then return end
+					end
+				end
+				return origSendNotif(selfc, payload, ...)
+			end
+		end
+		local function removeNotifFilter()
+			if notifCtrl and origSendNotif and notifCtrl.sendNotification ~= origSendNotif then
+				notifCtrl.sendNotification = origSendNotif
+			end
+			origSendNotif = nil
+		end
+
 		TablistWinstreak = vain.Categories.Render:CreateModule({
 			Name = 'Tablist Winstreak',
-			Tooltip = "Shows each player's winstreak next to their name in the tab-list (Tab key). Fetches each player's stats once and caches them, then re-applies as the list updates.",
+			Tooltip = "Shows each player's current-gamemode winstreak, winrate and K/D next to their name in the tab-list (Tab key). Private profiles fall back to their global winstreak. Fetches once per player and caches.",
 			Function = function(callback)
 				if callback then
 					table.clear(fetched)
 					table.clear(fetching)
 					table.clear(streaks)
+					installNotifFilter()
 					task.spawn(function()
 						repeat
 							pcall(paint)
 							task.wait(1)
 						until not TablistWinstreak.Enabled
+						removeNotifFilter()
 					end)
 				end
 			end
