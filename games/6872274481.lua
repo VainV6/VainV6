@@ -1781,7 +1781,7 @@ local AimAssist
 	-- This is a BUTTON (press = one charge), it requires you to be mounted on your
 	-- Elk first, targets the player you pick from the dropdown, and is Premium-only.
 	do
-		local SigridCharge, Target, Notify
+		local SigridCharge, Target, Notify, AutoMount
 		local function getRemote()
 			local ok, r = pcall(function() return bedwars.Client:Get('SigridBeginChargeRequest') end)
 			return ok and r or nil
@@ -1790,6 +1790,19 @@ local AimAssist
 		local function isMounted()
 			local ok, mounts = pcall(function() return bedwars.MountController:getActiveMounts() end)
 			return ok and mounts ~= nil and mounts[lplr] ~= nil
+		end
+		-- summon the Elk via the ELK_SUMMON ability ("elk_summon"), then wait up to
+		-- ~1.5s for the mount to register. Returns true once mounted.
+		local function ensureMounted()
+			if isMounted() then return true end
+			pcall(function()
+				if bedwars.AbilityController:canUseAbility('elk_summon') then
+					bedwars.AbilityController:useAbility('elk_summon')
+				end
+			end)
+			local deadline = tick() + 1.5
+			repeat task.wait(0.05) until isMounted() or tick() > deadline
+			return isMounted()
 		end
 		local function resolveTarget()
 			local name = Target and Target.Value
@@ -1808,8 +1821,15 @@ local AimAssist
 					return done()
 				end
 				if not isMounted() then
-					vain:CreateNotification('Sigrid Charge', 'You must be mounted on your Elk first.', 5, 'warning')
-					return done()
+					if AutoMount and AutoMount.Enabled then
+						if not ensureMounted() then
+							vain:CreateNotification('Sigrid Charge', 'Could not mount the Elk (do you have the Sigrid kit?).', 5, 'warning')
+							return done()
+						end
+					else
+						vain:CreateNotification('Sigrid Charge', 'You must be mounted on your Elk first (or enable Auto Mount).', 5, 'warning')
+						return done()
+					end
 				end
 				local remote = getRemote()
 				if not remote then
@@ -1831,6 +1851,8 @@ local AimAssist
 		Target = SigridCharge:CreateDropdown({ Name = 'Target', List = { 'None' }, Default = 'None',
 			Function = function() end,
 			Tooltip = 'Player to send the charge to (updates as players join/leave).' })
+		AutoMount = SigridCharge:CreateToggle({ Name = 'Auto Mount', Default = false,
+			Tooltip = 'If you are not on your Elk when you press, summon it first (uses the ELK_SUMMON ability) and wait for the mount before charging. Requires the Sigrid kit.' })
 		Notify = SigridCharge:CreateToggle({ Name = 'Notify', Default = true,
 			Tooltip = 'Notify when a charge is fired.' })
 		if SigridCharge.MarkPremium then SigridCharge:MarkPremium() end
