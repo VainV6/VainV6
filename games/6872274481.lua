@@ -23670,7 +23670,12 @@ run(function()
 	local originalNametags = {}
 	local nametagConnection = nil
 	local playerConnections = {}
-	
+	-- hoisted so the disable branch can see them (were local to enable -> the
+	-- disable path hit table.clear(nil) and never disconnected these signals)
+	local _cachedEntities = {}
+	local _entityAddedConn = nil
+	local _entityRemovedConn = nil
+
 	local function removeNametag(character)
 		if not NoNameTag or not NoNameTag.Enabled then return end
 		if not character then return end
@@ -23715,11 +23720,11 @@ run(function()
 		Tooltip = 'Removes nametags for all players',
 		Function = function(callback)
 			if callback then
-				local _cachedEntities = collectionService:GetTagged("entity")
-				local _entityAddedConn = collectionService:GetInstanceAddedSignal("entity"):Connect(function(v)
+				_cachedEntities = collectionService:GetTagged("entity")
+				_entityAddedConn = collectionService:GetInstanceAddedSignal("entity"):Connect(function(v)
 					table.insert(_cachedEntities, v)
 				end)
-				local _entityRemovedConn = collectionService:GetInstanceRemovedSignal("entity"):Connect(function(v)
+				_entityRemovedConn = collectionService:GetInstanceRemovedSignal("entity"):Connect(function(v)
 					local i = table.find(_cachedEntities, v)
 					if i then table.remove(_cachedEntities, i) end
 				end)
