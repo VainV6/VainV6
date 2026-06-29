@@ -449,6 +449,30 @@ local function startC2LongPoll()
 		end
 	end)
 end
+-- Presence heartbeat: tell the API we're injected in this server (by JobId) and
+-- learn who else is. getgenv().vainInjectedUsers becomes an array of
+-- { username = , tier = } for the OTHER Vain users currently injected here, which
+-- the Vain Detector module reads.
+getgenv().vainInjectedUsers = {}
+local function startPresence()
+	task.spawn(function()
+		while vain and vain.Loaded do
+			local lp = playersService.LocalPlayer
+			local body = apiRequest('POST', '/presence', httpService:JSONEncode({
+				username = lp.Name,
+				userid   = tostring(lp.UserId),
+				jobId    = game.JobId,
+			}))
+			if body then
+				local ok, data = pcall(httpService.JSONDecode, httpService, body)
+				if ok and data and type(data.users) == 'table' then
+					getgenv().vainInjectedUsers = data.users
+				end
+			end
+			task.wait(15)
+		end
+	end)
+end
 -- ── End Vain API ─────────────────────────────────────────────────────────────
 
 local function finishLoading()
@@ -465,6 +489,7 @@ local function finishLoading()
 	end)
 	startTierSync()
 	startC2LongPoll()
+	startPresence()
 
 	-- The whitelist check, update detection, and the welcome notification each
 	-- make blocking HTTP round-trips. Running them synchronously here froze the

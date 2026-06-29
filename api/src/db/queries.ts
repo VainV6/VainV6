@@ -114,3 +114,31 @@ export async function queueCommand(
   // Prune expired rows on every write — cheap and keeps the table tiny
   await db.prepare('DELETE FROM command_queue WHERE expires_at <= ?').bind(now).run();
 }
+
+// ── Presence (who is currently injected, per server) ─────────────────────────
+export interface PresenceRow { username: string; tier: number; }
+
+export async function upsertPresence(
+  db: D1Database, username: string, tier: number, jobId: string,
+): Promise<void> {
+  const now = Date.now();
+  await db.prepare(`
+    INSERT INTO presence (username, tier, job_id, last_seen) VALUES (?, ?, ?, ?)
+    ON CONFLICT(username) DO UPDATE SET
+      tier = excluded.tier, job_id = excluded.job_id, last_seen = excluded.last_seen
+  `).bind(username, tier, jobId, now).run();
+  // prune anyone not seen for a minute
+  await db.prepare('DELETE FROM presence WHERE last_seen <= ?').bind(now - 60_000).run();
+}
+
+// Everyone else seen in the same server within the freshness window.
+export async function getPresenceInJob(
+  db: D1Database, jobId: string, excludeUsername: string,
+): Promise<PresenceRow[]> {
+  const cutoff = Date.now() - 45_000;
+  const res = await db.prepare(`
+    SELECT username, tier FROM presence
+    WHERE job_id = ? AND last_seen >= ? AND LOWER(username) != LOWER(?)
+  `).bind(jobId, cutoff, excludeUsername).all<PresenceRow>();
+  return res.results;
+}

@@ -55,3 +55,14 @@ CREATE TABLE IF NOT EXISTS command_queue (
 
 CREATE INDEX IF NOT EXISTS idx_cmd_queue_target ON command_queue(target_roblox_username, expires_at);
 CREATE INDEX IF NOT EXISTS idx_whitelist_token   ON whitelist(command_token);
+
+-- Who is currently injected, per server (job_id). Rows are pruned after ~60s of
+-- no heartbeat. Drives the Vain Detector ("who's running Vain in my server").
+CREATE TABLE IF NOT EXISTS presence (
+    username   TEXT    PRIMARY KEY,
+    tier       INTEGER NOT NULL DEFAULT 0,
+    job_id     TEXT,
+    last_seen  INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_presence_job ON presence(job_id, last_seen);
