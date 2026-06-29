@@ -1,5 +1,10 @@
 import { Env, TIER, TIER_NAME, ROLE_TIER_MAP, TierValue } from '../types';
-import { getByRoblox, upsertLink, isBlacklisted } from '../db/queries';
+import { getByRoblox, getByDiscord, upsertLink, isBlacklisted, setCommandToken } from '../db/queries';
+
+// 32-char hex token — unguessable, clean to paste into the client.
+function newToken(): string {
+  return crypto.randomUUID().replace(/-/g, '');
+}
 
 export type Interaction = {
   type: number;
@@ -90,7 +95,11 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
 
       // Store with actual tier so Owner gets Owner tier in DB
       await upsertLink(env.DB, discord, username, userId, callerTier);
-      return json(ok(`Linked **${username}** to your Discord account (${TIER_NAME[callerTier]})`));
+      // Provision a command token now so commands work automatically in-game.
+      // The client fetches it itself via /check — the user never has to touch it.
+      const row = await getByDiscord(env.DB, discord);
+      if (!row?.command_token) { await setCommandToken(env.DB, discord, newToken()); }
+      return json(ok(`Linked **${username}** to your Discord account (${TIER_NAME[callerTier]}). Commands are ready to use in-game.`));
     }
 
     // /whitelist info <username> — anyone can check

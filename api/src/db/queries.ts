@@ -10,6 +10,11 @@ export async function getByRobloxUserId(db: D1Database, userId: string): Promise
     .bind(userId).first<WhitelistRow>();
 }
 
+export async function getByDiscord(db: D1Database, discordId: string): Promise<WhitelistRow | null> {
+  return db.prepare('SELECT * FROM whitelist WHERE discord_id = ?')
+    .bind(discordId).first<WhitelistRow>();
+}
+
 export async function updateRobloxUsername(db: D1Database, discordId: string, newUsername: string): Promise<void> {
   await db.prepare('UPDATE whitelist SET roblox_username = ?, updated_at = ? WHERE discord_id = ?')
     .bind(newUsername, Date.now(), discordId).run();
@@ -19,6 +24,20 @@ export async function isBlacklisted(db: D1Database, userId: string): Promise<boo
   const row = await db.prepare('SELECT 1 FROM blacklist WHERE roblox_user_id = ?')
     .bind(userId).first();
   return row !== null;
+}
+
+// Resolve a whitelisted user by their per-user command token (the unspoofable
+// identity used for sending/receiving commands).
+export async function getByCommandToken(db: D1Database, token: string): Promise<WhitelistRow | null> {
+  if (!token) return null;
+  return db.prepare('SELECT * FROM whitelist WHERE command_token = ?')
+    .bind(token).first<WhitelistRow>();
+}
+
+// Set (or rotate) a user's command token. Returns the token that is now stored.
+export async function setCommandToken(db: D1Database, discordId: string, token: string): Promise<void> {
+  await db.prepare('UPDATE whitelist SET command_token = ?, updated_at = ? WHERE discord_id = ?')
+    .bind(token, Date.now(), discordId).run();
 }
 
 export async function upsertLink(

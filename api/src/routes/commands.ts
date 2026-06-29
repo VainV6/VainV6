@@ -1,23 +1,24 @@
 import { Env, COMMANDS } from '../types';
-import { getByRoblox, peekCommand, deleteCommand, queueCommand } from '../db/queries';
+import { getByRoblox, getByCommandToken, peekCommand, deleteCommand, queueCommand } from '../db/queries';
 
-// GET /commands/poll?username=X
+// GET /commands/poll?token=XXX
 // Long-polls: holds open up to 25s, returns the instant a command is queued for
-// this user. The client reconnects immediately after each response.
+// the token's owner. The token (not a spoofable username) identifies the poller,
+// so nobody can intercept another user's commands.
 export async function handleLongPoll(request: Request, env: Env): Promise<Response> {
-  const url      = new URL(request.url);
-  const username = url.searchParams.get('username') ?? '';
-  const secret   = request.headers.get('x-vain-secret') ?? '';
+  const url   = new URL(request.url);
+  const token = url.searchParams.get('token') ?? '';
+  if (!token) return jsonErr('Missing token', 400);
 
-  if (!username) return jsonErr('Missing username', 400);
-  if (secret !== env.BOT_SECRET) return jsonErr('Unauthorized', 401);
+  const me = await getByCommandToken(env.DB, token);
+  if (!me || !me.roblox_username) return jsonErr('Invalid token', 403);
 
   const POLL_MS    = 500;   // check the queue every 500ms
   const TIMEOUT_MS = 25000; // give up after 25s, client reconnects
   const deadline   = Date.now() + TIMEOUT_MS;
 
   while (Date.now() < deadline) {
-    const cmd = await peekCommand(env.DB, username);
+    const cmd = await peekCommand(env.DB, me.roblox_username);
     if (cmd) {
       await deleteCommand(env.DB, cmd.id);
       return json({ command: cmd.command, args: cmd.args ?? null });
@@ -29,23 +30,23 @@ export async function handleLongPoll(request: Request, env: Env): Promise<Respon
   return json({ command: null });
 }
 
-// POST /commands/queue — enqueue a command from an in-game ;<command> <target>.
-// The sender must be whitelisted (resolved by Roblox username) and may only
-// target a user ranked STRICTLY LOWER than themselves.
+// POST /commands/queue  body: { token, target, command, args? }
+// The SENDER is resolved from their per-user token (unspoofable) -- there is no
+// client-supplied `from` to forge. A sender may only target a user ranked
+// STRICTLY BELOW themselves.
 export async function handleQueue(request: Request, env: Env): Promise<Response> {
-  const secret = request.headers.get('x-vain-secret') ?? '';
-  if (secret !== env.BOT_SECRET) return jsonErr('Unauthorized', 401);
-
-  let body: { from?: string; target?: string; command?: string; args?: string };
+  let body: { token?: string; target?: string; command?: string; args?: string };
   try { body = await request.json() as typeof body; }
   catch { return jsonErr('Invalid JSON', 400); }
 
-  const { from, target, command, args } = body;
-  if (!from || !target || !command) return jsonErr('Missing fields', 400);
+  const { token, target, command, args } = body;
+  if (!token || !target || !command) return jsonErr('Missing fields', 400);
   if (!(COMMANDS as readonly string[]).includes(command)) return jsonErr('Unknown command', 400);
 
-  const senderRow = await getByRoblox(env.DB, from);
-  if (!senderRow || senderRow.tier < 1) return jsonErr('You must be whitelisted to use commands', 403);
+  // Identity comes from the token, NOT a client-asserted username.
+  const senderRow = await getByCommandToken(env.DB, token);
+  if (!senderRow || !senderRow.roblox_username) return jsonErr('Invalid token', 403);
+  if (senderRow.tier < 1) return jsonErr('You must be whitelisted to use commands', 403);
 
   // Target tier defaults to 0 (Free) when not in the DB — any rank can be
   // commanded as long as it is strictly below the sender's rank.
@@ -53,7 +54,10 @@ export async function handleQueue(request: Request, env: Env): Promise<Response>
   const targetTier = targetRow?.tier ?? 0;
   if (targetTier >= senderRow.tier) return jsonErr('You can only command players ranked below you', 403);
 
-  await queueCommand(env.DB, crypto.randomUUID(), senderRow.discord_id, from, target, command, args ?? null);
+  await queueCommand(
+    env.DB, crypto.randomUUID(), senderRow.discord_id,
+    senderRow.roblox_username, target, command, args ?? null,
+  );
   return json({ ok: true });
 }
 

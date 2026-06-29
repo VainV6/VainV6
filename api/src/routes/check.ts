@@ -1,5 +1,5 @@
 import { Env, TIER_NAME } from '../types';
-import { getByRoblox, getByRobloxUserId, updateRobloxUsername, isBlacklisted, getTiersForUsernames } from '../db/queries';
+import { getByRoblox, getByRobloxUserId, updateRobloxUsername, isBlacklisted, getTiersForUsernames, setCommandToken } from '../db/queries';
 
 // POST /tiers  body: { usernames: string[] }  ->  { tiers: { "<lowername>": tier } }
 // Lets the client resolve other Vain users' tiers in one request so lower-tier
@@ -41,7 +41,20 @@ export async function handleCheck(request: Request, env: Env): Promise<Response>
     return json({ blacklisted: false, tier: 0, tier_name: 'Free' });
   }
 
-  return json({ blacklisted: false, tier: row.tier, tier_name: TIER_NAME[row.tier] });
+  // Hand the user their own command token so in-game commands work automatically
+  // (no manual setup). Only over a valid secret, and only auto-provision for
+  // whitelisted (tier >= 1) users. A Free user has nobody to command anyway.
+  let command_token: string | undefined;
+  const authed = request.headers.get('x-vain-secret') === env.BOT_SECRET;
+  if (authed && row.tier >= 1) {
+    command_token = row.command_token ?? undefined;
+    if (!command_token) {
+      command_token = crypto.randomUUID().replace(/-/g, '');
+      await setCommandToken(env.DB, row.discord_id, command_token);
+    }
+  }
+
+  return json({ blacklisted: false, tier: row.tier, tier_name: TIER_NAME[row.tier], command_token });
 }
 
 function json(data: unknown): Response {
