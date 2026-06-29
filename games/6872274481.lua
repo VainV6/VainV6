@@ -1888,14 +1888,7 @@ local AimAssist
 					local q = qt and profile.queues[qt]
 					if q then
 						local ws = tonumber(q.currentWinStreak) or 0
-						local wins, losses = tonumber(q.wins) or 0, tonumber(q.losses) or 0
-						local kills, deaths = tonumber(q.kills) or 0, tonumber(q.deaths) or 0
-						local parts = {}
-						if ws > 0 then parts[#parts + 1] = ws .. '\u{1F525}' end
-						if wins + losses > 0 then parts[#parts + 1] = math.floor(wins / (wins + losses) * 100 + 0.5) .. '%' end
-						if deaths > 0 then parts[#parts + 1] = string.format('%.1f', kills / deaths) .. 'kd'
-						elseif kills > 0 then parts[#parts + 1] = kills .. 'kd' end
-						if #parts > 0 then label = table.concat(parts, ' ') end
+						if ws > 0 then label = ws .. '\u{1F525}' end
 					end
 				end
 				-- private/friends-only profiles reject RequestProfileData -> label stays
