@@ -1887,9 +1887,19 @@ local AimAssist
 			return (s:gsub('<[^>]->', ''))
 		end
 
+		-- normalise a label's text for matching: drop rich-text tags, a leading
+		-- "[..]" (level/kill) tag, and surrounding whitespace.
+		local function clean(s)
+			s = stripTags(s)
+			s = s:gsub('^%s*%b[]%s*', '')
+			s = s:gsub('^%s+', ''):gsub('%s+$', '')
+			return s:lower()
+		end
+
+		local lastMatched, lastScanned = 0, 0
 		local function paint()
-			-- map current players' shown names -> winstreak; queue ONE fetch per pass
-			local byName, queued = {}, false
+			-- name(lower) -> winstreak; queue ONE fetch per pass to stay rate-safe
+			local entries, queued = {}, false
 			for _, plr in playersService:GetPlayers() do
 				local uid = plr.UserId
 				if not queued and cache[uid] == nil and not fetching[uid] then
@@ -1897,28 +1907,33 @@ local AimAssist
 				end
 				local ws = cache[uid]
 				if ws and ws > 0 then
-					byName[displayNameOf(plr):lower()] = ws
-					byName[plr.Name:lower()] = ws
+					entries[displayNameOf(plr):lower()] = ws
+					entries[plr.Name:lower()] = ws
 				end
 			end
-			if not next(byName) then return end
+			if not next(entries) then return end
 
-			-- scan the tab-list (cached root once found) for name labels to tag
+			-- scan the tab-list (cached root once found) for matching name labels
 			local root = (tablistRoot and tablistRoot.Parent) and tablistRoot or lplr:FindFirstChild('PlayerGui')
 			if not root then return end
+			local matched, scanned = 0, 0
 			for _, gui in root:GetDescendants() do
-				if gui:IsA('TextLabel') and not gui:GetAttribute('VainWS') then
-					local ws = byName[stripTags(gui.Text):lower()]
-					if ws then
-						gui:SetAttribute('VainWS', true)
-						gui.RichText = true
-						gui.Text = gui.Text .. "  <font color='#FFD24D'>" .. ws .. "\u{1F525}</font>"
-						if not tablistRoot then
-							tablistRoot = gui:FindFirstAncestorWhichIsA('ScreenGui')
+				if gui:IsA('TextLabel') then
+					scanned += 1
+					if not gui:GetAttribute('VainWS') then
+						local ws = entries[clean(gui.Text)]
+						if ws then
+							gui:SetAttribute('VainWS', true)
+							gui.RichText = true
+							gui.Text = gui.Text .. "  <font color='#FFD24D'>" .. ws .. "\u{1F525}</font>"
+							matched += 1
+							if not tablistRoot then tablistRoot = gui:FindFirstAncestorWhichIsA('ScreenGui') end
 						end
 					end
 				end
 			end
+			lastScanned = scanned
+			if matched > 0 then lastMatched = matched end
 		end
 
 		TablistWinstreak = vain.Categories.Render:CreateModule({
@@ -1928,7 +1943,25 @@ local AimAssist
 				if callback then
 					table.clear(cache)
 					table.clear(fetching)
-					tablistRoot = nil
+					tablistRoot, lastMatched, lastScanned = nil, 0, 0
+					-- diagnostic 1: does the data path work? (self winstreak)
+					task.spawn(function()
+						local ok, data = pcall(function()
+							return bedwars.NametagController:requestNametagData(lplr):expect()
+						end)
+						vain:CreateNotification('Tablist Winstreak',
+							'self fetch ' .. (ok and ('OK ws=' .. tostring(data and data.winstreak)) or ('FAIL: ' .. tostring(data))),
+							8, ok and nil or 'alert')
+					end)
+					-- diagnostic 2: counts after a few seconds (open the Tab list!)
+					task.delay(7, function()
+						if not TablistWinstreak.Enabled then return end
+						local got = 0
+						for _, v in cache do if v and v > 0 then got += 1 end end
+						vain:CreateNotification('Tablist Winstreak',
+							('players %d | streaks %d | labels %d | matched %d'):format(
+								#playersService:GetPlayers(), got, lastScanned, lastMatched), 9)
+					end)
 					task.spawn(function()
 						repeat
 							pcall(paint)
