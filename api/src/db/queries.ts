@@ -1,4 +1,4 @@
-import { WhitelistRow, TierValue } from '../types';
+import { WhitelistRow, TierValue, CommandRow } from '../types';
 
 export async function getByRoblox(db: D1Database, username: string): Promise<WhitelistRow | null> {
   return db.prepare('SELECT * FROM whitelist WHERE LOWER(roblox_username) = LOWER(?)')
@@ -61,4 +61,37 @@ export async function getTiersForUsernames(
     map[row.roblox_username.toLowerCase()] = row.tier;
   }
   return map;
+}
+
+// ── Command queue (in-game ;<command> <target>) ──────────────────────────────
+// Backed by the command_queue table. Rows expire 30s after being issued.
+export async function peekCommand(db: D1Database, targetRoblox: string): Promise<CommandRow | null> {
+  const now = Date.now();
+  return db.prepare(`
+    SELECT * FROM command_queue
+    WHERE LOWER(target_roblox_username) = LOWER(?) AND expires_at > ?
+    ORDER BY issued_at ASC LIMIT 1
+  `).bind(targetRoblox, now).first<CommandRow>();
+}
+
+export async function deleteCommand(db: D1Database, id: string): Promise<void> {
+  await db.prepare('DELETE FROM command_queue WHERE id = ?').bind(id).run();
+}
+
+export async function queueCommand(
+  db: D1Database,
+  id: string,
+  fromDiscordId: string,
+  fromRoblox: string,
+  targetRoblox: string,
+  command: string,
+  args: string | null,
+): Promise<void> {
+  const now = Date.now();
+  await db.prepare(`
+    INSERT INTO command_queue (id, from_discord_id, from_roblox_username, target_roblox_username, command, args, issued_at, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, fromDiscordId, fromRoblox, targetRoblox, command, args, now, now + 30_000).run();
+  // Prune expired rows on every write — cheap and keeps the table tiny
+  await db.prepare('DELETE FROM command_queue WHERE expires_at <= ?').bind(now).run();
 }

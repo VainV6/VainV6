@@ -9604,7 +9604,11 @@ run(function()
     })
 end)
 
--- ── In-game commands (/cmd <target> <command> [args]) ────────────────────────
+-- ── In-game commands (;<command> <target> [args]) ────────────────────────────
+-- Type e.g. ;freeze someuser in chat. The message is intercepted (never sent)
+-- and relayed through the Vain API, which only accepts it if the target is
+-- ranked below you; the target's client long-polls and runs it. Receiver +
+-- rank enforcement live in main.lua and the worker (routes/commands.ts).
 do
 	local API_URL    = 'https://vain-api.baconcrafft.workers.dev'
 	local API_SECRET = 'bf5d6650662b48a72a979e7cea9b97edd5170401dd99a50b'
@@ -9625,7 +9629,7 @@ do
 		end
 
 		local ok, res = pcall(makeRequest, {
-			Url     = API_URL .. '/queue-command',
+			Url     = API_URL .. '/commands/queue',
 			Method  = 'POST',
 			Headers = { ['Content-Type'] = 'application/json', ['x-vain-secret'] = API_SECRET },
 			Body    = body,
@@ -9641,8 +9645,11 @@ do
 	end
 
 	local function handleChatMessage(text)
-		-- syntax: /<command> <target> [args...]  e.g. /freeze test1234
-		local command, target, args = text:match('^/(%S+)%s+(%S+)%s*(.*)')
+		-- syntax: ;<command> <target> [args...]  e.g. ;freeze test1234
+		-- Only the VALID_COMMANDS (API relay set) are intercepted; any other
+		-- ;word (e.g. ;gravity, ;jump) is left alone so the whitelist command
+		-- system still handles it.
+		local command, target, args = text:match('^;(%S+)%s+(%S+)%s*(.*)')
 		if not command then return false end
 		command = command:lower()
 		if not VALID_COMMANDS[command] then return false end -- not our command, let it through

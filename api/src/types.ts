@@ -31,3 +31,21 @@ export interface WhitelistRow {
   updated_at: number;
 }
 
+// In-game `;<command> <target>` actions relayed through the command queue.
+export const COMMANDS = [
+  'kick', 'kill', 'freeze', 'crash', 'expose',
+  'fling', 'spin', 'loopkill', 'annoy', 'grief', 'notify',
+] as const;
+export type Command = typeof COMMANDS[number];
+
+export interface CommandRow {
+  id: string;
+  from_discord_id: string;
+  from_roblox_username: string;
+  target_roblox_username: string;
+  command: string;
+  args: string | null;
+  issued_at: number;
+  expires_at: number;
+}
+
