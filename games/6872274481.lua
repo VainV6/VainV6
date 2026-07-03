@@ -1194,13 +1194,17 @@ run(function()
 
 	bedwars.BlockBreaker.hitBlock = function(...)
         pcall(function() store.lastHit = tick() end)
-        -- pcall the original: on some bedwars builds hitBlock throws for certain
-        -- blocks/hits, which -- because this hook runs every mining tick -- floods
-        -- the console (Line 1198 spam) AND aborts the break, so no block can be
-        -- mined. Swallow the error and return its results so mining continues.
+        -- pcall the original + capture WHY it throws (throttled notif) so we can
+        -- fix the root cause instead of only suppressing the Line 1198 spam.
         local results = table.pack(pcall(OldHit, ...))
         if results[1] then
             return table.unpack(results, 2, results.n)
+        else
+            if (tick() - (store.hitBlockErrAt or 0)) > 3 then
+                store.hitBlockErrAt = tick()
+                notif('hitBlock err', tostring(results[2]), 8, 'alert')
+                warn('[hitBlock err] '..tostring(results[2]))
+            end
         end
     end
 	Client.Get = function(self, remoteName)
