@@ -1194,7 +1194,14 @@ run(function()
 
 	bedwars.BlockBreaker.hitBlock = function(...)
         pcall(function() store.lastHit = tick() end)
-        return OldHit(...)
+        -- pcall the original: on some bedwars builds hitBlock throws for certain
+        -- blocks/hits, which -- because this hook runs every mining tick -- floods
+        -- the console (Line 1198 spam) AND aborts the break, so no block can be
+        -- mined. Swallow the error and return its results so mining continues.
+        local results = table.pack(pcall(OldHit, ...))
+        if results[1] then
+            return table.unpack(results, 2, results.n)
+        end
     end
 	Client.Get = function(self, remoteName)
 		local call = OldGet(self, remoteName)
