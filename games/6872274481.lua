@@ -1199,7 +1199,23 @@ run(function()
         -- 'hitBlock' popup at all, the game isn't reaching this path.
         if (tick() - (store.hitBlockDbgAt or 0)) > 2 then
             store.hitBlockDbgAt = tick()
-            notif('hitBlock', 'called; args='..select('#', ...), 4, 'alert')
+            -- report each arg's type + a hint, so we can see the REAL signature
+            -- (args=2 means the game changed how it calls hitBlock; the original
+            -- likely can't find the block to damage -> silent no-break).
+            local parts = {}
+            for i = 1, select('#', ...) do
+                local a = select(i, ...)
+                local hint = typeof(a)
+                if type(a) == 'table' then
+                    local keys = {}
+                    for k in pairs(a) do keys[#keys+1] = tostring(k); if #keys >= 4 then break end end
+                    hint = 'table{'..table.concat(keys, ',')..'}'
+                elseif typeof(a) == 'Instance' then
+                    hint = 'Instance:'..a.ClassName
+                end
+                parts[i] = i..'='..hint
+            end
+            notif('hitBlock args', table.concat(parts, ' | '), 8, 'alert')
         end
         local results = table.pack(pcall(OldHit, ...))
         if results[1] then
