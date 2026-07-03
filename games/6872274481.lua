@@ -1194,8 +1194,13 @@ run(function()
 
 	bedwars.BlockBreaker.hitBlock = function(...)
         pcall(function() store.lastHit = tick() end)
-        -- pcall the original + capture WHY it throws (throttled notif) so we can
-        -- fix the root cause instead of only suppressing the Line 1198 spam.
+        -- DEBUG: confirm hitBlock is even being CALLED when you mine, and capture
+        -- any error from the original (throttled). If you mine and see no
+        -- 'hitBlock' popup at all, the game isn't reaching this path.
+        if (tick() - (store.hitBlockDbgAt or 0)) > 2 then
+            store.hitBlockDbgAt = tick()
+            notif('hitBlock', 'called; args='..select('#', ...), 4, 'alert')
+        end
         local results = table.pack(pcall(OldHit, ...))
         if results[1] then
             return table.unpack(results, 2, results.n)
@@ -1260,7 +1265,19 @@ run(function()
 
 		if ok and deny then return false end
 
-		return OldBreak(self, breakTable, plr)
+		local orig = OldBreak(self, breakTable, plr)
+		-- DEBUG: report what the original returns for a mined block (throttled), so
+		-- we can tell if isBlockBreakable is wrongly denying (silent no-break).
+		if (tick() - (store.breakableDbgAt or 0)) > 2 then
+			store.breakableDbgAt = tick()
+			local nm = '?'
+			pcall(function()
+				local o = bedwars.BlockController:getStore():getBlockAt(breakTable.blockPosition)
+				nm = o and o.Name or 'nil-block'
+			end)
+			notif('isBreakable', 'block='..nm..' orig='..tostring(orig)..' pcallOk='..tostring(ok), 6, 'alert')
+		end
+		return orig
 	end
 
 	local cache, blockhealthbar = {}, {blockHealth = -1, breakingBlockPosition = Vector3.zero}
