@@ -13585,10 +13585,19 @@ run(function()
                     end
                 end))
                 old = bedwars.BlockBreaker.hitBlock
-                bedwars.BlockBreaker.hitBlock = function(self, maid, raycastparams, ...)
-                    local block = self.clientManager:getBlockSelector():getMouseInfo(1, {ray = raycastparams})
-                    if switchHotbarItem(block and block.target and block.target.blockInstance or nil) then return end
-                    return old(self, maid, raycastparams, ...)
+                -- hitBlock's signature changed to (self, maid) -- no raycastparams
+                -- arg anymore. The old code read raycastparams (nil), fed
+                -- getMouseInfo({ray = nil}) which resolved nothing, and -- worse --
+                -- could early-return WITHOUT calling the original, so the block never
+                -- took damage (mining silently dead while Auto Tool was on). Forward
+                -- ... verbatim, resolve the block via the default mouse ray, and
+                -- ALWAYS chain to the original so the break still happens.
+                bedwars.BlockBreaker.hitBlock = function(self, ...)
+                    pcall(function()
+                        local block = self.clientManager:getBlockSelector():getMouseInfo(1)
+                        switchHotbarItem(block and block.target and block.target.blockInstance or nil)
+                    end)
+                    return old(self, ...)
                 end
             else
                 bedwars.BlockBreaker.hitBlock = old
