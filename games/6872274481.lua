@@ -1194,38 +1194,12 @@ run(function()
 
 	bedwars.BlockBreaker.hitBlock = function(...)
         pcall(function() store.lastHit = tick() end)
-        -- DEBUG: confirm hitBlock is even being CALLED when you mine, and capture
-        -- any error from the original (throttled). If you mine and see no
-        -- 'hitBlock' popup at all, the game isn't reaching this path.
-        if (tick() - (store.hitBlockDbgAt or 0)) > 2 then
-            store.hitBlockDbgAt = tick()
-            -- report each arg's type + a hint, so we can see the REAL signature
-            -- (args=2 means the game changed how it calls hitBlock; the original
-            -- likely can't find the block to damage -> silent no-break).
-            local parts = {}
-            for i = 1, select('#', ...) do
-                local a = select(i, ...)
-                local hint = typeof(a)
-                if type(a) == 'table' then
-                    local keys = {}
-                    for k in pairs(a) do keys[#keys+1] = tostring(k); if #keys >= 4 then break end end
-                    hint = 'table{'..table.concat(keys, ',')..'}'
-                elseif typeof(a) == 'Instance' then
-                    hint = 'Instance:'..a.ClassName
-                end
-                parts[i] = i..'='..hint
-            end
-            notif('hitBlock args', table.concat(parts, ' | '), 8, 'alert')
-        end
+        -- The game's hitBlock signature is (self, maid). We forward ... verbatim so
+        -- we never mangle args. pcall it so a throw can't spam the console or abort
+        -- the mining loop (that was the original Line 1198 flood).
         local results = table.pack(pcall(OldHit, ...))
         if results[1] then
             return table.unpack(results, 2, results.n)
-        else
-            if (tick() - (store.hitBlockErrAt or 0)) > 3 then
-                store.hitBlockErrAt = tick()
-                notif('hitBlock err', tostring(results[2]), 8, 'alert')
-                warn('[hitBlock err] '..tostring(results[2]))
-            end
         end
     end
 	Client.Get = function(self, remoteName)
@@ -1281,19 +1255,7 @@ run(function()
 
 		if ok and deny then return false end
 
-		local orig = OldBreak(self, breakTable, plr)
-		-- DEBUG: report what the original returns for a mined block (throttled), so
-		-- we can tell if isBlockBreakable is wrongly denying (silent no-break).
-		if (tick() - (store.breakableDbgAt or 0)) > 2 then
-			store.breakableDbgAt = tick()
-			local nm = '?'
-			pcall(function()
-				local o = bedwars.BlockController:getStore():getBlockAt(breakTable.blockPosition)
-				nm = o and o.Name or 'nil-block'
-			end)
-			notif('isBreakable', 'block='..nm..' orig='..tostring(orig)..' pcallOk='..tostring(ok), 6, 'alert')
-		end
-		return orig
+		return OldBreak(self, breakTable, plr)
 	end
 
 	local cache, blockhealthbar = {}, {blockHealth = -1, breakingBlockPosition = Vector3.zero}
@@ -5153,15 +5115,22 @@ run(function()
                 oldHitBlock = bedwars.BlockBreaker.hitBlock
 				local lastHotbarSlot = nil
 
-				bedwars.BlockBreaker.hitBlock = function(self, maid, raycastparams, ...)
+				-- The game updated hitBlock's signature to (self, maid) -- there is no
+				-- longer a raycastparams argument (it used to be the 3rd). Passing the
+				-- old (self, maid, raycastparams) meant raycastparams was nil, so
+				-- getMouseInfo({ray = nil}) resolved no block and the passthrough was
+				-- wrong -> FastBreak silently stopped mining. Match the new signature
+				-- with (...) so we forward EXACTLY what we receive, and resolve the
+				-- looked-at block via the default mouse ray (no ray arg needed).
+				bedwars.BlockBreaker.hitBlock = function(self, ...)
 					local block = nil
 					pcall(function()
-						local blockInfo = self.clientManager:getBlockSelector():getMouseInfo(1, {ray = raycastparams})
+						local blockInfo = self.clientManager:getBlockSelector():getMouseInfo(1)
 						if blockInfo and blockInfo.target and blockInfo.target.blockInstance then
 							block = blockInfo.target.blockInstance
 						end
 					end)
-					
+
 					local currentSlot = store.inventory and store.inventory.hotbarSlot
 					local slotChanged = currentSlot ~= lastHotbarSlot
 					if slotChanged then
@@ -5172,7 +5141,7 @@ run(function()
 						currentBlock = block
 						updateBreakSpeed()
 					end
-					return oldHitBlock and oldHitBlock(self, maid, raycastparams, ...)
+					return oldHitBlock and oldHitBlock(self, ...)
 				end
                 
                 updateBlacklistCache()
