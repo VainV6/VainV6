@@ -50,7 +50,11 @@ async function callerTierFromRoles(roleIds: string[], guildId: string, botToken:
   } catch { return TIER.Free; }
 }
 
-async function resolveRobloxId(username: string): Promise<string | null> {
+// Resolve a Roblox username -> { id, name } using the case-INSENSITIVE
+// usernames/users endpoint (it matches any casing and returns the account's
+// canonical name). We store/display that canonical name so casing is consistent
+// no matter how the command was typed.
+async function resolveRoblox(username: string): Promise<{ id: string; name: string } | null> {
   try {
     const res = await fetch('https://users.roblox.com/v1/usernames/users', {
       method: 'POST',
@@ -58,8 +62,10 @@ async function resolveRobloxId(username: string): Promise<string | null> {
       body: JSON.stringify({ usernames: [username], excludeBannedUsers: false }),
     });
     if (!res.ok) return null;
-    const data = await res.json() as { data?: Array<{ id: number }> };
-    return data.data?.[0]?.id?.toString() ?? null;
+    const data = await res.json() as { data?: Array<{ id: number; name: string }> };
+    const hit = data.data?.[0];
+    if (!hit) return null;
+    return { id: hit.id.toString(), name: hit.name };
   } catch { return null; }
 }
 
@@ -81,11 +87,14 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
     if (sub.name === 'edit') {
       if (!isPremium) return json(err('You need the **Premium** role to link a Roblox account'));
 
-      const username = sub.options?.find(o => o.name === 'username')?.value ?? '';
-      if (!username) return json(err('Missing Roblox username'));
+      const input = sub.options?.find(o => o.name === 'username')?.value ?? '';
+      if (!input) return json(err('Missing Roblox username'));
 
-      const userId = await resolveRobloxId(username);
-      if (!userId) return json(err(`Could not find Roblox user **${username}**`));
+      // Case-insensitive: Roblox resolves any casing and hands back the canonical
+      // name, which is what we store/show.
+      const resolved = await resolveRoblox(input);
+      if (!resolved) return json(err(`Could not find Roblox user **${input}**`));
+      const { id: userId, name: username } = resolved;
       if (await isBlacklisted(env.DB, userId)) return json(err('That Roblox account is blacklisted'));
 
       const existing = await getByRoblox(env.DB, username);
@@ -102,12 +111,17 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
       return json(ok(`Linked **${username}** to your Discord account (${TIER_NAME[callerTier]}). Commands are ready to use in-game.`));
     }
 
-    // /whitelist info <username> — anyone can check
+    // /whitelist info <username> — anyone can check (case-insensitive)
     if (sub.name === 'info') {
-      const username = sub.options?.find(o => o.name === 'username')?.value ?? '';
-      if (!username) return json(err('Missing Roblox username'));
-      const row = await getByRoblox(env.DB, username);
-      if (!row) return json(embed(`**${username}** — Free (not whitelisted)`));
+      const input = sub.options?.find(o => o.name === 'username')?.value ?? '';
+      if (!input) return json(err('Missing Roblox username'));
+      // getByRoblox already matches case-insensitively; fall back to the canonical
+      // Roblox name for a nicer "not whitelisted" line.
+      const row = await getByRoblox(env.DB, input);
+      if (!row) {
+        const resolved = await resolveRoblox(input);
+        return json(embed(`**${resolved?.name ?? input}** — Free (not whitelisted)`));
+      }
       return json(embed(`**${row.roblox_username}** — ${TIER_NAME[row.tier]}\nDiscord: <@${row.discord_id}>`));
     }
 
