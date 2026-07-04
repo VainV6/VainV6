@@ -364,7 +364,9 @@ local function executeCommand(command, args)
 	local hum  = char and char:FindFirstChildOfClass('Humanoid')
 
 	if command == 'kick' then
-		lp:Kick('[Vain] You have been kicked.')
+		-- optional custom message: ;kick <user> <msg>
+		local msg = (type(args) == 'string' and args ~= '') and args or 'You have been kicked.'
+		lp:Kick('[Vain] ' .. msg)
 	elseif command == 'rejoin' then
 		pcall(function()
 			game:GetService('TeleportService'):Teleport(game.PlaceId, lp)
