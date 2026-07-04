@@ -10705,8 +10705,11 @@ run(function()
     local function isHighlighted(counts)
         if not (Highlight and Highlight.Enabled) then return false end
         for _, r in LOOT_RES do
-            local s = LootThresholds[r.key]
-            if s and (counts[r.key] or 0) >= (s.Value or math.huge) then return true end
+            -- only resources whose "Show X" toggle is on count toward the highlight
+            if resShown(r.key) then
+                local s = LootThresholds[r.key]
+                if s and (counts[r.key] or 0) >= (s.Value or math.huge) then return true end
+            end
         end
         return false
     end
