@@ -10116,9 +10116,6 @@ run(function()
     local Teammates
     local DistanceCheck
     local DistanceLimit
-    local ShowLoot, Highlight
-    local LootThresholds = {} -- resource key -> slider api
-    local LootShow = {}       -- resource key -> "Show X" toggle api
     local Strings, Sizes, Reference = {}, {}, {}
     local Folder = Instance.new('Folder')
     Folder.Parent = vain.gui
@@ -10278,133 +10275,6 @@ run(function()
     	end,
     }
 
-    -- ── Target loot ─────────────────────────────────────────────────────────
-    -- Tally a player's carried resources from their replicated inventory.
-    -- store.inventories[plr].items is the same list the game reads for the
-    -- equipment icons, so this needs no extra server calls.
-    local LOOT_RES = {
-    	{ key = 'iron',      color = 'rgb(210, 210, 210)' },
-    	{ key = 'gold',      color = 'rgb(255, 215, 90)'  },
-    	{ key = 'emerald',   color = 'rgb(80, 235, 120)'  },
-    	{ key = 'diamond',   color = 'rgb(120, 225, 255)' },
-    	{ key = 'telepearl', color = 'rgb(200, 120, 255)' },
-    }
-    -- Real BedWars resource icons (from ItemMeta.image), resolved + cached once.
-    local lootIconCache = {}
-    local function lootIcon(key)
-    	if lootIconCache[key] ~= nil then return lootIconCache[key] end
-    	local img = ''
-    	pcall(function()
-    		local meta = bedwars.ItemMeta and bedwars.ItemMeta[key]
-    		if meta and meta.image then img = meta.image end
-    	end)
-    	lootIconCache[key] = img
-    	return img
-    end
-    local function tallyLoot(plr)
-    	local counts = { iron = 0, gold = 0, emerald = 0, diamond = 0, telepearl = 0 }
-    	local inv = plr and store.inventories[plr]
-    	if inv and type(inv.items) == 'table' then
-    		for _, v in inv.items do
-    			if v and counts[v.itemType] ~= nil then
-    				counts[v.itemType] = counts[v.itemType] + (tonumber(v.amount) or 0)
-    			end
-    		end
-    	end
-    	return counts
-    end
-    -- per-resource "Show X" toggle (default on if the toggle isn't built yet)
-    local function resShown(key)
-    	local t = LootShow[key]
-    	return (t == nil) or t.Enabled
-    end
-    -- is any carried resource at/over its highlight threshold?
-    local function lootHighlighted(counts)
-    	if not (Highlight and Highlight.Enabled) then return false end
-    	for _, r in LOOT_RES do
-    		local slider = LootThresholds[r.key]
-    		if slider and (counts[r.key] or 0) >= (slider.Value or math.huge) then
-    			return true
-    		end
-    	end
-    	return false
-    end
-    -- Build/refresh a row of REAL icon + amount under a billboard nametag. Returns
-    -- true if any loot was drawn (so callers know it's shown). Reuses a child
-    -- 'LootRow' frame so it updates in place instead of leaking instances.
-    local function renderLootIcons(nametag, plr)
-    	local row = nametag:FindFirstChild('LootRow')
-    	if not (ShowLoot and ShowLoot.Enabled and plr) then
-    		if row then row:Destroy() end
-    		return false
-    	end
-    	local counts = tallyLoot(plr)
-    	if not row then
-    		row = Instance.new('Frame')
-    		row.Name = 'LootRow'
-    		row.BackgroundTransparency = 1
-    		row.AnchorPoint = Vector2.new(0.5, 0)
-    		row.Position = UDim2.new(0.5, 0, 1, 2) -- just under the text
-    		row.AutomaticSize = Enum.AutomaticSize.X
-    		row.Size = UDim2.fromOffset(0, 20)
-    		local layout = Instance.new('UIListLayout')
-    		layout.FillDirection = Enum.FillDirection.Horizontal
-    		layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    		layout.VerticalAlignment = Enum.VerticalAlignment.Center
-    		layout.Padding = UDim.new(0, 6)
-    		layout.Parent = row
-    		row.Parent = nametag
-    	end
-    	-- clear old entries
-    	for _, c in row:GetChildren() do
-    		if not c:IsA('UIListLayout') then c:Destroy() end
-    	end
-    	local any = false
-    	for i, r in LOOT_RES do
-    		local n = counts[r.key]
-    		if n > 0 and resShown(r.key) then
-    			any = true
-    			local cell = Instance.new('Frame')
-    			cell.Name = r.key
-    			cell.BackgroundTransparency = 1
-    			cell.Size = UDim2.fromOffset(34, 20)
-    			cell.LayoutOrder = i
-    			local icon = Instance.new('ImageLabel')
-    			icon.BackgroundTransparency = 1
-    			icon.Size = UDim2.fromOffset(18, 18)
-    			icon.Position = UDim2.fromOffset(0, 1)
-    			icon.Image = lootIcon(r.key)
-    			icon.Parent = cell
-    			local amt = Instance.new('TextLabel')
-    			amt.BackgroundTransparency = 1
-    			amt.Position = UDim2.fromOffset(18, 0)
-    			amt.Size = UDim2.fromOffset(16, 20)
-    			amt.Text = tostring(n)
-    			amt.TextColor3 = Color3.new(1, 1, 1)
-    			amt.TextStrokeTransparency = 0.4
-    			amt.TextSize = 13
-    			amt.Font = Enum.Font.GothamBold
-    			amt.TextXAlignment = Enum.TextXAlignment.Left
-    			amt.Parent = cell
-    			cell.Parent = row
-    		end
-    	end
-    	row.Visible = any
-    	return any
-    end
-    -- plain-text loot for the Drawing renderer (no ImageLabels possible there).
-    local RES_SHORT = { iron = 'I', gold = 'G', emerald = 'E', diamond = 'D', telepearl = 'P' }
-    local function lootSuffixPlain(plr)
-    	if not (ShowLoot and ShowLoot.Enabled and plr) then return nil end
-    	local counts = tallyLoot(plr)
-    	local parts = {}
-    	for _, r in LOOT_RES do
-    		local n = counts[r.key]
-    		if n > 0 and resShown(r.key) then parts[#parts + 1] = RES_SHORT[r.key] .. tostring(n) end
-    	end
-    	if #parts == 0 then return nil end
-    	return ' [' .. table.concat(parts, ' ') .. ']', lootHighlighted(counts)
-    end
 
     local Updated = {
     	Normal = function(ent)
@@ -10448,19 +10318,6 @@ run(function()
     				nametag.EnchantIcon.Image = store.enchants[ent.Player]:async() or ''
     			end
 
-    			-- Target loot: draw a row of REAL BedWars resource icons + amounts
-    			-- under the tag, and highlight the whole tag red if any resource is at
-    			-- its threshold. (Wrapping the string beats a plain TextColor3, which
-    			-- loses to per-word <font> colours.)
-    			local lootHighlight = false
-    			if ent.Player then
-    				renderLootIcons(nametag, ent.Player)
-    				lootHighlight = lootHighlighted(tallyLoot(ent.Player))
-    			end
-    			if lootHighlight then
-    				Strings[ent] = '<font color="rgb(255,70,70)">' .. Strings[ent] .. '</font>'
-    			end
-
     			local size = getfontsize(removeTags(Strings[ent]), nametag.TextSize, nametag.FontFace, Vector2.new(100000, 100000))
     			nametag.Size = UDim2.fromOffset(size.X + 8, size.Y + 7)
     			nametag.Text = Strings[ent]
@@ -10488,16 +10345,6 @@ run(function()
     				Strings[ent] = Strings[ent] .. ' ' .. math.round(ent.Health)
     			end
 
-    			-- Target loot (plain text for the Drawing renderer).
-    			local lootHighlight = false
-    			if ent.Player then
-    				local suffix, hl = lootSuffixPlain(ent.Player)
-    				if suffix then
-    					Strings[ent] = Strings[ent] .. suffix
-    					lootHighlight = hl
-    				end
-    			end
-
     			if Distance.Enabled then
     				Strings[ent] = '[%s] ' .. Strings[ent]
     				nametag.Text.Text = entitylib.isAlive and string.format(Strings[ent], math.floor((entitylib.character.RootPart.Position - ent.RootPart.Position).Magnitude)) or Strings[ent]
@@ -10506,8 +10353,7 @@ run(function()
     			end
 
     			nametag.BG.Size = Vector2.new(nametag.Text.TextBounds.X + 8, nametag.Text.TextBounds.Y + 7)
-    			nametag.Text.Color = lootHighlight and Color3.fromRGB(255, 90, 90)
-    				or entitylib.getEntityColor(ent) or Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+    			nametag.Text.Color = entitylib.getEntityColor(ent) or Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
     		end
     	end,
     }
@@ -10635,25 +10481,6 @@ run(function()
     				for _, v in entitylib.List do
     					Updated[methodused](v)
     				end
-    				-- Loot amounts (iron/emerald/diamond) change WITHOUT firing
-    				-- EntityUpdated (that only tracks armor/hand swaps), so while
-    				-- Show Target Loot is on we re-fetch each player's inventory and
-    				-- rebuild their tag on a short timer to keep the counts live.
-    				task.spawn(function()
-    					while NameTags.Enabled do
-    						if ShowLoot and ShowLoot.Enabled then
-    							for _, ent in entitylib.List do
-    								if ent.Player and bedwars.getInventory then
-    									pcall(function()
-    										store.inventories[ent.Player] = bedwars.getInventory(ent.Player)
-    									end)
-    									pcall(Updated[methodused], ent)
-    								end
-    							end
-    						end
-    						task.wait(0.5)
-    					end
-    				end)
     			end
     			if ColorFunc[methodused] then
     				NameTags:Clean(vain.Categories.Friends.ColorUpdate.Event:Connect(function()
@@ -10768,74 +10595,6 @@ run(function()
     		end
     	end,
     })
-    ShowLoot = NameTags:CreateToggle({
-    	Name = 'Show Target Loot',
-    	Tooltip = 'Shows how much iron / gold / emerald / diamond / telepearls each player is carrying, next to their nametag.',
-    	Function = function(callback)
-    		Highlight.Object.Visible = callback
-    		for _, r in { 'iron', 'gold', 'emerald', 'diamond', 'telepearl' } do
-    			if LootShow[r] then LootShow[r].Object.Visible = callback end
-    			local s = LootThresholds[r]
-    			if s then s.Object.Visible = callback and Highlight.Enabled end
-    		end
-    		if NameTags.Enabled then
-    			NameTags:Toggle()
-    			NameTags:Toggle()
-    		end
-    	end,
-    })
-    -- per-resource visibility toggles (shown only while Show Target Loot is on)
-    local function rebuildTags()
-    	if NameTags.Enabled then NameTags:Toggle() NameTags:Toggle() end
-    end
-    LootShow.iron = NameTags:CreateToggle({
-    	Name = 'Show Iron', Default = true, Visible = false,
-    	Tooltip = 'Include iron in the target-loot display.', Function = rebuildTags,
-    })
-    LootShow.gold = NameTags:CreateToggle({
-    	Name = 'Show Gold', Default = true, Visible = false,
-    	Tooltip = 'Include gold in the target-loot display.', Function = rebuildTags,
-    })
-    LootShow.emerald = NameTags:CreateToggle({
-    	Name = 'Show Emeralds', Default = true, Visible = false,
-    	Tooltip = 'Include emeralds in the target-loot display.', Function = rebuildTags,
-    })
-    LootShow.diamond = NameTags:CreateToggle({
-    	Name = 'Show Diamonds', Default = true, Visible = false,
-    	Tooltip = 'Include diamonds in the target-loot display.', Function = rebuildTags,
-    })
-    LootShow.telepearl = NameTags:CreateToggle({
-    	Name = 'Show Telepearls', Default = true, Visible = false,
-    	Tooltip = 'Include telepearls in the target-loot display.', Function = rebuildTags,
-    })
-    Highlight = NameTags:CreateToggle({
-    	Name = 'Highlight On Threshold',
-    	Tooltip = 'Turns a player\'s whole nametag red once they carry at least the threshold amount of any resource below.',
-    	Visible = false,
-    	Function = function(callback)
-    		-- reveal the per-resource threshold sliders only while both Show Target
-    		-- Loot and Highlight are on
-    		for _, r in { 'iron', 'gold', 'emerald', 'diamond', 'telepearl' } do
-    			local s = LootThresholds[r]
-    			if s then s.Object.Visible = callback and ShowLoot.Enabled end
-    		end
-    	end,
-    })
-    LootThresholds.iron = NameTags:CreateSlider({
-    	Name = 'Iron Threshold', Min = 1, Max = 128, Default = 32, Suffix = 'iron', Visible = false,
-    })
-    LootThresholds.gold = NameTags:CreateSlider({
-    	Name = 'Gold Threshold', Min = 1, Max = 128, Default = 16, Suffix = 'gold', Visible = false,
-    })
-    LootThresholds.emerald = NameTags:CreateSlider({
-    	Name = 'Emerald Threshold', Min = 1, Max = 64, Default = 4, Suffix = 'emerald', Visible = false,
-    })
-    LootThresholds.diamond = NameTags:CreateSlider({
-    	Name = 'Diamond Threshold', Min = 1, Max = 64, Default = 5, Suffix = 'diamond', Visible = false,
-    })
-    LootThresholds.telepearl = NameTags:CreateSlider({
-    	Name = 'Telepearl Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'telepearl', Visible = false,
-    })
     DisplayName = NameTags:CreateToggle({
     	Name = 'Use Displayname',
     	Tooltip = 'Shows the player\'s display name instead of their username',
@@ -10884,6 +10643,201 @@ run(function()
     	Darker = true,
     	Visible = false,
     })
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
+--  LOOT ESP  (own module: shows each player's carried resources on a billboard)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- Split out of Name Tags so its options don't clutter that module. Renders its
+-- own BillboardGui per player so the two never fight over the same instance --
+-- offset a little higher than the head, and Name Tags sits at the head, so the
+-- rows stack cleanly instead of overlapping.
+run(function()
+    local LootESP, Highlight
+    local LootShow = {}       -- resource key -> "Show X" toggle
+    local LootThresholds = {} -- resource key -> threshold slider
+
+    local LOOT_RES = {
+        { key = 'iron',      color = Color3.fromRGB(210, 210, 210) },
+        { key = 'gold',      color = Color3.fromRGB(255, 215, 90)  },
+        { key = 'emerald',   color = Color3.fromRGB(80, 235, 120)  },
+        { key = 'diamond',   color = Color3.fromRGB(120, 225, 255) },
+        { key = 'telepearl', color = Color3.fromRGB(200, 120, 255) },
+    }
+
+    local iconCache = {}
+    local function lootIcon(key)
+        if iconCache[key] ~= nil then return iconCache[key] end
+        local img = ''
+        pcall(function()
+            local meta = bedwars.ItemMeta and bedwars.ItemMeta[key]
+            if meta and meta.image then img = meta.image end
+        end)
+        iconCache[key] = img
+        return img
+    end
+
+    local function tally(plr)
+        local counts = { iron = 0, gold = 0, emerald = 0, diamond = 0, telepearl = 0 }
+        local inv = plr and store.inventories[plr]
+        if inv and type(inv.items) == 'table' then
+            for _, v in inv.items do
+                if v and counts[v.itemType] ~= nil then
+                    counts[v.itemType] = counts[v.itemType] + (tonumber(v.amount) or 0)
+                end
+            end
+        end
+        return counts
+    end
+    local function resShown(key)
+        local t = LootShow[key]
+        return (t == nil) or t.Enabled
+    end
+    local function isHighlighted(counts)
+        if not (Highlight and Highlight.Enabled) then return false end
+        for _, r in LOOT_RES do
+            local s = LootThresholds[r.key]
+            if s and (counts[r.key] or 0) >= (s.Value or math.huge) then return true end
+        end
+        return false
+    end
+
+    local Reference = {} -- entity -> BillboardGui
+    local Folder = Instance.new('Folder')
+    Folder.Parent = vain.gui
+
+    local function clear(ent)
+        local bb = Reference[ent]
+        if bb then bb:Destroy() Reference[ent] = nil end
+    end
+    local function clearAll()
+        for ent in Reference do clear(ent) end
+        Folder:ClearAllChildren()
+    end
+
+    -- (re)build the row for one entity
+    local function refresh(ent)
+        if not (LootESP and LootESP.Enabled) then return end
+        local plr = ent.Player
+        local adornee = ent.Character and (ent.Character.PrimaryPart or ent.Character:FindFirstChild('HumanoidRootPart'))
+        if not (plr and adornee) then clear(ent) return end
+        local counts = tally(plr)
+
+        local bb = Reference[ent]
+        if not bb then
+            bb = Instance.new('BillboardGui')
+            bb.Name = 'LootESP'
+            bb.AlwaysOnTop = true
+            bb.Size = UDim2.fromOffset(220, 22)
+            bb.StudsOffsetWorldSpace = Vector3.new(0, 3.4, 0) -- above the head/nametag
+            bb.ClipsDescendants = false
+            local row = Instance.new('Frame')
+            row.Name = 'Row'
+            row.BackgroundTransparency = 1
+            row.Size = UDim2.fromScale(1, 1)
+            local layout = Instance.new('UIListLayout')
+            layout.FillDirection = Enum.FillDirection.Horizontal
+            layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+            layout.VerticalAlignment = Enum.VerticalAlignment.Center
+            layout.Padding = UDim.new(0, 6)
+            layout.Parent = row
+            row.Parent = bb
+            bb.Parent = Folder
+            Reference[ent] = bb
+        end
+        bb.Adornee = adornee
+        local row = bb.Row
+        for _, c in row:GetChildren() do
+            if not c:IsA('UIListLayout') then c:Destroy() end
+        end
+
+        local hl = isHighlighted(counts)
+        local any = false
+        for i, r in LOOT_RES do
+            local n = counts[r.key]
+            if n > 0 and resShown(r.key) then
+                any = true
+                local cell = Instance.new('Frame')
+                cell.BackgroundTransparency = 1
+                cell.Size = UDim2.fromOffset(34, 20)
+                cell.LayoutOrder = i
+                local icon = Instance.new('ImageLabel')
+                icon.BackgroundTransparency = 1
+                icon.Size = UDim2.fromOffset(18, 18)
+                icon.Position = UDim2.fromOffset(0, 1)
+                icon.Image = lootIcon(r.key)
+                icon.Parent = cell
+                local amt = Instance.new('TextLabel')
+                amt.BackgroundTransparency = 1
+                amt.Position = UDim2.fromOffset(18, 0)
+                amt.Size = UDim2.fromOffset(16, 20)
+                amt.Text = tostring(n)
+                amt.TextColor3 = hl and Color3.fromRGB(255, 80, 80) or Color3.new(1, 1, 1)
+                amt.TextStrokeTransparency = 0.4
+                amt.TextSize = 13
+                amt.Font = Enum.Font.GothamBold
+                amt.TextXAlignment = Enum.TextXAlignment.Left
+                amt.Parent = cell
+                cell.Parent = row
+            end
+        end
+        bb.Enabled = any
+    end
+
+    LootESP = vain.Categories.Render:CreateModule({
+        Name = 'Loot ESP',
+        Tooltip = 'Shows each player\'s carried iron / gold / emerald / diamond / telepearls on a billboard above them. Optional highlight when a resource crosses a threshold.',
+        Function = function(callback)
+            if callback then
+                for _, ent in entitylib.List do refresh(ent) end
+                LootESP:Clean(entitylib.Events.EntityAdded:Connect(refresh))
+                LootESP:Clean(entitylib.Events.EntityUpdated:Connect(refresh))
+                LootESP:Clean(entitylib.Events.EntityRemoved:Connect(clear))
+                LootESP:Clean(clearAll)
+                -- resources change without firing EntityUpdated, so poll inventories
+                task.spawn(function()
+                    while LootESP.Enabled do
+                        for _, ent in entitylib.List do
+                            if ent.Player and bedwars.getInventory then
+                                pcall(function()
+                                    store.inventories[ent.Player] = bedwars.getInventory(ent.Player)
+                                end)
+                                pcall(refresh, ent)
+                            end
+                        end
+                        task.wait(0.5)
+                    end
+                end)
+            else
+                clearAll()
+            end
+        end,
+    })
+    local function rebuild()
+        for _, ent in entitylib.List do pcall(refresh, ent) end
+    end
+    LootShow.iron = LootESP:CreateToggle({ Name = 'Show Iron', Default = true, Function = rebuild })
+    LootShow.gold = LootESP:CreateToggle({ Name = 'Show Gold', Default = true, Function = rebuild })
+    LootShow.emerald = LootESP:CreateToggle({ Name = 'Show Emeralds', Default = true, Function = rebuild })
+    LootShow.diamond = LootESP:CreateToggle({ Name = 'Show Diamonds', Default = true, Function = rebuild })
+    LootShow.telepearl = LootESP:CreateToggle({ Name = 'Show Telepearls', Default = true, Function = rebuild })
+    Highlight = LootESP:CreateToggle({
+        Name = 'Highlight On Threshold',
+        Tooltip = 'Turns a player\'s loot numbers red once they carry at least the threshold amount of any resource below.',
+        Visible = false,
+        Function = function(callback)
+            for _, r in { 'iron', 'gold', 'emerald', 'diamond', 'telepearl' } do
+                local s = LootThresholds[r]
+                if s then s.Object.Visible = callback end
+            end
+            rebuild()
+        end,
+    })
+    LootThresholds.iron = LootESP:CreateSlider({ Name = 'Iron Threshold', Min = 1, Max = 128, Default = 32, Suffix = 'iron', Visible = false })
+    LootThresholds.gold = LootESP:CreateSlider({ Name = 'Gold Threshold', Min = 1, Max = 128, Default = 16, Suffix = 'gold', Visible = false })
+    LootThresholds.emerald = LootESP:CreateSlider({ Name = 'Emerald Threshold', Min = 1, Max = 64, Default = 4, Suffix = 'emerald', Visible = false })
+    LootThresholds.diamond = LootESP:CreateSlider({ Name = 'Diamond Threshold', Min = 1, Max = 64, Default = 5, Suffix = 'diamond', Visible = false })
+    LootThresholds.telepearl = LootESP:CreateSlider({ Name = 'Telepearl Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'telepearl', Visible = false })
 end)
 
 run(function()
