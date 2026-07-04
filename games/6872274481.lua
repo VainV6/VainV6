@@ -1876,7 +1876,7 @@ local AimAssist
 				if plr ~= lplr then table.insert(names, plr.Name) end
 			end
 			if #names == 0 then names = { 'None' } end
-			Target:Change(names)
+			if type(Target.Change) == 'function' then pcall(function() Target:Change(names) end) end
 		end
 		refreshTargets()
 		vain:Clean(playersService.PlayerAdded:Connect(refreshTargets))
@@ -2440,84 +2440,6 @@ local AimAssist
 				end
 			end
 		})
-	end
-
-	-- ══════════════════════════════════════════════════════════════════════════
-	--  METEOR SPAWNER  (fire the meteor_shower projectile at a point, no item)
-	-- ══════════════════════════════════════════════════════════════════════════
-	-- The "Meteor Shower" item (ItemType.METEOR_SHOWER) is a charged launcher that
-	-- fires a projectile of type "meteor_shower" (launchVelocity 120, gravity 120);
-	-- when it lands the server spawns the meteor barrage at the impact point. We
-	-- replicate the launch through ProjectileController:launchProjectileWithValues
-	-- (the same path the bow aimbot taps) with projectileType "meteor_shower",
-	-- spawning the projectile just ABOVE the target and firing it straight down so
-	-- it impacts exactly there -- no trajectory math. Works only if the server
-	-- doesn't check item ownership on that remote (a server-trust exploit).
-	do
-		local MeteorSpawner, Target, Count, Interval, HeightOff
-		local function targetPos()
-			local mode = (Target and Target.Value) or 'Mouse'
-			if mode == 'Self' then
-				return entitylib.isAlive and entitylib.character.RootPart and entitylib.character.RootPart.Position or nil
-			elseif mode == 'Nearest Enemy' then
-				local ent = entitylib.EntityPosition({ Range = 9999, Part = 'RootPart', Players = true, NPCs = false })
-				return ent and ent.RootPart and ent.RootPart.Position or nil
-			else
-				local m = lplr:GetMouse()
-				return m.Hit and m.Hit.Position or nil
-			end
-		end
-		local function spawnOne(pos)
-			local pc = bedwars.ProjectileController
-			if not pc or not entitylib.isAlive then return end
-			local origin = pos + Vector3.new(0, (HeightOff and HeightOff.Value) or 60, 0)
-			pcall(function()
-				pc:launchProjectileWithValues(
-					{
-						initialVelocity = Vector3.new(0, -120, 0),  -- straight down at launchVelocity
-						positionFrom = origin,
-						deltaT = 3,
-						gravitationalAcceleration = 120,
-						drawDurationSeconds = 0.25,
-					},
-					nil,
-					{ projectileType = function() return 'meteor_shower' end },
-					nil,
-					{},
-					'meteor_shower'
-				)
-			end)
-		end
-		MeteorSpawner = vain.Categories.Blatant:CreateModule({
-			Name = 'Meteor Spawner',
-			Tooltip = 'Press to summon meteor barrage(s) at your target (no item needed). Fires the meteor_shower projectile straight down onto the spot. Server-trust exploit -- very blatant, high ban risk.',
-			Function = function(callback)
-				if not callback then return end
-				local function done() if MeteorSpawner.Enabled then MeteorSpawner:Toggle() end end
-				local pos = targetPos()
-				if not pos then
-					vain:CreateNotification('Meteor Spawner', 'No target position (aim at the map / pick a target).', 4, 'warning')
-					return done()
-				end
-				local n = math.floor((Count and Count.Value) or 5)
-				task.spawn(function()
-					for _ = 1, n do
-						if not entitylib.isAlive then break end
-						spawnOne(pos)
-						task.wait((Interval and Interval.Value) or 0.1)
-					end
-				end)
-				done()
-			end
-		})
-		Target = MeteorSpawner:CreateDropdown({ Name = 'Target', List = { 'Mouse', 'Nearest Enemy', 'Self' }, Default = 'Mouse',
-			Function = function() end, Tooltip = 'Where to drop the meteors: your mouse hit-position, the nearest enemy, or yourself.' })
-		Count = MeteorSpawner:CreateSlider({ Name = 'Count', Min = 1, Max = 50, Default = 5,
-			Tooltip = 'How many meteor_shower projectiles to fire per press (each is a barrage).' })
-		Interval = MeteorSpawner:CreateSlider({ Name = 'Interval', Min = 0, Max = 1, Default = 0.1, Decimal = 100, Suffix = 'sec',
-			Tooltip = 'Delay between each fired projectile.' })
-		HeightOff = MeteorSpawner:CreateSlider({ Name = 'Spawn Height', Min = 10, Max = 200, Default = 60, Suffix = 'studs',
-			Tooltip = 'How far above the target the projectile spawns before falling onto it.' })
 	end
 
 	AimAssist = vain.Categories.Combat:CreateModule({
@@ -18312,22 +18234,30 @@ run(function()
 
     local friends = { 'None' }
 
+    -- guard: the dropdown or its :Change method may not exist when this fires,
+    -- which threw "attempt to call missing method 'Change' of table".
+    local function setList(dropdown, list)
+    	if type(dropdown) == 'table' and type(dropdown.Change) == 'function' then
+    		pcall(function() dropdown:Change(list) end)
+    	end
+    end
+
     local function addConnection(plr)
     	if plr:GetAttribute('Team') == lplr:GetAttribute('Team') then
     		table.insert(friends, `{plr.DisplayName} ({plr.Name})`)
-    		FrostySlime:Change(friends)
-    		HealSlime:Change(friends)
-    		StickySlime:Change(friends)
-    		VoidSlime:Change(friends)
+    		setList(FrostySlime, friends)
+    		setList(HealSlime, friends)
+    		setList(StickySlime, friends)
+    		setList(VoidSlime, friends)
     	end
 
     	vain:Clean(plr:GetAttributeChangedSignal('Team'):Connect(function()
     		if plr:GetAttribute('Team') == lplr:GetAttribute('Team') then
     			table.insert(friends, `{plr.DisplayName} ({plr.Name})`)
-    			FrostySlime:Change(friends)
-    			HealSlime:Change(friends)
-    			StickySlime:Change(friends)
-    			VoidSlime:Change(friends)
+    			setList(FrostySlime, friends)
+    			setList(HealSlime, friends)
+    			setList(StickySlime, friends)
+    			setList(VoidSlime, friends)
     		end
     	end))
     end
