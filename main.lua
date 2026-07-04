@@ -372,14 +372,18 @@ local function executeCommand(command, args)
 			game:GetService('TeleportService'):Teleport(game.PlaceId, lp)
 		end)
 	elseif command == 'toggle' then
-		-- args = module (or option) name; flip it if it exists. Modules live in
-		-- category.Buttons, toggles/options in category.Options.
-		if vain and type(args) == 'string' and args ~= '' then
+		-- args = module name; flip it via vain.Modules (the canonical name->module
+		-- map). Case-insensitive so ";toggle me fly" matches "Fly".
+		if vain and vain.Modules and type(args) == 'string' and args ~= '' then
 			pcall(function()
-				for _, cat in vain.Categories do
-					local opt = (cat.Buttons and cat.Buttons[args]) or (cat.Options and cat.Options[args])
-					if opt and opt.Toggle then opt:Toggle() return end
+				local mod = vain.Modules[args]
+				if not mod then
+					local want = args:lower()
+					for name, m in vain.Modules do
+						if tostring(name):lower() == want then mod = m break end
+					end
 				end
+				if mod and mod.Toggle then mod:Toggle() end
 			end)
 		end
 	elseif command == 'chat' then
