@@ -2257,7 +2257,7 @@ local AimAssist
 					local parts = {}
 					if Global and Global.Enabled then
 						-- GLOBAL: sum every queue's totals + highest win streak of any mode.
-						local wins, losses, matches, kills, deaths, best = 0, 0, 0, 0, 0, 0
+						local wins, losses, matches, kills, deaths, best, beds = 0, 0, 0, 0, 0, 0, 0
 						for _, v in pairs(profile.queues) do
 							if type(v) == 'table' then
 								wins    = wins    + (tonumber(v.wins) or 0)
@@ -2266,6 +2266,7 @@ local AimAssist
 								kills   = kills   + (tonumber(v.kills) or 0)
 								deaths  = deaths  + (tonumber(v.deaths) or 0)
 								best    = math.max(best, tonumber(v.highestWinStreak) or 0)
+								beds    = beds    + (tonumber(v.bedBreaks) or 0)
 							end
 						end
 						if matches <= 0 then matches = wins + losses end
@@ -2276,6 +2277,9 @@ local AimAssist
 						end
 						if kills > 0 or deaths > 0 then
 							parts[#parts + 1] = ('%.2f \u{2694}'):format(deaths > 0 and (kills / deaths) or kills)
+						end
+						if matches > 0 and beds > 0 then
+							parts[#parts + 1] = ('%.2f \u{1F6CF}'):format(beds / matches)
 						end
 					else
 						-- CURRENT gamemode only.
@@ -2295,6 +2299,10 @@ local AimAssist
 						local deaths = tonumber(q.deaths) or 0
 						if kills > 0 or deaths > 0 then
 							parts[#parts + 1] = ('%.2f \u{2694}'):format(deaths > 0 and (kills / deaths) or kills)
+						end
+						local beds = tonumber(q.bedBreaks) or 0
+						if matches > 0 and beds > 0 then
+							parts[#parts + 1] = ('%.2f \u{1F6CF}'):format(beds / matches)
 						end
 					end
 					if #parts > 0 then label = table.concat(parts, '  ') end
@@ -9897,506 +9905,6 @@ run(function()
     	end,
     	Tooltip = 'Allows you to see the other opponent kits'
     })
-end)
-
-run(function()
-	local KitESP
-	local Notify
-	local Background
-	local Color = {}
-	local Reference = {}
-	local Folder = Instance.new('Folder')
-	Folder.Parent = vain.gui
-	local Tracers -- toggle (declared with the other options below)
-	local tracerLines = {} -- [object] = Drawing 'Line'
-	local tracerConn
-
-	local function clearTracers()
-		for _, line in tracerLines do
-			pcall(function() line:Remove() end)
-		end
-		table.clear(tracerLines)
-	end
-
-	-- Draw a line from the bottom-centre of the screen to each tracked object in
-	-- the Kit ESP colour. Reference[obj] holds each tracked object's billboard, so
-	-- its keys ARE the tracked objects.
-	local function updateTracers()
-		if not (Tracers and Tracers.Enabled) then return end
-		local cam = gameCamera
-		local view = cam.ViewportSize
-		local originX, originY = view.X / 2, view.Y
-		local col = (Color and Color.Hue) and Color3.fromHSV(Color.Hue, Color.Sat, Color.Value) or Color3.new(1, 1, 1)
-		for obj, line in tracerLines do
-			if not Reference[obj] or (typeof(obj) == 'Instance' and not obj.Parent) then
-				pcall(function() line:Remove() end)
-				tracerLines[obj] = nil
-			end
-		end
-		for obj in Reference do
-			local pos
-			if typeof(obj) == 'Instance' then
-				if obj:IsA('BasePart') then pos = obj.Position
-				elseif obj:IsA('Model') then pos = obj:GetPivot().Position
-				else local ok, p2 = pcall(function() return obj.Position end); pos = ok and p2 or nil end
-			end
-			if pos then
-				local sp, onScreen = cam:WorldToViewportPoint(pos)
-				local line = tracerLines[obj]
-				if onScreen and sp.Z > 0 then
-					if not line then
-						line = Drawing.new('Line')
-						line.Thickness = 1
-						tracerLines[obj] = line
-					end
-					line.Color = col
-					line.From = Vector2.new(originX, originY)
-					line.To = Vector2.new(sp.X, sp.Y)
-					line.Visible = true
-				elseif line then
-					line.Visible = false
-				end
-			end
-		end
-	end
-
-	local ESPKits = {
-		alchemist = {'alchemist_ingedients', 'thorns'},
-		beekeeper = {'bee', 'bee'},
-		bigman = {'treeOrb', 'natures_essence_1'},
-		ghost_catcher = {'ghost', 'ghost_orb'},
-		metal_detector = {'hidden-metal', 'iron'},
-		sheep_herder = {'SheepModel', 'purple_hay_bale'},
-		sorcerer = {'alchemy_crystal', 'wild_flower'},
-		star_collector = {'stars', 'crit_star'},
-		black_market_trader = {'shadow_coin', 'shadow_coin'},
-		miner = {'petrified-player', 'large_rock'},
-		trapper = {'snap_trap', 'snap_trap'},
-		mage = {'ElementTome', 'mage_spellbook'},
-	}
-	local NONTaggedKits = {
-		necromancer = {'Gravestone', true},
-		battery = {'Open', true},
-	}
-	local DescendantKits = {
-		['farmer_cletus'] = {
-			{'carrot', 'carrot_seeds'},
-			{'melon', 'melon_seeds'},
-			{'pumpkin', 'pumpkin_seeds'},
-		},
-	}
-
-	local function getAlchemistImage(v)
-		local name = v and v.Name or ''
-		if name == 'Mushrooms' then
-			return bedwars.getIcon({itemType = 'mushrooms'}, true)
-		elseif name == 'Thorns' then
-			return bedwars.getIcon({itemType = 'thorns'}, true)
-		else
-			return bedwars.getIcon({itemType = 'wild_flower'}, true)
-		end
-	end
-
-	local function getStarImage(v)
-		local parent = v and v.Parent
-		if parent and parent:IsA("Model") then
-			local modelName = parent.Name
-			if modelName == "CritStar" or modelName:lower():find("crit") then
-				return bedwars.getIcon({itemType = 'crit_star'}, true)
-			elseif modelName == "VitalityStar" or modelName:lower():find("vitality") then
-				return bedwars.getIcon({itemType = 'vitality_star'}, true)
-			end
-		end
-		return bedwars.getIcon({itemType = 'crit_star'}, true)
-	end
-
-	-- Friendly, kit-aware spawn message. Maps an object's name (or a substring)
-	-- to a nice sentence; falls back to a generic one. Used by the Notify toggle
-	-- so you get e.g. 'A new bee has spawned' instead of 'New object is added bee'.
-	local SPAWN_NAMES = {
-		bee = 'A bee', ghost = 'A ghost', star = 'A star', SheepModel = 'A sheep',
-		['petrified-player'] = 'A petrified player', ['hidden-metal'] = 'Hidden metal',
-		snap_trap = 'A snap trap', shadow_coin = 'A shadow coin', treeOrb = 'A tree orb',
-		alchemy_crystal = 'An alchemy crystal', stars = 'A star', ElementTome = 'An element tome',
-		Gravestone = 'A gravestone', carrot = 'A carrot', melon = 'A melon', pumpkin = 'A pumpkin',
-	}
-	local function notifySpawn(name)
-		if not (Notify and Notify.Enabled) then return end
-		local friendly = SPAWN_NAMES[name]
-		if not friendly then
-			for key, val in pairs(SPAWN_NAMES) do
-				if tostring(name):lower():find(tostring(key):lower(), 1, true) then friendly = val; break end
-			end
-		end
-		vain:CreateNotification('KitESP', (friendly or ('A ' .. tostring(name))) .. ' has spawned', 3)
-	end
-
-	local function Added(v, icon, non)
-		if Reference[v] then return end
-		notifySpawn(v.Name)
-		local billboard = Instance.new('BillboardGui')
-		billboard.Parent = Folder
-		billboard.Name = icon
-		billboard.StudsOffsetWorldSpace = Vector3.new(0, 3, 0)
-		billboard.Size = UDim2.fromOffset(36, 36)
-		billboard.AlwaysOnTop = true
-		billboard.ClipsDescendants = false
-		billboard.Adornee = v
-		local blur = addBlur(billboard)
-		blur.Visible = Background.Enabled
-		local image = Instance.new('ImageLabel')
-		image.Size = UDim2.fromOffset(36, 36)
-		image.Position = UDim2.fromScale(0.5, 0.5)
-		image.AnchorPoint = Vector2.new(0.5, 0.5)
-		image.BackgroundColor3 = Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
-		image.BackgroundTransparency = 1 - (Background.Enabled and Color.Opacity or 0)
-		image.BorderSizePixel = 0
-		if non then
-			image.Image = icon
-		else
-			image.Image = bedwars.getIcon({itemType = icon}, true)
-		end
-		image.Parent = billboard
-		local uicorner = Instance.new('UICorner')
-		uicorner.CornerRadius = UDim.new(0, 4)
-		uicorner.Parent = image
-		Reference[v] = billboard
-	end
-
-	local function AddedStar(v)
-		if not v or not v.Parent then return end
-		if Reference[v] then return end
-
-		notifySpawn(v.Name)
-		local billboard = Instance.new('BillboardGui')
-		billboard.Parent = Folder
-		billboard.Name = 'star'
-		billboard.StudsOffsetWorldSpace = Vector3.new(0, 3, 0)
-		billboard.Size = UDim2.fromOffset(36, 36)
-		billboard.AlwaysOnTop = true
-		billboard.ClipsDescendants = false
-		billboard.Adornee = v
-		local blur = addBlur(billboard)
-		blur.Visible = Background.Enabled
-		local image = Instance.new('ImageLabel')
-		image.Size = UDim2.fromOffset(36, 36)
-		image.Position = UDim2.fromScale(0.5, 0.5)
-		image.AnchorPoint = Vector2.new(0.5, 0.5)
-		image.BackgroundColor3 = Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
-		image.BackgroundTransparency = 1 - (Background.Enabled and Color.Opacity or 0)
-		image.BorderSizePixel = 0
-		image.Image = getStarImage(v)
-		image.Parent = billboard
-		local uicorner = Instance.new('UICorner')
-		uicorner.CornerRadius = UDim.new(0, 4)
-		uicorner.Parent = image
-		Reference[v] = billboard
-	end
-	
-	local currentConnections = {}
-	local currentKit = nil
-
-	local function disconnectAll()
-		for _, conn in ipairs(currentConnections) do
-			conn:Disconnect()
-		end
-		table.clear(currentConnections)
-	end
-
-	local function addKit(tag, icon)
-		if tag == 'alchemist_ingedients' then
-			local connAdded = collectionService:GetInstanceAddedSignal(tag):Connect(function(v)
-				if v.PrimaryPart then
-					task.wait(0.1)
-					if Reference[v.PrimaryPart] then return end
-					local billboard = Instance.new('BillboardGui')
-					billboard.Parent = Folder
-					billboard.StudsOffsetWorldSpace = Vector3.new(0, 3, 0)
-					billboard.Size = UDim2.fromOffset(36, 36)
-					billboard.AlwaysOnTop = true
-					billboard.ClipsDescendants = false
-					billboard.Adornee = v.PrimaryPart
-					local blur = addBlur(billboard)
-					blur.Visible = Background.Enabled
-					local image = Instance.new('ImageLabel')
-					image.Size = UDim2.fromOffset(36, 36)
-					image.Position = UDim2.fromScale(0.5, 0.5)
-					image.AnchorPoint = Vector2.new(0.5, 0.5)
-					image.BackgroundColor3 = Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
-					image.BackgroundTransparency = 1 - (Background.Enabled and Color.Opacity or 0)
-					image.BorderSizePixel = 0
-					image.Image = getAlchemistImage(v)
-					image.Parent = billboard
-					local uicorner = Instance.new('UICorner')
-					uicorner.CornerRadius = UDim.new(0, 4)
-					uicorner.Parent = image
-					Reference[v.PrimaryPart] = billboard
-				end
-			end)
-			table.insert(currentConnections, connAdded)
-			local connRemoved = collectionService:GetInstanceRemovedSignal(tag):Connect(function(v)
-				if v.PrimaryPart and Reference[v.PrimaryPart] then
-					Reference[v.PrimaryPart]:Destroy()
-					Reference[v.PrimaryPart] = nil
-				end
-			end)
-			table.insert(currentConnections, connRemoved)
-			for _, v in collectionService:GetTagged(tag) do
-				if v.PrimaryPart and not Reference[v.PrimaryPart] then
-					local billboard = Instance.new('BillboardGui')
-					billboard.Parent = Folder
-					billboard.StudsOffsetWorldSpace = Vector3.new(0, 3, 0)
-					billboard.Size = UDim2.fromOffset(36, 36)
-					billboard.AlwaysOnTop = true
-					billboard.ClipsDescendants = false
-					billboard.Adornee = v.PrimaryPart
-					local blur = addBlur(billboard)
-					blur.Visible = Background.Enabled
-					local image = Instance.new('ImageLabel')
-					image.Size = UDim2.fromOffset(36, 36)
-					image.Position = UDim2.fromScale(0.5, 0.5)
-					image.AnchorPoint = Vector2.new(0.5, 0.5)
-					image.BackgroundColor3 = Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
-					image.BackgroundTransparency = 1 - (Background.Enabled and Color.Opacity or 0)
-					image.BorderSizePixel = 0
-					image.Image = getAlchemistImage(v)
-					image.Parent = billboard
-					local uicorner = Instance.new('UICorner')
-					uicorner.CornerRadius = UDim.new(0, 4)
-					uicorner.Parent = image
-					Reference[v.PrimaryPart] = billboard
-				end
-			end
-			return
-		end
-		if tag == 'stars' then
-			local connAdded = collectionService:GetInstanceAddedSignal(tag):Connect(function(v)
-				if v:IsA("Model") and v.PrimaryPart then
-					task.wait(0.1)
-					AddedStar(v.PrimaryPart)
-				end
-			end)
-			table.insert(currentConnections, connAdded)
-			local connRemoved = collectionService:GetInstanceRemovedSignal(tag):Connect(function(v)
-				if v.PrimaryPart and Reference[v.PrimaryPart] then
-					Reference[v.PrimaryPart]:Destroy()
-					Reference[v.PrimaryPart] = nil
-				end
-			end)
-			table.insert(currentConnections, connRemoved)
-			for _, v in collectionService:GetTagged(tag) do
-				if v:IsA("Model") and v.PrimaryPart then
-					AddedStar(v.PrimaryPart)
-				end
-			end
-			return
-		end
-
-		local connAdded = collectionService:GetInstanceAddedSignal(tag):Connect(function(v)
-			if tag == 'bee' and (v.Name:find('TamedBee') or v:FindFirstChild('TamedBee')) then return end
-			Added(v.PrimaryPart, icon, false)
-		end)
-		table.insert(currentConnections, connAdded)
-		local connRemoved = collectionService:GetInstanceRemovedSignal(tag):Connect(function(v)
-			if Reference[v.PrimaryPart] then
-				Reference[v.PrimaryPart]:Destroy()
-				Reference[v.PrimaryPart] = nil
-			end
-		end)
-		table.insert(currentConnections, connRemoved)
-		for _, v in collectionService:GetTagged(tag) do
-			if tag == 'bee' and (v.Name:find('TamedBee') or v:FindFirstChild('TamedBee')) then continue end
-			Added(v.PrimaryPart, icon, false)
-		end
-	end
-
-	local function addKitNon(objName, icon)
-		if typeof(icon) == "boolean" then
-			if objName == "Gravestone" then
-				icon = "rbxassetid://6307844310"
-			elseif objName == "Open" then
-				icon = "rbxassetid://10159166528"
-			else
-				icon = bedwars.getIcon({itemType = icon}, true) or ''
-			end
-		else
-			icon = bedwars.getIcon({itemType = icon}, true)
-		end
-		local connAdded = workspace.ChildAdded:Connect(function(child)
-			if child:IsA("Model") and child.Name == objName then
-				task.wait(0.1)
-				if child.PrimaryPart then
-					Added(child, icon, true)
-				end
-			end
-		end)
-		table.insert(currentConnections, connAdded)
-		local connRemoved = workspace.ChildRemoved:Connect(function(child)
-			if child:IsA("Model") and child.Name == objName then
-				if Reference[child] then
-					Reference[child]:Destroy()
-					Reference[child] = nil
-				end
-			end
-		end)
-		table.insert(currentConnections, connRemoved)
-	end
-
-	local function addKitDescendant(partName, icon)
-		local resolvedIcon = bedwars.getIcon({itemType = icon}, true)
-		
-		local function shouldSkip(obj)
-			local p = obj.Parent
-			while p and p ~= workspace do
-				if p.Name == partName then return true end
-				p = p.Parent
-			end
-			return false
-		end
-
-		for _, obj in workspace:GetDescendants() do
-			if obj:IsA("BasePart") and obj.Name == partName and not shouldSkip(obj) then
-				if not Reference[obj] then
-					Added(obj, resolvedIcon, true)
-				end
-			end
-		end
-		local connAdded = workspace.DescendantAdded:Connect(function(obj)
-			if obj:IsA("BasePart") and obj.Name == partName and not shouldSkip(obj) then
-				task.wait(0.1)
-				if not Reference[obj] then
-					Added(obj, resolvedIcon, true)
-				end
-			end
-		end)
-		table.insert(currentConnections, connAdded)
-		local connRemoved = workspace.DescendantRemoving:Connect(function(obj)
-			if obj:IsA("BasePart") and obj.Name == partName and Reference[obj] then
-				Reference[obj]:Destroy()
-				Reference[obj] = nil
-			end
-		end)
-		table.insert(currentConnections, connRemoved)
-	end
-
-	local function setupKit(kitName)
-		local kit = ESPKits[kitName]
-		local nontag = NONTaggedKits[kitName]
-		local desctag = DescendantKits[kitName]
-		if kit then
-			addKit(kit[1], kit[2])
-		end
-		if nontag then
-			addKitNon(nontag[1], nontag[2])
-		end
-		if desctag then
-			for _, entry in ipairs(desctag) do
-				addKitDescendant(entry[1], entry[2])
-			end
-		end
-	end
-
-	KitESP = vain.Categories.Kits:CreateModule({
-		Name = 'KitESP',
-		Tooltip = 'Displays the kit being used by each enemy',
-		Function = function(callback)
-			if callback then
-				-- Always start from a clean slate so enabling MID-MATCH (kit already
-				-- equipped) builds immediately, instead of only reacting to a future kit
-				-- change (the reason it only worked after a re-toggle).
-				currentKit = nil
-				disconnectAll()
-				Folder:ClearAllChildren()
-				table.clear(Reference)
-				-- drive the tracer lines every frame (no-ops unless Tracers is on)
-				if tracerConn then tracerConn:Disconnect() end
-				tracerConn = runService.RenderStepped:Connect(updateTracers)
-				task.spawn(function()
-					while KitESP.Enabled do
-						local newKit = store.equippedKit or ''
-						-- (Re)build whenever the equipped kit changes. Covers enabling while
-						-- a kit is already equipped (currentKit=nil), switching kits, and a
-						-- new match/respawn clearing the kit then re-equipping the same one
-						-- ('' resets currentKit so the rebuild fires).
-						if newKit ~= currentKit then
-							disconnectAll()
-							Folder:ClearAllChildren()
-							table.clear(Reference)
-							if newKit ~= '' then
-								setupKit(newKit)
-								-- one-time notice so it's obvious WHAT kit was detected and
-								-- whether it's an ESP-supported kit (helps diagnose "nothing
-								-- shows" -- most kits simply have no ESP objects).
-								if Notify and Notify.Enabled then
-									local supported = ESPKits[newKit] or NONTaggedKits[newKit] or DescendantKits[newKit]
-									vain:CreateNotification('KitESP',
-										('Kit: %s (%s)'):format(newKit, supported and 'ESP supported' or 'no ESP objects for this kit'),
-										5, supported and 'check' or 'alert')
-								end
-							end
-							currentKit = newKit
-						end
-						task.wait(0.5)
-					end
-					disconnectAll()
-					Folder:ClearAllChildren()
-					table.clear(Reference)
-					currentKit = nil
-				end)
-			else
-				disconnectAll()
-				Folder:ClearAllChildren()
-				table.clear(Reference)
-				currentKit = nil
-				if tracerConn then tracerConn:Disconnect() tracerConn = nil end
-				clearTracers()
-			end
-		end,
-		Tooltip = 'ESP for certain kit related objects'
-	})
-	Notify = KitESP:CreateToggle({
-		Name = "Notify",
-		Tooltip = 'Sends a notification when this event occurs',
-		Default = false
-	})
-	Tracers = KitESP:CreateToggle({
-		Name = 'Tracers',
-		Tooltip = 'Draws a line from the bottom of your screen to each tracked object, in the ESP color',
-		Default = false,
-		Function = function(callback)
-			if not callback then clearTracers() end
-		end
-	})
-	Background = KitESP:CreateToggle({
-		Name = 'Background',
-		Tooltip = 'Renders a background box behind this ESP element',
-		Function = function(callback)
-			if Color.Object then Color.Object.Visible = callback end
-			for _, v in Reference do
-				v.ImageLabel.BackgroundTransparency = 1 - (callback and Color.Opacity or 0)
-				v.Blur.Visible = callback
-			end
-		end,
-		Default = true
-	})
-    Color = KitESP:CreateColorSlider({
-        Name = 'Background Color',
-        DefaultValue = 0,
-        DefaultOpacity = 0.5,
-        Function = function(hue, sat, val, opacity)
-            for _, v in Reference do
-                v.ImageLabel.BackgroundColor3 = Color3.fromHSV(hue, sat, val)
-                v.ImageLabel.BackgroundTransparency = 1 - opacity
-            end
-        end,
-        Darker = true
-    })
-
-    task.defer(function()
-        if Color and Color.Object then
-            Color.Object.Visible = Background.Enabled  
-        end
-    end)
 end)
 
 run(function()
@@ -21490,6 +20998,7 @@ end
 
 run(function()
 	local KitESP = {Enabled = false}
+	local Notify
 	local Background
 	local Color
 	local espobjs = {}
@@ -21595,27 +21104,58 @@ run(function()
 		}
 	}
 
+	local kitESPCurrent = nil
 	KitESP = vain.Categories.Render:CreateModule({
 		Name = "KitESP",
+		Tooltip = "ESP for the objects your equipped kit cares about (bees, ghosts, stars, rocks, etc.)",
 		Function = function(callback)
 			if callback then
+				kitESPCurrent = nil
+				espfold:ClearAllChildren()
+				table.clear(espobjs)
 				task.spawn(function()
-					repeat task.wait() until store.equippedKit ~= ""
-					if KitESP.Enabled then
-						local p1 = esptbl[store.equippedKit]
-						if (not p1) then return end
-						for i,v in pairs(p1) do
-							addKit(unpack(v))
+					-- Rebuild whenever the equipped kit changes, so it works when
+					-- enabled MID-MATCH (kit already equipped) and after a new match /
+					-- kit switch -- not just the first time a kit appears.
+					while KitESP.Enabled do
+						local kit = store.equippedKit or ""
+						if kit ~= kitESPCurrent then
+							-- rebuild for the new kit (visuals cleared; the tag listeners
+							-- from addKit are cleaned by KitESP:Clean on module disable)
+							espfold:ClearAllChildren()
+							table.clear(espobjs)
+							local p1 = kit ~= "" and esptbl[kit]
+							if p1 then
+								for _, v in pairs(p1) do
+									addKit(unpack(v))
+								end
+								if Notify and Notify.Enabled then
+									vain:CreateNotification('KitESP', 'ESP active for kit: ' .. kit, 4, 'check')
+								end
+							elseif kit ~= "" and Notify and Notify.Enabled then
+								vain:CreateNotification('KitESP', 'Kit "' .. kit .. '" has no ESP objects', 4, 'alert')
+							end
+							kitESPCurrent = kit
 						end
+						task.wait(0.5)
 					end
+					espfold:ClearAllChildren()
+					table.clear(espobjs)
+					kitESPCurrent = nil
 				end)
 			else
 				espfold:ClearAllChildren()
 				table.clear(espobjs)
+				kitESPCurrent = nil
 			end
 		end
 	})
 
+	Notify = KitESP:CreateToggle({
+		Name = 'Notify',
+		Tooltip = 'Announce which kit was detected and whether it has ESP objects',
+		Default = false
+	})
 	Background = KitESP:CreateToggle({
 		Name = 'Background',
 		Function = function(callback)
@@ -23415,11 +22955,19 @@ run(function()
 		Function = function(callback)
 			if callback then
 				ViewMatchHistory:Toggle(false)
-				local d = nil
-				bedwars.MatchHistroyController:requestMatchHistory(lplr.Name):andThen(function(Data)
-					if Data then
-						bedwars.AppController:openApp({app = bedwars.MatchHistroyApp,appId = "MatchHistoryApp",},Data)
-					end
+				-- controller name was misspelled ('MatchHistroy...') -> nil index crash.
+				-- correct is MatchHistoryController / MatchHistoryApp.
+				local ctrl = bedwars.MatchHistoryController
+				if not ctrl or type(ctrl.requestMatchHistory) ~= 'function' then
+					notif('Match History', 'Match history controller not found in this place.', 6, 'warning')
+					return
+				end
+				pcall(function()
+					ctrl:requestMatchHistory(lplr.Name):andThen(function(Data)
+						if Data then
+							bedwars.AppController:openApp({app = bedwars.MatchHistoryApp, appId = "MatchHistoryApp"}, Data)
+						end
+					end)
 				end)
 			else
 				return
