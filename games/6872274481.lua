@@ -10715,13 +10715,44 @@ run(function()
     local Folder = Instance.new('Folder')
     Folder.Parent = vain.gui
 
+    local highlights = {} -- entity -> Highlight instance (threshold glow)
+    local function clearGlow(ent)
+        local hl = highlights[ent]
+        if hl then hl:Destroy() highlights[ent] = nil end
+    end
     local function clear(ent)
         local bb = Reference[ent]
         if bb then bb:Destroy() Reference[ent] = nil end
+        clearGlow(ent)
     end
     local function clearAll()
         for ent in Reference do clear(ent) end
+        for ent in highlights do clearGlow(ent) end
         Folder:ClearAllChildren()
+    end
+
+    -- Apply/remove a real Roblox Highlight glow on the character when they cross a
+    -- loot threshold (much clearer than tinting numbers).
+    local function setGlow(ent, on)
+        if on then
+            local hl = highlights[ent]
+            if not hl or not hl.Parent then
+                hl = Instance.new('Highlight')
+                hl.Name = 'VainLootGlow'
+                hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                hl.FillColor = Color3.fromRGB(255, 70, 70)
+                hl.OutlineColor = Color3.fromRGB(255, 70, 70)
+                hl.FillTransparency = 0.6
+                hl.OutlineTransparency = 0
+                hl.Adornee = ent.Character
+                hl.Parent = ent.Character
+                highlights[ent] = hl
+            elseif hl.Adornee ~= ent.Character then
+                hl.Adornee = ent.Character
+            end
+        else
+            clearGlow(ent)
+        end
     end
 
     -- (re)build the row for one entity
@@ -10760,7 +10791,8 @@ run(function()
             if not c:IsA('UIListLayout') then c:Destroy() end
         end
 
-        local hl = isHighlighted(counts)
+        -- threshold -> glow the whole character with a real Roblox Highlight
+        setGlow(ent, isHighlighted(counts))
         local any = false
         for i, r in LOOT_RES do
             local n = counts[r.key]
@@ -10781,7 +10813,7 @@ run(function()
                 amt.Position = UDim2.fromOffset(18, 0)
                 amt.Size = UDim2.fromOffset(16, 20)
                 amt.Text = tostring(n)
-                amt.TextColor3 = hl and Color3.fromRGB(255, 80, 80) or Color3.new(1, 1, 1)
+                amt.TextColor3 = Color3.new(1, 1, 1)
                 amt.TextStrokeTransparency = 0.4
                 amt.TextSize = 13
                 amt.Font = Enum.Font.GothamBold
