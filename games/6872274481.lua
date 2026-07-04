@@ -2225,7 +2225,7 @@ local AimAssist
 	-- tab-list, re-applying on a loop since the tab-list is Roact and re-renders.
 	do
 		local TablistWinstreak
-		local AdvancedStats
+		local Global
 		local fetched = {}    -- userId -> true once fetched (dedupe)
 		local fetching = {}   -- userId -> true while a request is in flight
 		local streaks = {}    -- lowercased name -> winstreak number (persists after they leave)
@@ -2254,28 +2254,50 @@ local AimAssist
 				-- just yields no label.
 				pcall(function()
 					if not (ok and profile and profile.queues) then return end
-					local qt = bedwars.Store:getState().Game.queueType
-					local q = qt and profile.queues[qt]
-					if not q then return end
-					local ws = tonumber(q.currentWinStreak) or 0
 					local parts = {}
-				-- Winstreak (always shown when > 0)
-				if ws > 0 then parts[#parts + 1] = tostring(ws) .. ' \u{1F525}' end
-				-- Advanced stats: winrate, K/D and total matches -- icons instead of text.
-				if AdvancedStats and AdvancedStats.Enabled then
-					local wins = tonumber(q.wins) or 0
-					local matches = tonumber(q.matches) or 0
-					if matches <= 0 then matches = wins + (tonumber(q.losses) or 0) end
-					if matches > 0 then
-						parts[#parts + 1] = ('%d%% \u{1F3C6}'):format(math.floor(wins / matches * 100 + 0.5))
-						parts[#parts + 1] = ('%d \u{1F3AE}'):format(matches)
+					if Global and Global.Enabled then
+						-- GLOBAL: sum every queue's totals + highest win streak of any mode.
+						local wins, losses, matches, kills, deaths, best = 0, 0, 0, 0, 0, 0
+						for _, v in pairs(profile.queues) do
+							if type(v) == 'table' then
+								wins    = wins    + (tonumber(v.wins) or 0)
+								losses  = losses  + (tonumber(v.losses) or 0)
+								matches = matches + (tonumber(v.matches) or 0)
+								kills   = kills   + (tonumber(v.kills) or 0)
+								deaths  = deaths  + (tonumber(v.deaths) or 0)
+								best    = math.max(best, tonumber(v.highestWinStreak) or 0)
+							end
+						end
+						if matches <= 0 then matches = wins + losses end
+						if best > 0 then parts[#parts + 1] = tostring(best) .. ' \u{1F525}' end
+						if matches > 0 then
+							parts[#parts + 1] = ('%d%% \u{1F3C6}'):format(math.floor(wins / matches * 100 + 0.5))
+							parts[#parts + 1] = ('%d \u{1F3AE}'):format(matches)
+						end
+						if kills > 0 or deaths > 0 then
+							parts[#parts + 1] = ('%.2f \u{2694}'):format(deaths > 0 and (kills / deaths) or kills)
+						end
+					else
+						-- CURRENT gamemode only.
+						local qt = bedwars.Store:getState().Game.queueType
+						local q = qt and profile.queues[qt]
+						if not q then return end
+						local ws = tonumber(q.currentWinStreak) or 0
+						if ws > 0 then parts[#parts + 1] = tostring(ws) .. ' \u{1F525}' end
+						local wins = tonumber(q.wins) or 0
+						local matches = tonumber(q.matches) or 0
+						if matches <= 0 then matches = wins + (tonumber(q.losses) or 0) end
+						if matches > 0 then
+							parts[#parts + 1] = ('%d%% \u{1F3C6}'):format(math.floor(wins / matches * 100 + 0.5))
+							parts[#parts + 1] = ('%d \u{1F3AE}'):format(matches)
+						end
+						local kills = tonumber(q.kills) or 0
+						local deaths = tonumber(q.deaths) or 0
+						if kills > 0 or deaths > 0 then
+							parts[#parts + 1] = ('%.2f \u{2694}'):format(deaths > 0 and (kills / deaths) or kills)
+						end
 					end
-					local kills = tonumber(q.kills) or 0
-					local deaths = tonumber(q.deaths) or 0
-					if kills > 0 or deaths > 0 then
-						parts[#parts + 1] = ('%.2f \u{2694}'):format(deaths > 0 and (kills / deaths) or kills)
-					end
-				end
+					if #parts > 0 then label = table.concat(parts, '  ') end
 				end)
 				-- private/friends-only profiles reject RequestProfileData -> label stays
 				-- nil and nothing is shown for them (no global-streak fallback).
@@ -2371,7 +2393,7 @@ local AimAssist
 
 		TablistWinstreak = vain.Categories.Render:CreateModule({
 			Name = 'Show Advanced Stats',
-			Tooltip = "Shows each player's current-gamemode winstreak next to their name in the tab-list (Tab key), plus winrate and K/D when 'Advanced Stats' is on. Private profiles show nothing. Fetches once per player and caches.",
+			Tooltip = "Shows each player's current-gamemode winstreak, winrate, K/D and total matches next to their name in the tab-list (Tab key). Private profiles show nothing. Fetches once per player and caches.",
 			Function = function(callback)
 				if callback then
 					table.clear(fetched)
@@ -2388,24 +2410,23 @@ local AimAssist
 				end
 			end
 		})
-		AdvancedStats = TablistWinstreak:CreateToggle({
-			Name = 'Advanced Stats',
-			Tooltip = 'Also show current-gamemode winrate and K/D (not just winstreak). Re-fetches when toggled.',
+		Global = TablistWinstreak:CreateToggle({
+			Name = 'Global Stats',
+			Tooltip = 'Show GLOBAL stats across ALL gamemodes (highest win streak of any mode, and total winrate / K-D over every match) instead of just the current mode.',
 			Default = false,
 			Function = function()
-				-- labels depend on this toggle, so wipe the cache to rebuild them and
-				-- clear any tags we already painted onto the tab-list rows
+				-- labels depend on this, so wipe the cache + our painted tags to rebuild
 				table.clear(fetched)
 				table.clear(fetching)
 				table.clear(streaks)
 				local pg = lplr:FindFirstChild('PlayerGui')
 				if pg then
-					for _, gui in pg:GetDescendants() do
-						if gui:IsA('TextLabel') and gui:GetAttribute('VainWS') then
-							local orig = gui:GetAttribute('VainWSOrig')
-							if type(orig) == 'string' then gui.Text = orig end
-							gui:SetAttribute('VainWSOrig', nil)
-							gui:SetAttribute('VainWS', nil)
+					for _, g in pg:GetDescendants() do
+						if g:IsA('TextLabel') and g:GetAttribute('VainWS') then
+							local orig = g:GetAttribute('VainWSOrig')
+							if type(orig) == 'string' then g.Text = orig end
+							g:SetAttribute('VainWSOrig', nil)
+							g:SetAttribute('VainWS', nil)
 						end
 					end
 				end
