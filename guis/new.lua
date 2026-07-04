@@ -6085,7 +6085,7 @@ local function showPatchNotes(force)
 		local mutedText   = color.Dark(uipallet.Text, 0.42)
 		local bodyText    = color.Dark(uipallet.Text, 0.14)
 
-		local CARD_W, CARD_H = 470, 400
+		local CARD_W, CARD_H = 560, 480
 
 		-- Own top-DisplayOrder ScreenGui so it sits above everything and is not
 		-- affected by the click-gui scale/visibility.
@@ -6169,16 +6169,83 @@ local function showPatchNotes(force)
 		tweenService:Create(card, TweenInfo.new(0.28), {GroupTransparency = 0}):Play()
 		tweenService:Create(cardScale, TweenInfo.new(0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
 
-		-- Accent underline under the header row, with a moving sheen (alive).
+		-- ── Header band ─────────────────────────────────────────────────────
+		-- A subtle darker strip behind the title area gives an official, framed
+		-- feel and visually groups the title + version together.
+		local HEADER_H = 74
+		local headerband = Instance.new('Frame')
+		headerband.Name = 'HeaderBand'
+		headerband.Size = UDim2.new(1, 0, 0, HEADER_H)
+		headerband.BackgroundColor3 = color.Dark(uipallet.Main, 0.04)
+		headerband.BackgroundTransparency = 0.35
+		headerband.BorderSizePixel = 0
+		headerband.Parent = card
+
+		-- Title: "What's New"
+		local titlelbl = Instance.new('TextLabel')
+		titlelbl.Name = 'Title'
+		titlelbl.Size = UDim2.new(1, -220, 0, 30)
+		titlelbl.Position = UDim2.fromOffset(28, 18)
+		titlelbl.BackgroundTransparency = 1
+		titlelbl.Text = "What's New"
+		titlelbl.TextXAlignment = Enum.TextXAlignment.Left
+		titlelbl.TextYAlignment = Enum.TextYAlignment.Center
+		titlelbl.TextColor3 = textColor
+		titlelbl.TextSize = 25
+		titlelbl.FontFace = uipallet.FontSemiBold
+		titlelbl.Parent = card
+
+		-- Subtitle
+		local subtitle = Instance.new('TextLabel')
+		subtitle.Name = 'Subtitle'
+		subtitle.Size = UDim2.new(1, -220, 0, 16)
+		subtitle.Position = UDim2.fromOffset(28, 47)
+		subtitle.BackgroundTransparency = 1
+		subtitle.Text = 'Vain was updated — here are the highlights.'
+		subtitle.TextXAlignment = Enum.TextXAlignment.Left
+		subtitle.TextColor3 = mutedText
+		subtitle.TextSize = 13
+		subtitle.FontFace = uipallet.Font
+		subtitle.Parent = card
+
+		-- Version + date, integrated flush in the header band (right-aligned,
+		-- accent-tinted chip that reads as part of the header rather than a
+		-- floating pill).
+		local badge = Instance.new('Frame')
+		badge.Name = 'VersionBadge'
+		badge.AnchorPoint = Vector2.new(1, 0.5)
+		badge.Size = UDim2.fromOffset(0, 26)
+		badge.AutomaticSize = Enum.AutomaticSize.X
+		badge.Position = UDim2.new(1, -22, 0, HEADER_H - 22)
+		badge.BackgroundColor3 = accent
+		badge.BackgroundTransparency = 0.7
+		badge.BorderSizePixel = 0
+		badge.Parent = card
+		addCorner(badge, UDim.new(0, 7))
+		local badgepad = Instance.new('UIPadding')
+		badgepad.PaddingLeft = UDim.new(0, 12)
+		badgepad.PaddingRight = UDim.new(0, 12)
+		badgepad.Parent = badge
+		local badgelbl = Instance.new('TextLabel')
+		badgelbl.Size = UDim2.new(0, 0, 1, 0)
+		badgelbl.AutomaticSize = Enum.AutomaticSize.X
+		badgelbl.BackgroundTransparency = 1
+		badgelbl.Text = 'v' .. tostring(newest.Version) .. (newest.Date and ('   ·   ' .. newest.Date) or '')
+		badgelbl.TextColor3 = color.Light(uipallet.Text, 0.1)
+		badgelbl.TextSize = 13
+		badgelbl.FontFace = uipallet.FontSemiBold
+		badgelbl.Parent = badge
+
+		-- Accent underline along the bottom edge of the header band, with a
+		-- slow sweeping sheen (subtle sign of life).
 		local headerline = Instance.new('Frame')
 		headerline.Name = 'HeaderLine'
-		headerline.Size = UDim2.new(1, -40, 0, 2)
-		headerline.Position = UDim2.fromOffset(20, 62)
+		headerline.Size = UDim2.new(1, 0, 0, 2)
+		headerline.Position = UDim2.fromOffset(0, HEADER_H - 2)
 		headerline.BackgroundColor3 = accent
-		headerline.BackgroundTransparency = 0.2
+		headerline.BackgroundTransparency = 0.15
 		headerline.BorderSizePixel = 0
 		headerline.Parent = card
-		addCorner(headerline, UDim.new(1, 0))
 		local sheen = Instance.new('UIGradient')
 		sheen.Color = ColorSequence.new({
 			ColorSequenceKeypoint.new(0, accent),
@@ -6187,99 +6254,21 @@ local function showPatchNotes(force)
 		})
 		sheen.Offset = Vector2.new(-1, 0)
 		sheen.Parent = headerline
-		-- continuously sweep the sheen across the underline
 		task.spawn(function()
 			while headerline.Parent do
 				sheen.Offset = Vector2.new(-1, 0)
-				local tw = tweenService:Create(sheen, TweenInfo.new(2.2, Enum.EasingStyle.Linear), {Offset = Vector2.new(1, 0)})
+				local tw = tweenService:Create(sheen, TweenInfo.new(2.4, Enum.EasingStyle.Linear), {Offset = Vector2.new(1, 0)})
 				tw:Play()
 				tw.Completed:Wait()
-				task.wait(1.2)
+				task.wait(1.4)
 			end
 		end)
-
-		-- Little accent "spark" icon block to the left of the title.
-		local spark = Instance.new('Frame')
-		spark.Name = 'Spark'
-		spark.Size = UDim2.fromOffset(4, 22)
-		spark.Position = UDim2.fromOffset(22, 22)
-		spark.BackgroundColor3 = accentGlow
-		spark.BorderSizePixel = 0
-		spark.Parent = card
-		addCorner(spark, UDim.new(1, 0))
-		-- gentle pulse
-		task.spawn(function()
-			while spark.Parent do
-				tweenService:Create(spark, TweenInfo.new(0.9, Enum.EasingStyle.Sine), {BackgroundTransparency = 0.5}):Play()
-				task.wait(0.9)
-				if not spark.Parent then break end
-				tweenService:Create(spark, TweenInfo.new(0.9, Enum.EasingStyle.Sine), {BackgroundTransparency = 0}):Play()
-				task.wait(0.9)
-			end
-		end)
-
-		-- Title: "What's New"
-		local titlelbl = Instance.new('TextLabel')
-		titlelbl.Name = 'Title'
-		titlelbl.Size = UDim2.new(1, -160, 0, 24)
-		titlelbl.Position = UDim2.fromOffset(36, 20)
-		titlelbl.BackgroundTransparency = 1
-		titlelbl.Text = "What's New"
-		titlelbl.TextXAlignment = Enum.TextXAlignment.Left
-		titlelbl.TextYAlignment = Enum.TextYAlignment.Center
-		titlelbl.TextColor3 = textColor
-		titlelbl.TextSize = 19
-		titlelbl.FontFace = uipallet.FontSemiBold
-		titlelbl.Parent = card
-
-		-- Subtitle
-		local subtitle = Instance.new('TextLabel')
-		subtitle.Name = 'Subtitle'
-		subtitle.Size = UDim2.new(1, -160, 0, 16)
-		subtitle.Position = UDim2.fromOffset(36, 42)
-		subtitle.BackgroundTransparency = 1
-		subtitle.Text = 'Vain was updated — here are the highlights.'
-		subtitle.TextXAlignment = Enum.TextXAlignment.Left
-		subtitle.TextColor3 = mutedText
-		subtitle.TextSize = 12
-		subtitle.FontFace = uipallet.Font
-		subtitle.Parent = card
-
-		-- Version + date pill (top-right, vertically centred to the title row)
-		local badge = Instance.new('Frame')
-		badge.Name = 'VersionBadge'
-		badge.AnchorPoint = Vector2.new(1, 0.5)
-		badge.Size = UDim2.fromOffset(0, 24)
-		badge.AutomaticSize = Enum.AutomaticSize.X
-		badge.Position = UDim2.new(1, -20, 0, 32)
-		badge.BackgroundColor3 = accent
-		badge.BackgroundTransparency = 0.5
-		badge.BorderSizePixel = 0
-		badge.Parent = card
-		addCorner(badge, UDim.new(1, 0))
-		local badgeStroke = Instance.new('UIStroke')
-		badgeStroke.Color = accentGlow
-		badgeStroke.Transparency = 0.5
-		badgeStroke.Parent = badge
-		local badgepad = Instance.new('UIPadding')
-		badgepad.PaddingLeft = UDim.new(0, 11)
-		badgepad.PaddingRight = UDim.new(0, 11)
-		badgepad.Parent = badge
-		local badgelbl = Instance.new('TextLabel')
-		badgelbl.Size = UDim2.new(0, 0, 1, 0)
-		badgelbl.AutomaticSize = Enum.AutomaticSize.X
-		badgelbl.BackgroundTransparency = 1
-		badgelbl.Text = 'v' .. tostring(newest.Version) .. (newest.Date and ('  ·  ' .. newest.Date) or '')
-		badgelbl.TextColor3 = textColor
-		badgelbl.TextSize = 12
-		badgelbl.FontFace = uipallet.FontSemiBold
-		badgelbl.Parent = badge
 
 		-- Scrolling body of changes
 		local body = Instance.new('ScrollingFrame')
 		body.Name = 'Body'
-		body.Size = UDim2.new(1, -20, 1, -132)
-		body.Position = UDim2.fromOffset(10, 76)
+		body.Size = UDim2.new(1, -24, 1, -158)
+		body.Position = UDim2.fromOffset(12, 86)
 		body.BackgroundTransparency = 1
 		body.BorderSizePixel = 0
 		body.ScrollBarThickness = 3
@@ -6289,13 +6278,13 @@ local function showPatchNotes(force)
 		body.Parent = card
 		local bodylist = Instance.new('UIListLayout')
 		bodylist.SortOrder = Enum.SortOrder.LayoutOrder
-		bodylist.Padding = UDim.new(0, 9)
+		bodylist.Padding = UDim.new(0, 12)
 		bodylist.Parent = body
 		local bodypad = Instance.new('UIPadding')
-		bodypad.PaddingLeft = UDim.new(0, 16)
-		bodypad.PaddingRight = UDim.new(0, 12)
-		bodypad.PaddingTop = UDim.new(0, 6)
-		bodypad.PaddingBottom = UDim.new(0, 8)
+		bodypad.PaddingLeft = UDim.new(0, 18)
+		bodypad.PaddingRight = UDim.new(0, 14)
+		bodypad.PaddingTop = UDim.new(0, 8)
+		bodypad.PaddingBottom = UDim.new(0, 10)
 		bodypad.Parent = body
 
 		local rows = {}
@@ -6407,26 +6396,26 @@ local function showPatchNotes(force)
 		end)
 		gotit.MouseButton1Click:Connect(dismiss)
 
-		-- X close (top-right corner)
-		local xclose = Instance.new('TextButton')
+		-- Close (top-right) -- uses the same close.png the rest of the UI uses, so
+		-- it renders correctly and matches the native panels (no font-glyph box).
+		local xclose = Instance.new('ImageButton')
 		xclose.Name = 'Close'
 		xclose.AnchorPoint = Vector2.new(1, 0)
-		xclose.Position = UDim2.new(1, -10, 0, 10)
-		xclose.Size = UDim2.fromOffset(22, 22)
-		xclose.BackgroundColor3 = accent
+		xclose.Position = UDim2.new(1, -12, 0, 12)
+		xclose.Size = UDim2.fromOffset(18, 18)
+		xclose.BackgroundColor3 = Color3.new(1, 1, 1)
 		xclose.BackgroundTransparency = 1
 		xclose.AutoButtonColor = false
-		xclose.Text = '×'
-		xclose.TextColor3 = mutedText
-		xclose.TextSize = 20
-		xclose.FontFace = uipallet.FontSemiBold
+		xclose.Image = getcustomasset('vain/assets/new/close.png')
+		xclose.ImageColor3 = color.Light(uipallet.Text, 0.2)
+		xclose.ImageTransparency = 0.45
 		xclose.Parent = card
-		addCorner(xclose, UDim.new(0, 5))
+		addCorner(xclose, UDim.new(1, 0))
 		xclose.MouseEnter:Connect(function()
-			tweenService:Create(xclose, TweenInfo.new(0.12), {BackgroundTransparency = 0.6, TextColor3 = textColor}):Play()
+			tweenService:Create(xclose, TweenInfo.new(0.12), {ImageTransparency = 0.1, BackgroundTransparency = 0.75}):Play()
 		end)
 		xclose.MouseLeave:Connect(function()
-			tweenService:Create(xclose, TweenInfo.new(0.12), {BackgroundTransparency = 1, TextColor3 = mutedText}):Play()
+			tweenService:Create(xclose, TweenInfo.new(0.12), {ImageTransparency = 0.45, BackgroundTransparency = 1}):Play()
 		end)
 		xclose.MouseButton1Click:Connect(dismiss)
 	end
