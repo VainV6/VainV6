@@ -1912,13 +1912,13 @@ local AimAssist
 		end
 
 		AdvancedSpectate = vain.Categories.Utility:CreateModule({
-			Name = 'Advanced Spectate',
+			Name = 'Better Spectating',
 			Tooltip = 'Spectate ANYONE, not just your team (forces the spectate mode to ALL). Enable Fixed Spectate + pick a player to lock the view to them.',
 			Function = function(callback)
 				local ctrl = getSpec()
 				if callback then
 					if not ctrl then
-						notif('Advanced Spectate', 'Spectate controller not found in this place.', 6, 'warning')
+						notif('Better Spectating', 'Spectate controller not found in this place.', 6, 'warning')
 						AdvancedSpectate:Toggle()
 						return
 					end
@@ -1937,6 +1937,14 @@ local AimAssist
 								if p then return { p } end -- only ever this player
 							end
 							return origGetTargets(selfc, ...)
+						end
+					end
+					-- if Fixed Spectate is already on, snap onto the fixed player now
+					-- (so re-enabling the module re-fixates as expected).
+					if FixedSpectate and FixedSpectate.Enabled then
+						local p = fixedPlr()
+						if p and ctrl.switchSpectateTargets then
+							pcall(function() ctrl:switchSpectateTargets(p) end)
 						end
 					end
 				else
@@ -1964,13 +1972,18 @@ local AimAssist
 			Tooltip = 'Lock spectating to the selected player. If they die, the game auto-switches — this snaps the view straight back to them.',
 			Default = false,
 			Function = function(callback)
-				-- when enabling, immediately switch onto the fixed player if possible
+				local ctrl = getSpec()
 				if callback then
-					local ctrl = getSpec()
-					local p = fixedPlr()
-					if ctrl and p and ctrl.switchSpectateTargets then
-						pcall(function() ctrl:switchSpectateTargets(p) end)
+					-- ON: snap onto the fixed player (only if the module is enabled)
+					if AdvancedSpectate.Enabled then
+						local p = fixedPlr()
+						if ctrl and p and ctrl.switchSpectateTargets then
+							pcall(function() ctrl:switchSpectateTargets(p) end)
+						end
 					end
+				else
+					-- OFF: un-fixate -> leave the locked spectate view entirely
+					if ctrl then pcall(function() ctrl:stopSpectatingPlayer() end) end
 				end
 			end
 		})
