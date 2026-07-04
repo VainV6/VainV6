@@ -9502,11 +9502,30 @@ run(function()
 		return bedwars.getIcon({itemType = 'crit_star'}, true)
 	end
 
+	-- Friendly, kit-aware spawn message. Maps an object's name (or a substring)
+	-- to a nice sentence; falls back to a generic one. Used by the Notify toggle
+	-- so you get e.g. 'A new bee has spawned' instead of 'New object is added bee'.
+	local SPAWN_NAMES = {
+		bee = 'A bee', ghost = 'A ghost', star = 'A star', SheepModel = 'A sheep',
+		['petrified-player'] = 'A petrified player', ['hidden-metal'] = 'Hidden metal',
+		snap_trap = 'A snap trap', shadow_coin = 'A shadow coin', treeOrb = 'A tree orb',
+		alchemy_crystal = 'An alchemy crystal', stars = 'A star', ElementTome = 'An element tome',
+		Gravestone = 'A gravestone', carrot = 'A carrot', melon = 'A melon', pumpkin = 'A pumpkin',
+	}
+	local function notifySpawn(name)
+		if not (Notify and Notify.Enabled) then return end
+		local friendly = SPAWN_NAMES[name]
+		if not friendly then
+			for key, val in pairs(SPAWN_NAMES) do
+				if tostring(name):lower():find(tostring(key):lower(), 1, true) then friendly = val; break end
+			end
+		end
+		vain:CreateNotification('KitESP', (friendly or ('A ' .. tostring(name))) .. ' has spawned', 3)
+	end
+
 	local function Added(v, icon, non)
 		if Reference[v] then return end
-		if Notify.Enabled then
-			vain:CreateNotification("KitESP", `New object is added {v.Name}`, 2)
-		end
+		notifySpawn(v.Name)
 		local billboard = Instance.new('BillboardGui')
 		billboard.Parent = Folder
 		billboard.Name = icon
@@ -9540,9 +9559,7 @@ run(function()
 		if not v or not v.Parent then return end
 		if Reference[v] then return end
 
-		if Notify.Enabled then
-			vain:CreateNotification("KitESP", `New object is added {v.Name}`, 2)
-		end
+		notifySpawn(v.Name)
 		local billboard = Instance.new('BillboardGui')
 		billboard.Parent = Folder
 		billboard.Name = 'star'
@@ -16566,7 +16583,7 @@ run(function()
     end
     
     Breaker = vain.Categories.Minigames:CreateModule({
-        Name = 'Breaker',
+        Name = 'Nuker',
         Tooltip = 'Automatically breaks target blocks within range',
         Function = function(callback)
             if callback then
@@ -30650,116 +30667,3 @@ run(function()
     })
 end)
 
--- ── Nuker ─────────────────────────────────────────────────────────────────────
-run(function()
-    local Nuker
-    local nukerrange     = { Value = 30 }
-    local nukerslowmode  = { Value = 2 }
-    local nukereffects   = { Enabled = false }
-    local nukeranimation = { Enabled = false }
-    local nukerlegit     = { Enabled = false }
-    local nukerown       = { Enabled = false }
-    local nukerbeds      = { Enabled = false }
-    local nukercustom    = { ObjectList = {} }
-    local nukerluckyblock = { Enabled = false }
-    local nukerironore   = { Enabled = false }
-    local luckyblocktable = {}
-
-    local function getBestBreakSide(pos)
-        if not entitylib.isAlive then return Enum.NormalId.Front end
-        local root = entitylib.character.RootPart
-        local normals = {
-            {n = Enum.NormalId.Front,  v = Vector3.new(0, 0, 1)},
-            {n = Enum.NormalId.Back,   v = Vector3.new(0, 0, -1)},
-            {n = Enum.NormalId.Right,  v = Vector3.new(1, 0, 0)},
-            {n = Enum.NormalId.Left,   v = Vector3.new(-1, 0, 0)},
-            {n = Enum.NormalId.Top,    v = Vector3.new(0, 1, 0)},
-            {n = Enum.NormalId.Bottom, v = Vector3.new(0, -1, 0)},
-        }
-        local best, bestDist = Enum.NormalId.Front, math.huge
-        for _, entry in normals do
-            local dist = ((pos + entry.v * 1.5) - root.Position).Magnitude
-            if dist < bestDist then best, bestDist = entry.n, dist end
-        end
-        return best
-    end
-
-    Nuker = vain.Categories.Minigames:CreateModule({
-        Name = 'Nuker',
-        Tooltip = 'Automatically destroys beds and lucky blocks near you.',
-        Function = function(callback)
-            if callback then
-                luckyblocktable = {}
-                for _, v in pairs(store.blocks or {}) do
-                    if table.find(nukercustom.ObjectList, v.Name)
-                        or (nukerluckyblock.Enabled and tostring(v.Name):find('lucky'))
-                        or (nukerironore.Enabled and v.Name == 'iron_ore') then
-                        table.insert(luckyblocktable, v)
-                    end
-                end
-                Nuker:Clean(collectionService:GetInstanceAddedSignal('block'):Connect(function(v)
-                    if table.find(nukercustom.ObjectList, v.Name)
-                        or (nukerluckyblock.Enabled and tostring(v.Name):find('lucky'))
-                        or (nukerironore.Enabled and v.Name == 'iron_ore') then
-                        table.insert(luckyblocktable, v)
-                    end
-                end))
-                Nuker:Clean(collectionService:GetInstanceRemovedSignal('block'):Connect(function(v)
-                    local idx = table.find(luckyblocktable, v)
-                    if idx then table.remove(luckyblocktable, idx) end
-                end))
-                task.spawn(function()
-                    repeat
-                        if entitylib.isAlive then
-                            local root = entitylib.character.RootPart
-                            local tool = nukerlegit.Enabled and store.hand and store.hand.tool or {Name = 'wood_axe'}
-                            if nukerbeds.Enabled then
-                                for _, obj in collectionService:GetTagged('bed') do
-                                    if not entitylib.isAlive then break end
-                                    if not obj.Parent then continue end
-                                    if obj.Name == 'bed'
-                                        and tostring(obj:GetAttribute('TeamId')) == tostring(lplr:GetAttribute('Team')) then continue end
-                                    local shield = obj:GetAttribute('BedShieldEndTime')
-                                    if shield and shield > workspace:GetServerTimeNow() then continue end
-                                    if (root.Position - obj.Position).Magnitude <= nukerrange.Value then
-                                        if tool and bedwars.ItemTable and bedwars.ItemTable[tool.Name]
-                                            and bedwars.ItemTable[tool.Name].breakBlock
-                                            and pcall(bedwars.BlockController.isBlockBreakable, bedwars.BlockController, {blockPosition = obj.Position / 3}, lplr) then
-                                            pcall(bedwars.breakBlock, bedwars, obj.Position, nukereffects.Enabled, getBestBreakSide(obj.Position), false, nukeranimation.Enabled)
-                                            task.wait(nukerslowmode.Value ~= 0 and nukerslowmode.Value / 10 or 0)
-                                        end
-                                    end
-                                end
-                            end
-                            for _, obj in luckyblocktable do
-                                if not entitylib.isAlive then break end
-                                if obj and obj.Parent then
-                                    if (root.Position - obj.Position).Magnitude <= nukerrange.Value
-                                        and (nukerown.Enabled or obj:GetAttribute('PlacedByUserId') ~= lplr.UserId) then
-                                        if tool and bedwars.ItemTable and bedwars.ItemTable[tool.Name]
-                                            and bedwars.ItemTable[tool.Name].breakBlock then
-                                            pcall(bedwars.breakBlock, bedwars, obj.Position, nukereffects.Enabled, getBestBreakSide(obj.Position), true, nukeranimation.Enabled)
-                                            task.wait(nukerslowmode.Value ~= 0 and nukerslowmode.Value / 10 or 0)
-                                        end
-                                    end
-                                end
-                            end
-                        end
-                        task.wait()
-                    until not Nuker.Enabled
-                end)
-            else
-                luckyblocktable = {}
-            end
-        end,
-    })
-    nukerslowmode  = Nuker:CreateSlider({ Name = 'Break Slowmode',         Min = 0, Max = 10, Default = 2,  Function = function() end })
-    nukerrange     = Nuker:CreateSlider({ Name = 'Break Range',            Min = 1, Max = 30, Default = 30, Function = function(val) nukerrange.Value = val end })
-    nukerlegit     = Nuker:CreateToggle({ Name = 'Hand Check',             Function = function() end })
-    nukereffects   = Nuker:CreateToggle({ Name = 'Show HealthBar & Effects', Default = true, Function = function() end })
-    nukeranimation = Nuker:CreateToggle({ Name = 'Break Animation',        Function = function() end })
-    nukerown       = Nuker:CreateToggle({ Name = 'Self Break',             Function = function() end })
-    nukerbeds      = Nuker:CreateToggle({ Name = 'Break Beds',             Function = function() end })
-    nukerluckyblock = Nuker:CreateToggle({ Name = 'Lucky Blocks',          Function = function() end })
-    nukerironore   = Nuker:CreateToggle({ Name = 'Iron Ore',               Function = function() end })
-end)
