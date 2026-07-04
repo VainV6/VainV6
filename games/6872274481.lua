@@ -11164,13 +11164,19 @@ run(function()
         if not st then st = {}; alertState[adornee] = st end
         local function one(res, threshold)
             local n = counts[res] or 0
-            local over = threshold and n >= threshold.Value
-            if over and not st[res] then
-                st[res] = true
+            local thr = threshold and threshold.Value or math.huge
+            local over = n >= thr
+            -- Fire when the count first crosses the threshold, and again whenever it
+            -- climbs to a NEW high while still over (so a growing stockpile keeps you
+            -- informed). st[res] stores the last-notified amount; reset when it drops
+            -- back under the threshold so a fresh crossing alerts again.
+            local last = st[res] or 0
+            if over and n > last then
+                st[res] = n
                 local teamtxt = team ~= nil and (' (Team ' .. tostring(team) .. ')') or ''
                 notif('Storage ESP', ('%d %s in a team chest%s'):format(n, res, teamtxt), 8, 'warning')
             elseif not over then
-                st[res] = false -- reset so it can fire again after dropping below
+                st[res] = 0 -- back under threshold -> re-arm
             end
         end
         one('emerald', EmeraldThreshold)
@@ -11214,13 +11220,19 @@ run(function()
     		if resCounts[item.Name] ~= nil then
     			resCounts[item.Name] = resCounts[item.Name] + (tonumber(item:GetAttribute('Amount')) or 1)
     		end
-    		if ((ShowAll and ShowAll.Enabled) or table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name)) then
+    		-- Always surface emerald/diamond on the billboard while Resource Alert is
+    		-- on, so you can watch the amount live even if they aren't whitelisted.
+    		local alertRes = (ResourceAlert and ResourceAlert.Enabled)
+    			and (item.Name == 'emerald' or item.Name == 'diamond')
+    		if alertRes or (ShowAll and ShowAll.Enabled) or table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name) then
     			if counts[item.Name] == nil then order[#order + 1] = item.Name end
     			local amt = tonumber(item:GetAttribute('Amount')) or 1
     			counts[item.Name] = (counts[item.Name] or 0) + amt
     		end
     	end
-    	checkResourceAlert(v.Adornee, resCounts)
+    	-- run the alert non-fatally AFTER the display so a failure here can never
+    	-- block the count from refreshing
+    	pcall(checkResourceAlert, v.Adornee, resCounts)
     	for _, name in order do
     		v.Enabled = true
     		local blockimage = Instance.new('ImageLabel')
