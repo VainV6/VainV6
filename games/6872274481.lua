@@ -9399,7 +9399,59 @@ run(function()
 	local Reference = {}
 	local Folder = Instance.new('Folder')
 	Folder.Parent = vain.gui
-	
+	local Tracers -- toggle (declared with the other options below)
+	local tracerLines = {} -- [object] = Drawing 'Line'
+	local tracerConn
+
+	local function clearTracers()
+		for _, line in tracerLines do
+			pcall(function() line:Remove() end)
+		end
+		table.clear(tracerLines)
+	end
+
+	-- Draw a line from the bottom-centre of the screen to each tracked object in
+	-- the Kit ESP colour. Reference[obj] holds each tracked object's billboard, so
+	-- its keys ARE the tracked objects.
+	local function updateTracers()
+		if not (Tracers and Tracers.Enabled) then return end
+		local cam = gameCamera
+		local view = cam.ViewportSize
+		local originX, originY = view.X / 2, view.Y
+		local col = (Color and Color.Hue) and Color3.fromHSV(Color.Hue, Color.Sat, Color.Value) or Color3.new(1, 1, 1)
+		for obj, line in tracerLines do
+			if not Reference[obj] or (typeof(obj) == 'Instance' and not obj.Parent) then
+				pcall(function() line:Remove() end)
+				tracerLines[obj] = nil
+			end
+		end
+		for obj in Reference do
+			local pos
+			if typeof(obj) == 'Instance' then
+				if obj:IsA('BasePart') then pos = obj.Position
+				elseif obj:IsA('Model') then pos = obj:GetPivot().Position
+				else local ok, p2 = pcall(function() return obj.Position end); pos = ok and p2 or nil end
+			end
+			if pos then
+				local sp, onScreen = cam:WorldToViewportPoint(pos)
+				local line = tracerLines[obj]
+				if onScreen and sp.Z > 0 then
+					if not line then
+						line = Drawing.new('Line')
+						line.Thickness = 1
+						tracerLines[obj] = line
+					end
+					line.Color = col
+					line.From = Vector2.new(originX, originY)
+					line.To = Vector2.new(sp.X, sp.Y)
+					line.Visible = true
+				elseif line then
+					line.Visible = false
+				end
+			end
+		end
+	end
+
 	local ESPKits = {
 		alchemist = {'alchemist_ingedients', 'thorns'},
 		beekeeper = {'bee', 'bee'},
@@ -9724,15 +9776,23 @@ run(function()
 		Tooltip = 'Displays the kit being used by each enemy',
 		Function = function(callback)
 			if callback then
+				-- Always start from a clean slate so enabling MID-MATCH (kit already
+				-- equipped) builds immediately, instead of only reacting to a future kit
+				-- change (the reason it only worked after a re-toggle).
+				currentKit = nil
+				disconnectAll()
+				Folder:ClearAllChildren()
+				table.clear(Reference)
+				-- drive the tracer lines every frame (no-ops unless Tracers is on)
+				if tracerConn then tracerConn:Disconnect() end
+				tracerConn = runService.RenderStepped:Connect(updateTracers)
 				task.spawn(function()
 					while KitESP.Enabled do
-						if not currentKit then
-							repeat
-								task.wait()
-							until store.equippedKit ~= '' or not KitESP.Enabled
-							if not KitESP.Enabled then break end
-						end
-						local newKit = store.equippedKit
+						local newKit = store.equippedKit or ''
+						-- (Re)build whenever the equipped kit changes. Covers enabling while
+						-- a kit is already equipped (currentKit=nil), switching kits, and a
+						-- new match/respawn clearing the kit then re-equipping the same one
+						-- ('' resets currentKit so the rebuild fires).
 						if newKit ~= currentKit then
 							disconnectAll()
 							Folder:ClearAllChildren()
@@ -9742,7 +9802,7 @@ run(function()
 							end
 							currentKit = newKit
 						end
-						task.wait(1)
+						task.wait(0.5)
 					end
 					disconnectAll()
 					Folder:ClearAllChildren()
@@ -9754,6 +9814,8 @@ run(function()
 				Folder:ClearAllChildren()
 				table.clear(Reference)
 				currentKit = nil
+				if tracerConn then tracerConn:Disconnect() tracerConn = nil end
+				clearTracers()
 			end
 		end,
 		Tooltip = 'ESP for certain kit related objects'
@@ -9762,6 +9824,14 @@ run(function()
 		Name = "Notify",
 		Tooltip = 'Sends a notification when this event occurs',
 		Default = false
+	})
+	Tracers = KitESP:CreateToggle({
+		Name = 'Tracers',
+		Tooltip = 'Draws a line from the bottom of your screen to each tracked object, in the ESP color',
+		Default = false,
+		Function = function(callback)
+			if not callback then clearTracers() end
+		end
 	})
 	Background = KitESP:CreateToggle({
 		Name = 'Background',

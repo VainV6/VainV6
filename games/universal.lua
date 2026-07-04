@@ -534,27 +534,36 @@ run(function()
 		return tostring(ent.TeamColor) ~= 'White' and ent.TeamColor.Color or nil
 	end
 
-	-- Notify when a friend or target joins/leaves
+	-- Notify when a friend or target joins/leaves. Gated by the System Settings ->
+	-- Modules toggles 'Friend notifications' / 'Target notifications' (default on).
+	local function friendNotifsOn()
+		local opt = vain.Categories.Main.Options['Friend notifications']
+		return opt == nil or opt.Enabled
+	end
+	local function targetNotifsOn()
+		local opt = vain.Categories.Main.Options['Target notifications']
+		return opt == nil or opt.Enabled
+	end
 	local function onPlayerAdded(plr)
 		if isFriend(plr) then
-			vain:CreateNotification('Friends', plr.Name .. ' joined the server', 8, 'success')
+			if friendNotifsOn() then vain:CreateNotification('Friends', plr.Name .. ' joined the server', 8, 'success') end
 		elseif isTarget(plr) then
-			vain:CreateNotification('Targets', plr.Name .. ' joined the server', 8, 'alert')
+			if targetNotifsOn() then vain:CreateNotification('Targets', plr.Name .. ' joined the server', 8, 'alert') end
 		end
 	end
 	local function onPlayerRemoving(plr)
 		if isFriend(plr) then
-			vain:CreateNotification('Friends', plr.Name .. ' left the server', 8, 'success')
+			if friendNotifsOn() then vain:CreateNotification('Friends', plr.Name .. ' left the server', 8, 'success') end
 		elseif isTarget(plr) then
-			vain:CreateNotification('Targets', plr.Name .. ' left the server', 8, 'alert')
+			if targetNotifsOn() then vain:CreateNotification('Targets', plr.Name .. ' left the server', 8, 'alert') end
 		end
 	end
 	for _, plr in playersService:GetPlayers() do
 		if plr ~= lplr then
 			if isFriend(plr) then
-				vain:CreateNotification('Friends', plr.Name .. ' is in the server', 8, 'success')
+				if friendNotifsOn() then vain:CreateNotification('Friends', plr.Name .. ' is in the server', 8, 'success') end
 			elseif isTarget(plr) then
-				vain:CreateNotification('Targets', plr.Name .. ' is in the server', 8, 'alert')
+				if targetNotifsOn() then vain:CreateNotification('Targets', plr.Name .. ' is in the server', 8, 'alert') end
 			end
 		end
 	end
@@ -6815,23 +6824,24 @@ end)
 
 run(function()
     local loaded = false
-    local DexExplorer
-    DexExplorer = vain.Categories.Utility:CreateModule({
+    vain.Categories.Utility:CreateModule({
         Name = 'Dex Explorer',
-        Function = function(callback)
-            if not callback then return end
-            if loaded then DexExplorer:Toggle(); return end
+        Button = true, -- clickable one-shot action, not a toggle
+        Function = function()
+            if loaded then
+                notif('Dex Explorer', 'Dex is already open.', 4)
+                return
+            end
             local suc, err = pcall(function()
                 return loadstring(game:HttpGet('https://raw.githubusercontent.com/infyiff/backup/main/dex.lua'))()
             end)
-            DexExplorer:Toggle()
             if suc then
                 loaded = true
             else
                 notif('Dex Explorer', 'Failed to load: ' .. tostring(err), 6, 'warning')
             end
         end,
-        Tooltip = 'Loads and opens the Dex explorer (DataModel browser) in its own window.'
+        Tooltip = 'Click to load and open the Dex explorer (DataModel browser) in its own window.'
     })
 end)
 
