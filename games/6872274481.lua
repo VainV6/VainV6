@@ -1894,8 +1894,10 @@ local AimAssist
 	-- only the chosen player, so the game's own auto-next-on-death can only ever
 	-- land back on them.
 	do
-		local AdvancedSpectate, FixedSpectate, FixedPlayer
+		local AdvancedSpectate, FixedSpectate, FixedPlayer, SpectateTeam
 		local origGetTargets, spec
+		-- maps the "Spectate Team" dropdown label -> team id (nil = All Teams)
+		local teamLabelToId = {}
 
 		local function getSpec()
 			if spec then return spec end
@@ -1991,7 +1993,20 @@ local AimAssist
 								local p = fixedPlr()
 								if p then return { p } end -- only ever this player
 							end
-							return origGetTargets(selfc, ...)
+							local targets = origGetTargets(selfc, ...)
+							-- "Spectate Team": if a specific team is chosen, keep only its
+							-- players; "All Teams" (nil) leaves the full ALL list intact.
+							local teamId = SpectateTeam and teamLabelToId[SpectateTeam.Value]
+							if teamId ~= nil and type(targets) == 'table' then
+								local filtered = {}
+								for _, pl in targets do
+									if pl:GetAttribute('Team') == teamId then
+										filtered[#filtered + 1] = pl
+									end
+								end
+								if #filtered > 0 then return filtered end
+							end
+							return targets
 						end
 					end
 					-- if Fixed Spectate is already on, snap onto the fixed player now
@@ -2055,14 +2070,50 @@ local AimAssist
 				end
 			end
 		})
+		SpectateTeam = AdvancedSpectate:CreateDropdown({
+			Name = 'Spectate Team',
+			List = { 'All Teams' },
+			Default = 'All Teams',
+			Tooltip = 'Spectate every team ("All Teams") or restrict the spectate cycle to one specific team. Ignored while Fixed Spectate is on.',
+			Function = function()
+				-- advance to a valid target within the newly-chosen team right away
+				local ctrl = getSpec()
+				if AdvancedSpectate.Enabled and ctrl and not (FixedSpectate and FixedSpectate.Enabled) then
+					pcall(function()
+						if ctrl.switchSpectateTargets then ctrl:switchSpectateTargets('next') end
+					end)
+				end
+			end
+		})
 
-		-- keep the Fixed Player dropdown in sync with the server population
+		-- keep the Fixed Player + Spectate Team dropdowns in sync with the server
 		local function refreshList()
 			local names = { 'None' }
 			for _, plr in playersService:GetPlayers() do
 				if plr ~= lplr then names[#names + 1] = plr.Name end
 			end
 			pcall(function() FixedPlayer:Change(names) end)
+
+			-- rebuild the team list from the store (label -> id map for filtering)
+			local teamNames = { 'All Teams' }
+			teamLabelToId = {}
+			pcall(function()
+				local teams = bedwars.Store:getState().Game.teams
+				if type(teams) == 'table' then
+					local list = {}
+					for _, t in teams do list[#list + 1] = t end
+					table.sort(list, function(a, b) return tostring(a.id) < tostring(b.id) end)
+					for _, t in list do
+						local label = (t.name and tostring(t.name)) or ('Team ' .. tostring(t.id))
+						-- avoid a label clashing with 'All Teams' or duplicates
+						if label ~= 'All Teams' and not teamLabelToId[label] then
+							teamNames[#teamNames + 1] = label
+							teamLabelToId[label] = t.id
+						end
+					end
+				end
+			end)
+			pcall(function() SpectateTeam:Change(teamNames) end)
 		end
 		refreshList()
 		vain:Clean(playersService.PlayerAdded:Connect(refreshList))
@@ -2089,6 +2140,42 @@ local AimAssist
 			return bedwars.BedwarsKitMeta and bedwars.BedwarsKitMeta[kitId]
 		end
 
+		-- Resolve the MatchDraftPhase enum module once (values may be strings or
+		-- numbers depending on the build) so we can name the current phase.
+		local phaseEnum
+		local function getPhaseEnum()
+			if phaseEnum ~= nil then return phaseEnum or nil end
+			local ok, mod = pcall(function()
+				return require(replicatedStorage.TS.match.draft['match-draft-phase']).MatchDraftPhase
+			end)
+			phaseEnum = (ok and mod) or false
+			return phaseEnum or nil
+		end
+
+		-- Friendly, user-facing label for the current draft phase.
+		local PHASE_LABELS = {
+			LOADING = 'Loading…',
+			BANNING = 'Kit Banning',
+			BANNING_TRANSITION = 'Kit Banning',
+			KIT_SELECT = 'Kit Selection',
+			KIT_SELECT_POST = 'Kit Selection',
+			START_MATCH = 'Starting…',
+		}
+		local function phaseLabel(state)
+			local raw = state.Draft and state.Draft.sharedData and state.Draft.sharedData.matchDraftPhase
+			if raw == nil then return nil end
+			-- If it's already the enum KEY string, use it directly.
+			if type(raw) == 'string' and PHASE_LABELS[raw] then return PHASE_LABELS[raw], raw end
+			-- Otherwise reverse-map the enum value back to its key name.
+			local enum = getPhaseEnum()
+			if enum then
+				for k, v in pairs(enum) do
+					if v == raw and PHASE_LABELS[k] then return PHASE_LABELS[k], k end
+				end
+			end
+			return nil
+		end
+
 		local dbgOnce = false
 		local function build()
 			if gui then gui:Destroy() gui = nil end
@@ -2105,7 +2192,11 @@ local AimAssist
 				return
 			end
 			local draft = state.Draft or {}
-			local kitSel = (draft.teamData and draft.teamData.kitSelection) or {}
+			-- Your OWN team's picks live in Draft.teamData.kitSelection; every OTHER
+			-- team's picks live in Draft.enemyTeamData[teamId].kitSelection. Both are
+			-- keyed by tostring(userId). We resolve per-team below.
+			local ownKitSel = (draft.teamData and draft.teamData.kitSelection) or {}
+			local enemyTeamData = draft.enemyTeamData or {}
 			local kitBans = (draft.sharedData and draft.sharedData.kitBans) or {}
 
 			gui = Instance.new('ScreenGui')
@@ -2122,6 +2213,21 @@ local AimAssist
 			if not gui.Parent then
 				gui.Parent = cloneref(game:GetService('Players')).LocalPlayer:WaitForChild('PlayerGui')
 			end
+
+			-- Phase banner (Kit Banning / Kit Selection) centred above the columns.
+			local plabel = phaseLabel(state)
+			local banner = Instance.new('TextLabel')
+			banner.Name = 'PhaseBanner'
+			banner.AnchorPoint = Vector2.new(0.5, 0)
+			banner.Position = UDim2.new(0.5, 0, 0, 34)
+			banner.Size = UDim2.fromOffset(360, 34)
+			banner.BackgroundTransparency = 1
+			banner.Text = plabel or 'Preparation Preview'
+			banner.TextColor3 = Color3.fromRGB(255, 235, 150)
+			banner.TextSize = 24
+			banner.Font = Enum.Font.GothamBold
+			banner.TextXAlignment = Enum.TextXAlignment.Center
+			banner.Parent = gui
 
 			-- collect teams into a stable ordered list
 			local teamList = {}
@@ -2190,6 +2296,16 @@ local AimAssist
 					banlbl.Parent = col
 				end
 
+				-- Pick this team's kit-selection table: own team from teamData, every
+				-- other team from enemyTeamData[teamId] (both keyed by string userId).
+				local teamKitSel = ownKitSel
+				do
+					local ed = enemyTeamData[team.id] or enemyTeamData[tostring(team.id)]
+					if type(ed) == 'table' and type(ed.kitSelection) == 'table' then
+						teamKitSel = ed.kitSelection
+					end
+				end
+
 				local members = team.members
 				if type(members) == 'table' then
 					local order = 2
@@ -2227,11 +2343,12 @@ local AimAssist
 						nm.Parent = row
 
 						-- Kit source, in priority order:
-						--  1) the draft store's kitSelection (during the pick phase)
+						--  1) this team's kitSelection (own team OR enemyTeamData) during
+						--     the pick phase, keyed by string userId
 						--  2) the player's replicated PlayingAsKit attribute (once they've
 						--     spawned as their kit) -- this is how the game's own nametags
 						--     read everyone's kit, so it's the reliable in-match source.
-						local kitId = kitSel[tostring(uid)] or kitSel[uid]
+						local kitId = teamKitSel[tostring(uid)] or teamKitSel[uid]
 						if (not kitId or kitId == '') and plr then
 							kitId = plr:GetAttribute('PlayingAsKit')
 						end
