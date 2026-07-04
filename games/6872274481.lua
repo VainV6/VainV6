@@ -10653,12 +10653,16 @@ end)
 -- offset a little higher than the head, and Name Tags sits at the head, so the
 -- rows stack cleanly instead of overlapping.
 run(function()
-    local LootDisplay, Highlight
+    local LootDisplay, Highlight, TargetClass, ClassDropdown
     local LootShow = {}       -- resource key -> "Show X" toggle
     local LootThresholds = {} -- resource key -> threshold slider
 
-    -- key  = display / toggle key
-    -- item = inventory itemType to tally + whose ItemMeta.image is the icon
+    -- key   = display / toggle key
+    -- item  = exact inventory itemType to tally (nil when using `match`)
+    -- match = a prefix; ANY itemType starting with it is summed into this key
+    --         (used for blocks: all wool_* colours count as one)
+    -- icon  = itemType whose ItemMeta.image is shown (defaults to `item`)
+    -- off   = true -> Show toggle defaults OFF
     local LOOT_RES = {
         { key = 'iron',      item = 'iron',          color = Color3.fromRGB(210, 210, 210) },
         { key = 'gold',      item = 'gold',          color = Color3.fromRGB(255, 215, 90)  },
@@ -10668,14 +10672,17 @@ run(function()
         { key = 'vitality',  item = 'vitality_star', color = Color3.fromRGB(140, 235, 140) },
         { key = 'crit',      item = 'crit_star',     color = Color3.fromRGB(255, 220, 90)  },
         { key = 'bee',       item = 'bee',           color = Color3.fromRGB(255, 210, 60)  },
+        { key = 'arrow',     item = 'arrow',         color = Color3.fromRGB(230, 230, 230) },
+        { key = 'block',     match = 'wool_', icon = 'wool_white', off = true, color = Color3.fromRGB(235, 235, 235) },
+        { key = 'tesla',     match = 'tesla', icon = 'tesla',      off = true, color = Color3.fromRGB(120, 220, 255) },
     }
-    -- inventory itemType -> the LOOT_RES key that tallies it
+    -- exact itemType -> key
     local ITEM_TO_KEY = {}
-    for _, r in LOOT_RES do ITEM_TO_KEY[r.item] = r.key end
+    for _, r in LOOT_RES do if r.item then ITEM_TO_KEY[r.item] = r.key end end
 
     local iconCache = {}
     local function lootIcon(r)
-        local id = r.item
+        local id = r.icon or r.item or r.match
         if iconCache[id] ~= nil then return iconCache[id] end
         local img = ''
         pcall(function()
@@ -10692,8 +10699,21 @@ run(function()
         local inv = plr and store.inventories[plr]
         if inv and type(inv.items) == 'table' then
             for _, v in inv.items do
-                local key = v and ITEM_TO_KEY[v.itemType]
-                if key then counts[key] = counts[key] + (tonumber(v.amount) or 0) end
+                if v and v.itemType then
+                    local amt = tonumber(v.amount) or 0
+                    local key = ITEM_TO_KEY[v.itemType]
+                    if key then
+                        counts[key] = counts[key] + amt
+                    else
+                        -- prefix-matched groups (blocks)
+                        for _, r in LOOT_RES do
+                            if r.match and v.itemType:sub(1, #r.match) == r.match then
+                                counts[r.key] = counts[r.key] + amt
+                                break
+                            end
+                        end
+                    end
+                end
             end
         end
         return counts
@@ -10702,6 +10722,61 @@ run(function()
         local t = LootShow[key]
         return (t == nil) or t.Enabled
     end
+
+    -- ── Kit class ─────────────────────────────────────────────────────────────
+    -- getBedwarsClassMeta(classId).display -> "Movement"/"Fighter"/... . Resolve
+    -- the module once and cache class display names so we can filter by class.
+    local classMetaFn
+    local function getClassMeta()
+        if classMetaFn ~= nil then return classMetaFn or nil end
+        local ok, mod = pcall(function()
+            return require(replicatedStorage.TS.games.bedwars.kit.class['bedwars-class-meta']).getBedwarsClassMeta
+        end)
+        classMetaFn = (ok and mod) or false
+        return classMetaFn or nil
+    end
+    local classNameCache = {}
+    local function classDisplay(classId)
+        if classId == nil or classId == 0 then return nil end
+        if classNameCache[classId] ~= nil then return classNameCache[classId] or nil end
+        local name
+        local fn = getClassMeta()
+        if fn then
+            pcall(function()
+                local meta = fn(classId)
+                if meta and meta.display then name = tostring(meta.display) end
+            end)
+        end
+        classNameCache[classId] = name or false
+        return name
+    end
+    -- the class name of the kit a player is currently using (via PlayingAsKit)
+    local function playerClassName(plr)
+        if not plr then return nil end
+        local kit = plr:GetAttribute('PlayingAsKit')
+        if not kit then return nil end
+        local meta = bedwars.BedwarsKitMeta and bedwars.BedwarsKitMeta[kit]
+        return meta and classDisplay(meta.kitClass)
+    end
+    -- discover every class display name across all kits (for the dropdown)
+    local function allClassNames()
+        local set, list = {}, { 'Any' }
+        pcall(function()
+            for _, meta in pairs(bedwars.BedwarsKitMeta or {}) do
+                if type(meta) == 'table' then
+                    local n = classDisplay(meta.kitClass)
+                    if n and not set[n] then set[n] = true; list[#list + 1] = n end
+                end
+            end
+        end)
+        table.sort(list, function(a, b)
+            if a == 'Any' then return true end
+            if b == 'Any' then return false end
+            return a < b
+        end)
+        return list
+    end
+
     local function isHighlighted(counts)
         if not (Highlight and Highlight.Enabled) then return false end
         for _, r in LOOT_RES do
@@ -10764,6 +10839,13 @@ run(function()
         local plr = ent.Player
         local adornee = ent.Character and (ent.Character.PrimaryPart or ent.Character:FindFirstChild('HumanoidRootPart'))
         if not (plr and adornee) then clear(ent) return end
+
+        -- Target Kit Class: when on, only show players whose kit is in the chosen
+        -- class ("Any" = no filter). Players whose class is unknown are hidden.
+        if TargetClass and TargetClass.Enabled and ClassDropdown and ClassDropdown.Value ~= 'Any' then
+            if playerClassName(plr) ~= ClassDropdown.Value then clear(ent) return end
+        end
+
         local counts = tally(plr)
 
         local bb = Reference[ent]
@@ -10771,8 +10853,11 @@ run(function()
             bb = Instance.new('BillboardGui')
             bb.Name = 'LootDisplay'
             bb.AlwaysOnTop = true
-            bb.Size = UDim2.fromOffset(340, 22) -- wide enough for all 8 resources
-            bb.StudsOffsetWorldSpace = Vector3.new(0, 3.4, 0) -- above the head/nametag
+            bb.Size = UDim2.fromOffset(460, 22) -- wide enough for all resources
+            -- Sit clearly ABOVE the nametag. A larger world offset keeps a gap even
+            -- at distance (a small offset projects to too few pixels far away and
+            -- the two rows start touching).
+            bb.StudsOffsetWorldSpace = Vector3.new(0, 4.8, 0)
             bb.ClipsDescendants = false
             local row = Instance.new('Frame')
             row.Name = 'Row'
@@ -10868,6 +10953,9 @@ run(function()
     LootShow.vitality = LootDisplay:CreateToggle({ Name = 'Show Vitality Stars', Default = true, Function = rebuild })
     LootShow.crit = LootDisplay:CreateToggle({ Name = 'Show Crit Stars', Default = true, Function = rebuild })
     LootShow.bee = LootDisplay:CreateToggle({ Name = 'Show Bees', Default = true, Function = rebuild })
+    LootShow.arrow = LootDisplay:CreateToggle({ Name = 'Show Arrows', Default = true, Function = rebuild })
+    LootShow.block = LootDisplay:CreateToggle({ Name = 'Show Blocks', Default = false, Function = rebuild })
+    LootShow.tesla = LootDisplay:CreateToggle({ Name = 'Show Teslas', Default = false, Function = rebuild })
     Highlight = LootDisplay:CreateToggle({
         Name = 'Highlight On Threshold',
         Tooltip = 'Glows a player red (character Highlight) once they carry at least the threshold amount of any resource below.',
@@ -10888,6 +10976,39 @@ run(function()
     LootThresholds.vitality = LootDisplay:CreateSlider({ Name = 'Vitality Star Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'star', Visible = false })
     LootThresholds.crit = LootDisplay:CreateSlider({ Name = 'Crit Star Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'star', Visible = false })
     LootThresholds.bee = LootDisplay:CreateSlider({ Name = 'Bee Threshold', Min = 1, Max = 16, Default = 3, Suffix = 'bee', Visible = false })
+    LootThresholds.arrow = LootDisplay:CreateSlider({ Name = 'Arrow Threshold', Min = 1, Max = 64, Default = 8, Suffix = 'arrow', Visible = false })
+    LootThresholds.block = LootDisplay:CreateSlider({ Name = 'Block Threshold', Min = 1, Max = 128, Default = 32, Suffix = 'block', Visible = false })
+    LootThresholds.tesla = LootDisplay:CreateSlider({ Name = 'Tesla Threshold', Min = 1, Max = 8, Default = 1, Suffix = 'tesla', Visible = false })
+
+    -- ── Target Kit Class filter ───────────────────────────────────────────────
+    TargetClass = LootDisplay:CreateToggle({
+        Name = 'Target Kit Class',
+        Tooltip = 'Only show loot for players using a kit of the class picked below.',
+        Default = false,
+        Function = function(callback)
+            if ClassDropdown then ClassDropdown.Object.Visible = callback end
+            rebuild()
+        end,
+    })
+    ClassDropdown = LootDisplay:CreateDropdown({
+        Name = 'Kit Class',
+        List = { 'Any' },
+        Default = 'Any',
+        Tooltip = 'Which kit class to show loot for.',
+        Visible = false,
+        Function = rebuild,
+    })
+    -- populate the class list once the kit meta is available
+    task.spawn(function()
+        for _ = 1, 20 do
+            local names = allClassNames()
+            if #names > 1 then
+                pcall(function() ClassDropdown:Change(names) end)
+                break
+            end
+            task.wait(1)
+        end
+    end)
 end)
 
 run(function()
