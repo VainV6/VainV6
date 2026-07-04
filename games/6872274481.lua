@@ -10400,6 +10400,13 @@ run(function()
     			local size = getfontsize(removeTags(Strings[ent]), nametag.TextSize, nametag.FontFace, Vector2.new(100000, 100000))
     			nametag.Size = UDim2.fromOffset(size.X + 8, size.Y + 7)
     			nametag.Text = Strings[ent]
+    			-- The RankIcon is placed at the text's right edge when the tag is built;
+    			-- appending loot widens the text, so re-anchor it to the new width or it
+    			-- overlaps the loot. (EnchantIcon sits on the left, unaffected.)
+    			local rankIcon = nametag:FindFirstChild('RankIcon')
+    			if rankIcon then
+    				rankIcon.Position = UDim2.fromOffset(size.X + 10, -4)
+    			end
     		end
     	end,
     	Drawing = function(ent)
