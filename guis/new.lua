@@ -6066,20 +6066,25 @@ scaledgui.Size = UDim2.fromScale(1 / scale.Scale, 1 / scale.Scale)
 
 -- ── One-time "What's New" patch-notes overlay ───────────────────────────────
 -- After a major update (the newest PatchNotes version differs from what the user
--- last acknowledged in patchseen.txt), show a fancy centered popup ONCE with the
--- newest changelog. Dismissing it (X / Got it / click backdrop) records the
--- version so it never reappears until the next update.
+-- last acknowledged in patchseen.txt) show a fancy centered popup ONCE with the
+-- newest changelog. Dismiss (X / Got it / click backdrop) records the version so
+-- it never reappears until the next update.
 do
 	local newest = mainapi.PatchNotes and mainapi.PatchNotes[1]
 	local latestPatchVersion = (newest and newest.Version) or mainapi.Version
 	local seen = (isfile('vain/profiles/patchseen.txt') and readfile('vain/profiles/patchseen.txt')) or ''
-	-- Only show when there IS a newest entry and it hasn't been acknowledged.
-	-- First-ever run (no patchseen.txt) also shows it once, then records it.
 	if newest and seen ~= latestPatchVersion then
-		local accent = color.Light(uipallet.Main, 0.28)
+		local accent      = color.Light(uipallet.Main, 0.30)
+		local accentGlow  = color.Light(uipallet.Main, 0.55)
+		local cardColor   = color.Dark(uipallet.Main, 0.02)
+		local textColor   = uipallet.Text
+		local mutedText   = color.Dark(uipallet.Text, 0.42)
+		local bodyText    = color.Dark(uipallet.Text, 0.14)
 
-		-- Full-screen dim backdrop (its own ScreenGui so it sits above everything
-		-- and ignores the click-gui scale/visibility).
+		local CARD_W, CARD_H = 470, 400
+
+		-- Own top-DisplayOrder ScreenGui so it sits above everything and is not
+		-- affected by the click-gui scale/visibility.
 		local overlayGui = Instance.new('ScreenGui')
 		overlayGui.Name = randomString()
 		overlayGui.DisplayOrder = 2147483647
@@ -6088,24 +6093,21 @@ do
 		overlayGui.ResetOnSpawn = false
 		overlayGui.Parent = gui.Parent
 
-		local backdrop, card
+		local backdrop, card, cardScale
 		local dismissed = false
 		local function dismiss()
 			if dismissed then return end
 			dismissed = true
 			pcall(function() writefile('vain/profiles/patchseen.txt', latestPatchVersion) end)
-			-- fade + shrink out, then destroy
 			pcall(function()
-				tweenService:Create(backdrop, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
+				tweenService:Create(backdrop, TweenInfo.new(0.22), {BackgroundTransparency = 1}):Play()
+				tweenService:Create(cardScale, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
+				tweenService:Create(card, TweenInfo.new(0.2), {GroupTransparency = 1}):Play()
 			end)
-			pcall(function()
-				tweenService:Create(card, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-					Size = UDim2.fromOffset(0, 0)
-				}):Play()
-			end)
-			task.delay(0.25, function() pcall(function() overlayGui:Destroy() end) end)
+			task.delay(0.28, function() pcall(function() overlayGui:Destroy() end) end)
 		end
 
+		-- Dim backdrop (click to dismiss).
 		backdrop = Instance.new('TextButton')
 		backdrop.Name = 'Backdrop'
 		backdrop.Size = UDim2.fromScale(1, 1)
@@ -6116,128 +6118,180 @@ do
 		backdrop.Text = ''
 		backdrop.Parent = overlayGui
 		backdrop.MouseButton1Click:Connect(dismiss)
-		tweenService:Create(backdrop, TweenInfo.new(0.25), {BackgroundTransparency = 0.45}):Play()
+		tweenService:Create(backdrop, TweenInfo.new(0.3), {BackgroundTransparency = 0.5}):Play()
 
-		-- The card. Clicking the card itself must NOT dismiss (only the backdrop),
-		-- so it's a Frame on top of the backdrop button.
-		card = Instance.new('Frame')
+		-- Holder centres + scales the whole popup as one unit (pop-in) and carries
+		-- the soft slice-image blur BEHIND the card (a CanvasGroup would clip the
+		-- oversized blur, so it lives on the holder instead).
+		local holder = Instance.new('Frame')
+		holder.Name = 'Holder'
+		holder.AnchorPoint = Vector2.new(0.5, 0.5)
+		holder.Position = UDim2.fromScale(0.5, 0.5)
+		holder.Size = UDim2.fromOffset(CARD_W, CARD_H)
+		holder.BackgroundTransparency = 1
+		holder.Parent = overlayGui
+		addBlur(holder) -- native slice-image blur behind the panel, like other panels
+
+		cardScale = Instance.new('UIScale')
+		cardScale.Scale = 0.9
+		cardScale.Parent = holder
+
+		-- Card is a CanvasGroup so the whole thing fades as one unit via
+		-- GroupTransparency (no per-element transparency juggling).
+		card = Instance.new('CanvasGroup')
 		card.Name = 'Card'
-		card.AnchorPoint = Vector2.new(0.5, 0.5)
-		card.Position = UDim2.fromScale(0.5, 0.5)
-		card.Size = UDim2.fromOffset(0, 0) -- tween to full size for a pop-in
-		card.BackgroundColor3 = color.Dark(uipallet.Main, 0.02)
+		card.Size = UDim2.fromScale(1, 1)
+		card.BackgroundColor3 = cardColor
 		card.BorderSizePixel = 0
-		card.ClipsDescendants = true
-		card.Parent = overlayGui
-		addCorner(card, UDim.new(0, 10))
+		card.GroupTransparency = 1
+		card.Parent = holder
+		addCorner(card, UDim.new(0, 12))
+
 		local cardStroke = Instance.new('UIStroke')
 		cardStroke.Color = accent
 		cardStroke.Thickness = 1
-		cardStroke.Transparency = 0.4
+		cardStroke.Transparency = 0.35
 		cardStroke.Parent = card
-		-- subtle vertical gradient sheen on the card background
+
 		local cardGrad = Instance.new('UIGradient')
 		cardGrad.Rotation = 90
-		cardGrad.Color = ColorSequence.new(color.Light(uipallet.Main, 0.05), color.Dark(uipallet.Main, 0.03))
+		cardGrad.Color = ColorSequence.new(color.Light(uipallet.Main, 0.045), color.Dark(uipallet.Main, 0.03))
 		cardGrad.Parent = card
 
-		local TARGET = UDim2.fromOffset(460, 380)
-		tweenService:Create(card, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = TARGET}):Play()
+		-- pop in
+		tweenService:Create(card, TweenInfo.new(0.28), {GroupTransparency = 0}):Play()
+		tweenService:Create(cardScale, TweenInfo.new(0.42, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1}):Play()
 
-		-- Accent header bar with a horizontal gradient
-		local headerbar = Instance.new('Frame')
-		headerbar.Name = 'Header'
-		headerbar.Size = UDim2.new(1, 0, 0, 3)
-		headerbar.BackgroundColor3 = accent
-		headerbar.BorderSizePixel = 0
-		headerbar.ZIndex = 3
-		headerbar.Parent = card
-		local headerGrad = Instance.new('UIGradient')
-		headerGrad.Color = ColorSequence.new({
+		-- Accent underline under the header row, with a moving sheen (alive).
+		local headerline = Instance.new('Frame')
+		headerline.Name = 'HeaderLine'
+		headerline.Size = UDim2.new(1, -40, 0, 2)
+		headerline.Position = UDim2.fromOffset(20, 62)
+		headerline.BackgroundColor3 = accent
+		headerline.BackgroundTransparency = 0.2
+		headerline.BorderSizePixel = 0
+		headerline.Parent = card
+		addCorner(headerline, UDim.new(1, 0))
+		local sheen = Instance.new('UIGradient')
+		sheen.Color = ColorSequence.new({
 			ColorSequenceKeypoint.new(0, accent),
-			ColorSequenceKeypoint.new(0.5, color.Light(uipallet.Main, 0.5)),
+			ColorSequenceKeypoint.new(0.5, accentGlow),
 			ColorSequenceKeypoint.new(1, accent),
 		})
-		headerGrad.Parent = headerbar
+		sheen.Offset = Vector2.new(-1, 0)
+		sheen.Parent = headerline
+		-- continuously sweep the sheen across the underline
+		task.spawn(function()
+			while headerline.Parent do
+				sheen.Offset = Vector2.new(-1, 0)
+				local tw = tweenService:Create(sheen, TweenInfo.new(2.2, Enum.EasingStyle.Linear), {Offset = Vector2.new(1, 0)})
+				tw:Play()
+				tw.Completed:Wait()
+				task.wait(1.2)
+			end
+		end)
+
+		-- Little accent "spark" icon block to the left of the title.
+		local spark = Instance.new('Frame')
+		spark.Name = 'Spark'
+		spark.Size = UDim2.fromOffset(4, 22)
+		spark.Position = UDim2.fromOffset(22, 22)
+		spark.BackgroundColor3 = accentGlow
+		spark.BorderSizePixel = 0
+		spark.Parent = card
+		addCorner(spark, UDim.new(1, 0))
+		-- gentle pulse
+		task.spawn(function()
+			while spark.Parent do
+				tweenService:Create(spark, TweenInfo.new(0.9, Enum.EasingStyle.Sine), {BackgroundTransparency = 0.5}):Play()
+				task.wait(0.9)
+				if not spark.Parent then break end
+				tweenService:Create(spark, TweenInfo.new(0.9, Enum.EasingStyle.Sine), {BackgroundTransparency = 0}):Play()
+				task.wait(0.9)
+			end
+		end)
 
 		-- Title: "What's New"
 		local titlelbl = Instance.new('TextLabel')
 		titlelbl.Name = 'Title'
-		titlelbl.Size = UDim2.new(1, -110, 0, 26)
-		titlelbl.Position = UDim2.fromOffset(20, 16)
+		titlelbl.Size = UDim2.new(1, -160, 0, 24)
+		titlelbl.Position = UDim2.fromOffset(36, 20)
 		titlelbl.BackgroundTransparency = 1
 		titlelbl.Text = "What's New"
 		titlelbl.TextXAlignment = Enum.TextXAlignment.Left
-		titlelbl.TextColor3 = uipallet.Text
-		titlelbl.TextSize = 20
+		titlelbl.TextYAlignment = Enum.TextYAlignment.Center
+		titlelbl.TextColor3 = textColor
+		titlelbl.TextSize = 19
 		titlelbl.FontFace = uipallet.FontSemiBold
-		titlelbl.ZIndex = 3
 		titlelbl.Parent = card
 
-		-- Version + date badge (top-right, pill)
+		-- Subtitle
+		local subtitle = Instance.new('TextLabel')
+		subtitle.Name = 'Subtitle'
+		subtitle.Size = UDim2.new(1, -160, 0, 16)
+		subtitle.Position = UDim2.fromOffset(36, 42)
+		subtitle.BackgroundTransparency = 1
+		subtitle.Text = 'Vain was updated — here are the highlights.'
+		subtitle.TextXAlignment = Enum.TextXAlignment.Left
+		subtitle.TextColor3 = mutedText
+		subtitle.TextSize = 12
+		subtitle.FontFace = uipallet.Font
+		subtitle.Parent = card
+
+		-- Version + date pill (top-right, vertically centred to the title row)
 		local badge = Instance.new('Frame')
 		badge.Name = 'VersionBadge'
-		badge.AnchorPoint = Vector2.new(1, 0)
-		badge.Size = UDim2.fromOffset(0, 22)
+		badge.AnchorPoint = Vector2.new(1, 0.5)
+		badge.Size = UDim2.fromOffset(0, 24)
 		badge.AutomaticSize = Enum.AutomaticSize.X
-		badge.Position = UDim2.new(1, -18, 0, 18)
+		badge.Position = UDim2.new(1, -20, 0, 32)
 		badge.BackgroundColor3 = accent
-		badge.BackgroundTransparency = 0.55
+		badge.BackgroundTransparency = 0.5
 		badge.BorderSizePixel = 0
-		badge.ZIndex = 3
 		badge.Parent = card
 		addCorner(badge, UDim.new(1, 0))
+		local badgeStroke = Instance.new('UIStroke')
+		badgeStroke.Color = accentGlow
+		badgeStroke.Transparency = 0.5
+		badgeStroke.Parent = badge
 		local badgepad = Instance.new('UIPadding')
-		badgepad.PaddingLeft = UDim.new(0, 10)
-		badgepad.PaddingRight = UDim.new(0, 10)
+		badgepad.PaddingLeft = UDim.new(0, 11)
+		badgepad.PaddingRight = UDim.new(0, 11)
 		badgepad.Parent = badge
 		local badgelbl = Instance.new('TextLabel')
 		badgelbl.Size = UDim2.new(0, 0, 1, 0)
 		badgelbl.AutomaticSize = Enum.AutomaticSize.X
 		badgelbl.BackgroundTransparency = 1
 		badgelbl.Text = 'v' .. tostring(newest.Version) .. (newest.Date and ('  ·  ' .. newest.Date) or '')
-		badgelbl.TextColor3 = uipallet.Text
+		badgelbl.TextColor3 = textColor
 		badgelbl.TextSize = 12
 		badgelbl.FontFace = uipallet.FontSemiBold
-		badgelbl.ZIndex = 3
 		badgelbl.Parent = badge
-
-		local subtitle = Instance.new('TextLabel')
-		subtitle.Name = 'Subtitle'
-		subtitle.Size = UDim2.new(1, -40, 0, 16)
-		subtitle.Position = UDim2.fromOffset(20, 42)
-		subtitle.BackgroundTransparency = 1
-		subtitle.Text = 'Vain was updated — here are the highlights.'
-		subtitle.TextXAlignment = Enum.TextXAlignment.Left
-		subtitle.TextColor3 = color.Dark(uipallet.Text, 0.4)
-		subtitle.TextSize = 12
-		subtitle.FontFace = uipallet.Font
-		subtitle.ZIndex = 3
-		subtitle.Parent = card
 
 		-- Scrolling body of changes
 		local body = Instance.new('ScrollingFrame')
 		body.Name = 'Body'
-		body.Size = UDim2.new(1, -16, 1, -118)
-		body.Position = UDim2.fromOffset(8, 68)
+		body.Size = UDim2.new(1, -20, 1, -132)
+		body.Position = UDim2.fromOffset(10, 76)
 		body.BackgroundTransparency = 1
 		body.BorderSizePixel = 0
 		body.ScrollBarThickness = 3
 		body.ScrollBarImageColor3 = accent
+		body.ScrollBarImageTransparency = 0.3
 		body.CanvasSize = UDim2.new()
-		body.ZIndex = 3
 		body.Parent = card
 		local bodylist = Instance.new('UIListLayout')
 		bodylist.SortOrder = Enum.SortOrder.LayoutOrder
-		bodylist.Padding = UDim.new(0, 8)
+		bodylist.Padding = UDim.new(0, 9)
 		bodylist.Parent = body
 		local bodypad = Instance.new('UIPadding')
-		bodypad.PaddingLeft = UDim.new(0, 14)
-		bodypad.PaddingRight = UDim.new(0, 10)
-		bodypad.PaddingTop = UDim.new(0, 4)
-		bodypad.PaddingBottom = UDim.new(0, 6)
+		bodypad.PaddingLeft = UDim.new(0, 16)
+		bodypad.PaddingRight = UDim.new(0, 12)
+		bodypad.PaddingTop = UDim.new(0, 6)
+		bodypad.PaddingBottom = UDim.new(0, 8)
 		bodypad.Parent = body
 
+		local rows = {}
 		for i, line in ipairs(newest.Changes or {}) do
 			local row = Instance.new('Frame')
 			row.Name = 'Change'
@@ -6245,77 +6299,128 @@ do
 			row.AutomaticSize = Enum.AutomaticSize.Y
 			row.BackgroundTransparency = 1
 			row.LayoutOrder = i
-			row.ZIndex = 3
 			row.Parent = body
+
+			-- accent dot, vertically aligned to first text line
 			local dot = Instance.new('Frame')
 			dot.Name = 'Dot'
-			dot.Size = UDim2.fromOffset(5, 5)
-			dot.Position = UDim2.fromOffset(0, 6)
-			dot.BackgroundColor3 = accent
+			dot.Size = UDim2.fromOffset(6, 6)
+			dot.Position = UDim2.fromOffset(1, 6)
+			dot.BackgroundColor3 = accentGlow
 			dot.BorderSizePixel = 0
-			dot.ZIndex = 3
 			dot.Parent = row
 			addCorner(dot, UDim.new(1, 0))
+
 			local text = Instance.new('TextLabel')
 			text.Name = 'Text'
-			text.Size = UDim2.new(1, -16, 0, 0)
-			text.Position = UDim2.fromOffset(16, 0)
+			text.Size = UDim2.new(1, -20, 0, 0)
+			text.Position = UDim2.fromOffset(20, 0)
 			text.AutomaticSize = Enum.AutomaticSize.Y
 			text.BackgroundTransparency = 1
 			text.Text = line
 			text.TextXAlignment = Enum.TextXAlignment.Left
 			text.TextYAlignment = Enum.TextYAlignment.Top
 			text.TextWrapped = true
-			text.TextColor3 = color.Dark(uipallet.Text, 0.12)
+			text.TextColor3 = bodyText
 			text.TextSize = 13
+			text.LineHeight = 1.08
 			text.FontFace = uipallet.Font
-			text.ZIndex = 3
 			text.Parent = row
+
+			-- start hidden + nudged down for a staggered reveal
+			text.TextTransparency = 1
+			dot.BackgroundTransparency = 1
+			row.Position = UDim2.fromOffset(0, 8)
+			rows[i] = {row = row, text = text, dot = dot}
 		end
+
 		bodylist:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
 			body.CanvasSize = UDim2.fromOffset(0, bodylist.AbsoluteContentSize.Y + 8)
 		end)
 		body.CanvasSize = UDim2.fromOffset(0, bodylist.AbsoluteContentSize.Y + 8)
 
-		-- "Got it" dismiss button (bottom)
+		-- staggered fade/slide-in of each change once the card has popped in
+		task.spawn(function()
+			task.wait(0.22)
+			for _, r in ipairs(rows) do
+				if not r.row.Parent then break end
+				tweenService:Create(r.text, TweenInfo.new(0.3), {TextTransparency = 0}):Play()
+				tweenService:Create(r.dot, TweenInfo.new(0.3), {BackgroundTransparency = 0}):Play()
+				tweenService:Create(r.row, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.fromOffset(0, 0)}):Play()
+				task.wait(0.06)
+			end
+		end)
+
+		-- bottom fade so long lists scroll under a soft edge (looks polished)
+		local bottomfade = Instance.new('Frame')
+		bottomfade.Name = 'BottomFade'
+		bottomfade.Size = UDim2.new(1, -20, 0, 22)
+		bottomfade.Position = UDim2.new(0, 10, 1, -78)
+		bottomfade.BackgroundColor3 = cardColor
+		bottomfade.BorderSizePixel = 0
+		bottomfade.Parent = card
+		local fadeGrad = Instance.new('UIGradient')
+		fadeGrad.Rotation = 90
+		fadeGrad.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+		fadeGrad.Parent = bottomfade
+
+		-- "Got it" dismiss button (bottom, centred) with hover lift
 		local gotit = Instance.new('TextButton')
 		gotit.Name = 'GotIt'
 		gotit.AnchorPoint = Vector2.new(0.5, 1)
-		gotit.Position = UDim2.new(0.5, 0, 1, -14)
-		gotit.Size = UDim2.fromOffset(140, 32)
+		gotit.Position = UDim2.new(0.5, 0, 1, -16)
+		gotit.Size = UDim2.fromOffset(150, 34)
 		gotit.BackgroundColor3 = accent
-		gotit.BackgroundTransparency = 0.15
+		gotit.BackgroundTransparency = 0.1
 		gotit.AutoButtonColor = false
 		gotit.Text = 'Got it'
-		gotit.TextColor3 = uipallet.Text
+		gotit.TextColor3 = textColor
 		gotit.TextSize = 14
 		gotit.FontFace = uipallet.FontSemiBold
-		gotit.ZIndex = 4
 		gotit.Parent = card
-		addCorner(gotit, UDim.new(0, 6))
+		addCorner(gotit, UDim.new(0, 7))
+		local gotitStroke = Instance.new('UIStroke')
+		gotitStroke.Color = accentGlow
+		gotitStroke.Transparency = 0.4
+		gotitStroke.Parent = gotit
+		local gotitScale = Instance.new('UIScale')
+		gotitScale.Parent = gotit
 		gotit.MouseEnter:Connect(function()
-			tweenService:Create(gotit, TweenInfo.new(0.12), {BackgroundTransparency = 0}):Play()
+			tweenService:Create(gotit, TweenInfo.new(0.14), {BackgroundTransparency = 0}):Play()
+			tweenService:Create(gotitScale, TweenInfo.new(0.14, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1.04}):Play()
+			tweenService:Create(gotitStroke, TweenInfo.new(0.14), {Transparency = 0}):Play()
 		end)
 		gotit.MouseLeave:Connect(function()
-			tweenService:Create(gotit, TweenInfo.new(0.12), {BackgroundTransparency = 0.15}):Play()
+			tweenService:Create(gotit, TweenInfo.new(0.14), {BackgroundTransparency = 0.1}):Play()
+			tweenService:Create(gotitScale, TweenInfo.new(0.14), {Scale = 1}):Play()
+			tweenService:Create(gotitStroke, TweenInfo.new(0.14), {Transparency = 0.4}):Play()
 		end)
 		gotit.MouseButton1Click:Connect(dismiss)
 
-		-- X close (top-right corner of the card)
+		-- X close (top-right corner)
 		local xclose = Instance.new('TextButton')
 		xclose.Name = 'Close'
 		xclose.AnchorPoint = Vector2.new(1, 0)
-		xclose.Position = UDim2.new(1, -8, 0, 8)
-		xclose.Size = UDim2.fromOffset(24, 24)
+		xclose.Position = UDim2.new(1, -10, 0, 10)
+		xclose.Size = UDim2.fromOffset(22, 22)
+		xclose.BackgroundColor3 = accent
 		xclose.BackgroundTransparency = 1
+		xclose.AutoButtonColor = false
 		xclose.Text = '×'
-		xclose.TextColor3 = color.Dark(uipallet.Text, 0.35)
-		xclose.TextSize = 22
+		xclose.TextColor3 = mutedText
+		xclose.TextSize = 20
 		xclose.FontFace = uipallet.FontSemiBold
-		xclose.ZIndex = 5
 		xclose.Parent = card
-		xclose.MouseEnter:Connect(function() xclose.TextColor3 = uipallet.Text end)
-		xclose.MouseLeave:Connect(function() xclose.TextColor3 = color.Dark(uipallet.Text, 0.35) end)
+		addCorner(xclose, UDim.new(0, 5))
+		xclose.MouseEnter:Connect(function()
+			tweenService:Create(xclose, TweenInfo.new(0.12), {BackgroundTransparency = 0.6, TextColor3 = textColor}):Play()
+		end)
+		xclose.MouseLeave:Connect(function()
+			tweenService:Create(xclose, TweenInfo.new(0.12), {BackgroundTransparency = 1, TextColor3 = mutedText}):Play()
+		end)
 		xclose.MouseButton1Click:Connect(dismiss)
 	end
 end
