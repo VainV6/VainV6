@@ -10798,6 +10798,7 @@ run(function()
     local List
     local Background
     local Color
+    local ShowAmount
     local Reference = {}
     local Connections = {}
     local Folder = Instance.new('Folder')
@@ -10828,16 +10829,37 @@ run(function()
     	end
 
     	v.Enabled = false
-    	local alreadygot = {}
+    	-- Tally the TOTAL quantity of each matching item type in the chest (sum of
+    	-- each stack's Amount attribute, defaulting to 1), so we can show how MUCH
+    	-- loot is stored, not just that a type is present.
+    	local counts = {}
+    	local order = {}
     	for _, item in chestitems do
-    		if not alreadygot[item.Name] and (table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name)) then
-    			alreadygot[item.Name] = true
-    			v.Enabled = true
-    			local blockimage = Instance.new('ImageLabel')
-    			blockimage.Size = UDim2.fromOffset(32, 32)
-    			blockimage.BackgroundTransparency = 1
-    			blockimage.Image = bedwars.getIcon({ itemType = item.Name }, true)
-    			blockimage.Parent = v.Frame
+    		if (table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name)) then
+    			if counts[item.Name] == nil then order[#order + 1] = item.Name end
+    			local amt = tonumber(item:GetAttribute('Amount')) or 1
+    			counts[item.Name] = (counts[item.Name] or 0) + amt
+    		end
+    	end
+    	for _, name in order do
+    		v.Enabled = true
+    		local blockimage = Instance.new('ImageLabel')
+    		blockimage.Size = UDim2.fromOffset(32, 32)
+    		blockimage.BackgroundTransparency = 1
+    		blockimage.Image = bedwars.getIcon({ itemType = name }, true)
+    		blockimage.Parent = v.Frame
+    		local total = counts[name]
+    		if total > 1 and (not ShowAmount or ShowAmount.Enabled) then
+    			local amounttext = Instance.new('TextLabel')
+    			amounttext.Name = 'Amount'
+    			amounttext.Size = UDim2.fromScale(1, 1)
+    			amounttext.BackgroundTransparency = 1
+    			amounttext.Text = tostring(total)
+    			amounttext.TextColor3 = Color3.new(1, 1, 1)
+    			amounttext.TextSize = 16
+    			amounttext.TextStrokeTransparency = 0.3
+    			amounttext.Font = Enum.Font.Arial
+    			amounttext.Parent = blockimage
     		end
     	end
     	table.clear(chestitems)
@@ -10976,6 +10998,16 @@ run(function()
     		end
     	end,
     	Darker = true,
+    })
+    ShowAmount = StorageESP:CreateToggle({
+    	Name = 'Show Amount',
+    	Tooltip = 'Show the total quantity of each stored item on its icon (not just that it is present)',
+    	Default = true,
+    	Function = function()
+    		for _, v in Reference do
+    			task.spawn(refreshAdornee, v)
+    		end
+    	end,
     })
 end)
 
