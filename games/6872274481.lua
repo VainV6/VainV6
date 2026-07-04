@@ -10281,11 +10281,12 @@ run(function()
     -- Tally a player's carried resources from their replicated inventory.
     -- store.inventories[plr].items is the same list the game reads for the
     -- equipment icons, so this needs no extra server calls.
+    -- icon = emoji shown before the amount (RichText labels render emoji).
     local LOOT_RES = {
-    	{ key = 'iron',    label = 'Iron',    color = 'rgb(210, 210, 210)' },
-    	{ key = 'gold',    label = 'Gold',    color = 'rgb(255, 215, 90)'  },
-    	{ key = 'emerald', label = 'Emerald', color = 'rgb(80, 235, 120)'  },
-    	{ key = 'diamond', label = 'Diamond', color = 'rgb(120, 225, 255)' },
+    	{ key = 'iron',    label = 'Iron',    color = 'rgb(210, 210, 210)', icon = '\u{1F529}' }, -- 🔩 nut & bolt
+    	{ key = 'gold',    label = 'Gold',    color = 'rgb(255, 215, 90)',  icon = '\u{1FA99}' }, -- 🪙 coin
+    	{ key = 'emerald', label = 'Emerald', color = 'rgb(80, 235, 120)',  icon = '\u{1F7E9}' }, -- 🟩
+    	{ key = 'diamond', label = 'Diamond', color = 'rgb(120, 225, 255)', icon = '\u{1F48E}' }, -- 💎
     }
     local function tallyLoot(plr)
     	local counts = { iron = 0, gold = 0, emerald = 0, diamond = 0 }
@@ -10307,7 +10308,7 @@ run(function()
     	for _, r in LOOT_RES do
     		local n = counts[r.key]
     		if n > 0 then
-    			parts[#parts + 1] = ('<font color="%s">%d</font>'):format(r.color, n)
+    			parts[#parts + 1] = ('%s <font color="%s">%d</font>'):format(r.icon, r.color, n)
     			-- highlight when any resource meets its threshold slider
     			if Highlight and Highlight.Enabled then
     				local slider = LootThresholds[r.key]
@@ -10316,7 +10317,7 @@ run(function()
     		end
     	end
     	if #parts == 0 then return nil end
-    	return ' ' .. table.concat(parts, ' '), highlighted
+    	return ' ' .. table.concat(parts, '  '), highlighted
     end
     -- plain-text version for the Drawing renderer (no rich-text tags)
     local function lootSuffixPlain(plr)
@@ -10326,7 +10327,7 @@ run(function()
     	for _, r in LOOT_RES do
     		local n = counts[r.key]
     		if n > 0 then
-    			parts[#parts + 1] = tostring(n)
+    			parts[#parts + 1] = r.icon .. tostring(n)
     			if Highlight and Highlight.Enabled then
     				local slider = LootThresholds[r.key]
     				if slider and n >= (slider.Value or math.huge) then highlighted = true end
@@ -10334,7 +10335,7 @@ run(function()
     		end
     	end
     	if #parts == 0 then return nil end
-    	return ' [' .. table.concat(parts, '/') .. ']', highlighted
+    	return ' ' .. table.concat(parts, ' '), highlighted
     end
 
     local Updated = {
@@ -10389,13 +10390,16 @@ run(function()
     				end
     			end
 
+    			-- When a loot threshold is crossed, wrap the WHOLE tag in red so it's
+    			-- unmistakable (a plain TextColor3 loses to the per-resource <font>
+    			-- colours already in the string).
+    			if lootHighlight then
+    				Strings[ent] = '<font color="rgb(255,70,70)">' .. Strings[ent] .. '</font>'
+    			end
+
     			local size = getfontsize(removeTags(Strings[ent]), nametag.TextSize, nametag.FontFace, Vector2.new(100000, 100000))
     			nametag.Size = UDim2.fromOffset(size.X + 8, size.Y + 7)
     			nametag.Text = Strings[ent]
-    			-- highlight the whole tag when a loot threshold is crossed
-    			if lootHighlight then
-    				nametag.TextColor3 = Color3.fromRGB(255, 90, 90)
-    			end
     		end
     	end,
     	Drawing = function(ent)
@@ -11152,6 +11156,24 @@ run(function()
         return best
     end
 
+    -- Describe a chest's team for the alert: "your team" if it's yours, otherwise
+    -- the team's colour name (e.g. "the Blue team") rather than a numeric id.
+    local function teamDescriptor(teamId)
+        if teamId == nil then return 'a team chest' end
+        if teamId == lplr:GetAttribute('Team') then return 'YOUR team\'s chest' end
+        local name
+        pcall(function()
+            local teams = bedwars.Store:getState().Game.teams
+            if type(teams) == 'table' then
+                for _, t in teams do
+                    if t.id == teamId then name = t.name and tostring(t.name); break end
+                end
+            end
+        end)
+        if name then return 'the ' .. name .. ' team\'s chest' end
+        return 'a team chest'
+    end
+
     -- Fire a one-shot notification when a chest's emerald/diamond count first
     -- crosses its threshold. Skips your own team unless Detect Own Team is on.
     local function checkResourceAlert(adornee, counts)
@@ -11173,8 +11195,7 @@ run(function()
             local last = st[res] or 0
             if over and n > last then
                 st[res] = n
-                local teamtxt = team ~= nil and (' (Team ' .. tostring(team) .. ')') or ''
-                notif('Storage ESP', ('%d %s in a team chest%s'):format(n, res, teamtxt), 8, 'warning')
+                notif('Storage ESP', ('%d %s in %s'):format(n, res, teamDescriptor(team)), 8, 'warning')
             elseif not over then
                 st[res] = 0 -- back under threshold -> re-arm
             end
