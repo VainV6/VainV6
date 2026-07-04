@@ -5508,7 +5508,7 @@ run(function()
     end
 
     FPSBoost = vain.Categories.Utility:CreateModule({
-        Name = 'FPS Booster',
+        Name = 'FPS Boost',
         Tooltip = 'Strips expensive rendering (particles, textures, shadows, post-processing, quality) to boost FPS. Client-visual only. Tune what to sacrifice below.',
         Function = function(callback)
             if callback then
