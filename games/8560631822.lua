@@ -29,15 +29,18 @@ local function downloadFile(path, func)
 end
 
 vain.Place = 6872274481
-if isfile('vain/games/'..vain.Place..'.lua') then
-	loadstring(readfile('vain/games/'..vain.Place..'.lua'), 'bedwars')()
-else
-	if not shared.VapeDeveloper then
-		local suc, res = pcall(function() 
-			return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeV4ForRoblox/'..readfile('vain/profiles/commit.txt')..'/games/'..vain.Place..'.lua', true) 
-		end)
-		if suc and res ~= '404: Not Found' then
-			loadstring(downloadFile('vain/games/'..vain.Place..'.lua'), 'bedwars')()
+-- Match-place redirect -> load the full 6872274481 module file. Always go through
+-- downloadFile so it fetches when missing (incl. dev mode), and self-heal a cached
+-- error body. (The old code skipped the download in developer mode when the file
+-- wasn't cached -> zero match modules.)
+do
+	local delfile = delfile or function(file) pcall(writefile, file, '') end
+	local path = 'vain/games/'..vain.Place..'.lua'
+	if isfile(path) then
+		local cached = readfile(path)
+		if cached == '' or cached:match('^%s*%d%d%d:%s') then
+			pcall(delfile, path)
 		end
 	end
+	loadstring(downloadFile(path), 'bedwars')()
 end

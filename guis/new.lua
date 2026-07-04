@@ -5817,7 +5817,21 @@ function mainapi:Load(skipgui, profile)
 		button.BackgroundColor3 = Color3.new()
 		button.BackgroundTransparency = hide and 1 or 0.35
 		button.Text = ''
-		button.Parent = game.GameId == 2619619496 and cloneref(game:GetService('Players')).LocalPlayer.PlayerGui.TopBarAppGui.TopBarApp or gui
+		-- BedWars (GameId 2619619496) parents the button into its custom top-bar
+		-- (TopBarAppGui.TopBarApp) -- but that GUI isn't always present (it doesn't
+		-- exist yet mid-match / in some states), and indexing it when missing threw
+		-- "TopBarAppGui is not a valid member of PlayerGui", which aborted the WHOLE
+		-- GUI load (finishLoading) and left most modules unregistered. Resolve it
+		-- safely and fall back to our own gui when it's not there.
+		local topbarParent
+		if game.GameId == 2619619496 then
+			pcall(function()
+				local pg = cloneref(game:GetService('Players')).LocalPlayer:FindFirstChild('PlayerGui')
+				local tba = pg and pg:FindFirstChild('TopBarAppGui')
+				topbarParent = tba and tba:FindFirstChild('TopBarApp')
+			end)
+		end
+		button.Parent = topbarParent or gui
 		local image = Instance.new('ImageLabel')
 		image.AnchorPoint = Vector2.new(0.5, 0.5)
 		image.Size = UDim2.fromOffset(22, 22)

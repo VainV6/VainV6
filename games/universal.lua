@@ -5629,35 +5629,60 @@ run(function()
         },
     }
 
+    local created = {}          -- our instances (parented directly to Lighting)
+    local hiddenAtmos = nil      -- the game's own Atmosphere we disabled (to restore)
+
+    local function clearShader()
+        for _, inst in created do pcall(function() inst:Destroy() end) end
+        table.clear(created)
+        -- restore the game's original Atmosphere if we hid it
+        if hiddenAtmos and hiddenAtmos.Parent == nil then
+            pcall(function() hiddenAtmos.Parent = lightingService end)
+        end
+        hiddenAtmos = nil
+        folder = nil
+    end
+
     local function build()
-        if folder then folder:Destroy() folder = nil end
+        clearShader()
         local cfg = PRESETS[(Preset and Preset.Value) or 'Realistic'] or PRESETS.Realistic
-        folder = Instance.new('Folder')
-        folder.Name = 'VainShader'
-        folder.Parent = lightingService
 
+        -- Atmosphere MUST be a direct child of Lighting (it does NOT render inside a
+        -- Folder), and only ONE Atmosphere renders at a time -- so temporarily
+        -- remove the game's existing one and add ours straight to Lighting.
+        local existing = lightingService:FindFirstChildOfClass('Atmosphere')
+        if existing and existing.Name ~= 'VainAtmosphere' then
+            hiddenAtmos = existing
+            pcall(function() existing.Parent = nil end)
+        end
         local atmos = Instance.new('Atmosphere')
+        atmos.Name = 'VainAtmosphere'
         for k, val in pairs(cfg.atmosphere) do pcall(function() atmos[k] = val end) end
-        atmos.Parent = folder
+        atmos.Parent = lightingService
+        created[#created + 1] = atmos
 
+        -- post-processing effects render as direct children of Lighting too.
         local cc = Instance.new('ColorCorrectionEffect')
         for k, val in pairs(cfg.cc) do pcall(function() cc[k] = val end) end
-        -- user overrides
         cc.Brightness = cc.Brightness + ((Brightness and Brightness.Value or 0) / 100)
         cc.Saturation = cc.Saturation + ((Saturation and Saturation.Value or 0) / 100)
-        cc.Parent = folder
+        cc.Parent = lightingService
+        created[#created + 1] = cc
 
         local bloom = Instance.new('BloomEffect')
         for k, val in pairs(cfg.bloom) do pcall(function() bloom[k] = val end) end
-        bloom.Parent = folder
+        bloom.Parent = lightingService
+        created[#created + 1] = bloom
 
         local sun = Instance.new('SunRaysEffect')
         for k, val in pairs(cfg.sunrays) do pcall(function() sun[k] = val end) end
-        sun.Parent = folder
+        sun.Parent = lightingService
+        created[#created + 1] = sun
 
         local dof = Instance.new('DepthOfFieldEffect')
         for k, val in pairs(cfg.dof) do pcall(function() dof[k] = val end) end
-        dof.Parent = folder
+        dof.Parent = lightingService
+        created[#created + 1] = dof
     end
 
     Shader = vain.Categories.Render:CreateModule({
@@ -5667,7 +5692,7 @@ run(function()
             if callback then
                 build()
             else
-                if folder then folder:Destroy() folder = nil end
+                clearShader()
             end
         end
     })
