@@ -6690,10 +6690,9 @@ end
 -- see the popup any time (forced, doesn't touch patchseen.txt).
 if getgenv then getgenv().vainShowPatchNotes = function() showPatchNotes(true) end end
 
--- TEST PREVIEW: force the panel every load so you can see it now. It does NOT
--- record patchseen.txt (forced), so it keeps showing until we switch this back.
--- To restore normal one-time behaviour, change this to: task.spawn(showPatchNotes)
-task.spawn(function() task.wait(0.4) showPatchNotes(true) end)
+-- Normal one-time behaviour on load: shows once after a real update, then
+-- records patchseen.txt so it won't reappear until the next version.
+task.spawn(showPatchNotes)
 
 mainapi:Clean(gui:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
 	if mainapi.Scale.Enabled then
