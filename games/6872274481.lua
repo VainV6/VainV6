@@ -1998,6 +1998,219 @@ local AimAssist
 	end
 
 	-- ══════════════════════════════════════════════════════════════════════════
+	--  PREPARATION PREVIEW  (see teams/players/kits while spectating the draft)
+	-- ══════════════════════════════════════════════════════════════════════════
+	-- When you spectate a match that's still in the kit-ban / kit-selection phase,
+	-- the game renders NOTHING for you (its draft UI bails when you have no myTeam).
+	-- The data is still in the replicated ClientStore though:
+	--   store.Game.teams[].members[].userId        -- teams + their players
+	--   store.Draft.teamData.kitSelection[userId]  -- each player's chosen kit
+	--   store.Draft.sharedData.kitBans[teamId]      -- banned kits per team
+	-- bedwars.BedwarsKitMeta[kitId] = { name, renderImage }. We read all that and
+	-- draw our own overlay: a column per team, each player row = avatar + name + kit.
+	do
+		local PrepPreview
+		local gui
+
+		local function kitMeta(kitId)
+			if not kitId or kitId == '' then return nil end
+			return bedwars.BedwarsKitMeta and bedwars.BedwarsKitMeta[kitId]
+		end
+
+		local function build()
+			if gui then gui:Destroy() gui = nil end
+			local ok, state = pcall(function() return bedwars.Store:getState() end)
+			if not ok or type(state) ~= 'table' then return end
+			local teams = state.Game and state.Game.teams
+			if type(teams) ~= 'table' or not next(teams) then return end
+			local draft = state.Draft or {}
+			local kitSel = (draft.teamData and draft.teamData.kitSelection) or {}
+			local kitBans = (draft.sharedData and draft.sharedData.kitBans) or {}
+
+			gui = Instance.new('ScreenGui')
+			gui.Name = 'VainPrepPreview'
+			gui.ResetOnSpawn = false
+			gui.IgnoreGuiInset = true
+			gui.DisplayOrder = 50
+			gui.Parent = vain.gui
+
+			-- collect teams into a stable ordered list
+			local teamList = {}
+			for _, t in teams do teamList[#teamList + 1] = t end
+			table.sort(teamList, function(a, b) return tostring(a.id) < tostring(b.id) end)
+
+			local cols = math.max(#teamList, 1)
+			local COL_W = 240
+			local root = Instance.new('Frame')
+			root.AnchorPoint = Vector2.new(0.5, 0)
+			root.Position = UDim2.new(0.5, 0, 0, 60)
+			root.Size = UDim2.fromOffset(COL_W * cols + (cols - 1) * 10, 0)
+			root.AutomaticSize = Enum.AutomaticSize.Y
+			root.BackgroundTransparency = 1
+			root.Parent = gui
+			local rootlist = Instance.new('UIListLayout')
+			rootlist.FillDirection = Enum.FillDirection.Horizontal
+			rootlist.Padding = UDim.new(0, 10)
+			rootlist.HorizontalAlignment = Enum.HorizontalAlignment.Center
+			rootlist.Parent = root
+
+			for _, team in teamList do
+				local col = Instance.new('Frame')
+				col.Size = UDim2.fromOffset(COL_W, 0)
+				col.AutomaticSize = Enum.AutomaticSize.Y
+				col.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+				col.BackgroundTransparency = 0.15
+				col.BorderSizePixel = 0
+				col.Parent = root
+				local cc = Instance.new('UICorner') cc.CornerRadius = UDim.new(0, 8) cc.Parent = col
+				local pad = Instance.new('UIPadding')
+				pad.PaddingTop = UDim.new(0, 8) pad.PaddingBottom = UDim.new(0, 8)
+				pad.PaddingLeft = UDim.new(0, 8) pad.PaddingRight = UDim.new(0, 8)
+				pad.Parent = col
+				local collist = Instance.new('UIListLayout')
+				collist.Padding = UDim.new(0, 6)
+				collist.Parent = col
+
+				-- team header (colored by TeamColor if resolvable)
+				local header = Instance.new('TextLabel')
+				header.Size = UDim2.new(1, 0, 0, 22)
+				header.BackgroundTransparency = 1
+				header.Text = (team.name and tostring(team.name)) or ('Team ' .. tostring(team.id))
+				header.TextColor3 = Color3.new(1, 1, 1)
+				header.TextSize = 16
+				header.Font = Enum.Font.GothamBold
+				header.TextXAlignment = Enum.TextXAlignment.Left
+				header.LayoutOrder = 0
+				header.Parent = col
+
+				-- banned kits line for this team
+				local bans = kitBans[tostring(team.id)] or kitBans[team.id]
+				if type(bans) == 'table' and next(bans) then
+					local names = {}
+					for _, k in pairs(bans) do
+						local m = kitMeta(k)
+						names[#names + 1] = (m and m.name) or tostring(k)
+					end
+					local banlbl = Instance.new('TextLabel')
+					banlbl.Size = UDim2.new(1, 0, 0, 16)
+					banlbl.BackgroundTransparency = 1
+					banlbl.Text = 'Banned: ' .. table.concat(names, ', ')
+					banlbl.TextColor3 = Color3.fromRGB(230, 120, 120)
+					banlbl.TextSize = 11
+					banlbl.Font = Enum.Font.Gotham
+					banlbl.TextXAlignment = Enum.TextXAlignment.Left
+					banlbl.TextTruncate = Enum.TextTruncate.AtEnd
+					banlbl.LayoutOrder = 1
+					banlbl.Parent = col
+				end
+
+				-- player rows
+				local members = team.members
+				if type(members) == 'table' then
+					local order = 2
+					for _, mem in members do
+						local uid = mem.userId or mem.UserId or mem
+						local row = Instance.new('Frame')
+						row.Size = UDim2.new(1, 0, 0, 34)
+						row.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
+						row.BackgroundTransparency = 0.25
+						row.BorderSizePixel = 0
+						row.LayoutOrder = order
+						row.Parent = col
+						local rc = Instance.new('UICorner') rc.CornerRadius = UDim.new(0, 6) rc.Parent = row
+						order = order + 1
+
+						-- avatar
+						local av = Instance.new('ImageLabel')
+						av.Size = UDim2.fromOffset(28, 28)
+						av.Position = UDim2.fromOffset(3, 3)
+						av.BackgroundTransparency = 1
+						av.Image = 'rbxthumb://type=AvatarHeadShot&id=' .. tostring(uid) .. '&w=48&h=48'
+						av.Parent = row
+
+						-- name
+						local plr = playersService:GetPlayerByUserId(uid)
+						local nm = Instance.new('TextLabel')
+						nm.Size = UDim2.new(1, -110, 1, 0)
+						nm.Position = UDim2.fromOffset(36, 0)
+						nm.BackgroundTransparency = 1
+						nm.Text = plr and (plr.DisplayName ~= '' and plr.DisplayName or plr.Name) or ('#' .. tostring(uid))
+						nm.TextColor3 = Color3.new(1, 1, 1)
+						nm.TextSize = 13
+						nm.Font = Enum.Font.Gotham
+						nm.TextXAlignment = Enum.TextXAlignment.Left
+						nm.TextTruncate = Enum.TextTruncate.AtEnd
+						nm.Parent = row
+
+						-- selected kit (icon + name)
+						local kitId = kitSel[tostring(uid)] or kitSel[uid]
+						local m = kitMeta(kitId)
+						if m then
+							if m.renderImage and m.renderImage ~= '' then
+								local ki = Instance.new('ImageLabel')
+								ki.Size = UDim2.fromOffset(24, 24)
+								ki.AnchorPoint = Vector2.new(1, 0.5)
+								ki.Position = UDim2.new(1, -68, 0.5, 0)
+								ki.BackgroundTransparency = 1
+								ki.Image = m.renderImage
+								ki.Parent = row
+							end
+							local kn = Instance.new('TextLabel')
+							kn.AnchorPoint = Vector2.new(1, 0.5)
+							kn.Size = UDim2.fromOffset(64, 34)
+							kn.Position = UDim2.new(1, -2, 0.5, 0)
+							kn.BackgroundTransparency = 1
+							kn.Text = m.name or tostring(kitId)
+							kn.TextColor3 = Color3.fromRGB(120, 200, 255)
+							kn.TextSize = 11
+							kn.Font = Enum.Font.GothamMedium
+							kn.TextXAlignment = Enum.TextXAlignment.Right
+							kn.TextTruncate = Enum.TextTruncate.AtEnd
+							kn.Parent = row
+						else
+							local kn = Instance.new('TextLabel')
+							kn.AnchorPoint = Vector2.new(1, 0.5)
+							kn.Size = UDim2.fromOffset(70, 34)
+							kn.Position = UDim2.new(1, -2, 0.5, 0)
+							kn.BackgroundTransparency = 1
+							kn.Text = 'picking…'
+							kn.TextColor3 = Color3.fromRGB(150, 150, 150)
+							kn.TextSize = 11
+							kn.Font = Enum.Font.Gotham
+							kn.TextXAlignment = Enum.TextXAlignment.Right
+							kn.Parent = row
+						end
+					end
+				end
+			end
+		end
+
+		PrepPreview = vain.Categories.Render:CreateModule({
+			Name = 'Preparation Preview',
+			Tooltip = 'While spectating a match still in the kit-ban / selection phase, shows each team, its players (avatar + name) and their chosen kit — which the game normally hides from spectators.',
+			Function = function(callback)
+				if callback then
+					task.spawn(function()
+						repeat
+							-- only during the PRE phase (matchState 0); rebuild from the
+							-- live store so picks/bans update as they happen
+							if store.matchState == 0 then
+								pcall(build)
+							elseif gui then
+								gui:Destroy() gui = nil
+							end
+							task.wait(0.5)
+						until not PrepPreview.Enabled
+						if gui then gui:Destroy() gui = nil end
+					end)
+				else
+					if gui then gui:Destroy() gui = nil end
+				end
+			end
+		})
+	end
+
+	-- ══════════════════════════════════════════════════════════════════════════
 	--  TABLIST WINSTREAK  (show each player's winstreak next to their tab-list name)
 	-- ══════════════════════════════════════════════════════════════════════════
 	-- BedWars uses a custom tab-list (the default PlayerList is disabled) and a
@@ -5173,6 +5386,113 @@ run(function()
     		end
     	end,
         Tooltip = 'Makes you go slightly faster when damaged'
+    })
+end)
+
+run(function()
+    -- ══════════════════════════════════════════════════════════════════════════
+    --  CHEAT DETECTOR  (flags players landing hits from beyond legit reach)
+    -- ══════════════════════════════════════════════════════════════════════════
+    -- Every damage event is replicated to us via EntityDamageEventZap with the
+    -- attacker's position (fromPosition), the attacker (fromEntity) and the victim
+    -- (entityInstance). A legit sword hit can only land within the game's own
+    -- RAYCAST_SWORD_CHARACTER_DISTANCE constant (14.4 studs, from
+    -- bedwars.CombatConstant). If someone repeatedly lands MELEE hits from farther
+    -- than that (+ a small tolerance for body size / interpolation), they're almost
+    -- certainly using reach. We count violations per player and alert once a player
+    -- crosses the flag threshold, so a single laggy frame doesn't false-positive.
+    local CheatDetector, Tolerance, FlagThreshold, ResetOnMatch
+    local flags = {}   -- [player] = violation count
+    local alerted = {} -- [player] = true once we've announced them
+
+    -- exact legit reach from the game constant, with a fallback to the literal.
+    local function legitReach()
+        local ok, c = pcall(function() return bedwars.CombatConstant.RAYCAST_SWORD_CHARACTER_DISTANCE end)
+        if ok and type(c) == 'number' and c > 0 then
+            -- if OUR reach module inflated the constant, ignore that and use 14.4
+            return c < 20 and c or 14.4
+        end
+        return 14.4
+    end
+
+    local function rootPos(char)
+        if typeof(char) ~= 'Instance' then return nil end
+        local hrp = char:FindFirstChild('HumanoidRootPart') or (char:IsA('Model') and char.PrimaryPart)
+        return hrp and hrp.Position
+    end
+
+    local function onDamage(damageTable)
+        if not (CheatDetector and CheatDetector.Enabled) then return end
+        local attackerChar = damageTable.fromEntity
+        local victimChar = damageTable.entityInstance
+        if typeof(attackerChar) ~= 'Instance' or typeof(victimChar) ~= 'Instance' then return end
+
+        local attacker = playersService:GetPlayerFromCharacter(attackerChar)
+        if not attacker or attacker == lplr then return end -- only detect OTHER players
+
+        -- attacker's claimed position at hit time (falls back to their root)
+        local fp = damageTable.fromPosition
+        local fromPos = fp and Vector3.new(fp.X, fp.Y, fp.Z) or rootPos(attackerChar)
+        local victimPos = rootPos(victimChar)
+        if not (fromPos and victimPos) then return end
+
+        -- MELEE only: a real sword hit has the attacker's character as the source.
+        -- Projectiles/explosions come from a projectile instance, not a player
+        -- character adjacent to the victim, so requiring a player fromEntity
+        -- filters most non-melee damage. We also skip absurd distances (>60) which
+        -- are clearly projectile/void/fall damage, not a reach attempt.
+        local dist = (victimPos - fromPos).Magnitude
+        if dist > 60 then return end
+
+        local limit = legitReach() + (Tolerance and Tolerance.Value or 2)
+        if dist > limit then
+            flags[attacker] = (flags[attacker] or 0) + 1
+            if not alerted[attacker] and flags[attacker] >= (FlagThreshold and FlagThreshold.Value or 3) then
+                alerted[attacker] = true
+                vain:CreateNotification('Cheat Detector',
+                    ('%s likely REACH — hit from %.1f studs (legit %.1f)'):format(
+                        attacker.Name, dist, legitReach()),
+                    8, 'alert')
+            end
+        end
+    end
+
+    CheatDetector = vain.Categories.Utility:CreateModule({
+        Name = 'Cheat Detector',
+        Tooltip = 'Flags players who land melee hits from beyond the game\'s legit sword reach (RAYCAST_SWORD_CHARACTER_DISTANCE = 14.4 studs). Counts violations and alerts once a player crosses the flag threshold, so lag spikes do not false-positive.',
+        Function = function(callback)
+            if callback then
+                table.clear(flags)
+                table.clear(alerted)
+                CheatDetector:Clean(vapeEvents.EntityDamageEvent.Event:Connect(onDamage))
+                if ResetOnMatch and ResetOnMatch.Enabled then
+                    CheatDetector:Clean(vapeEvents.MatchEndEvent.Event:Connect(function()
+                        table.clear(flags)
+                        table.clear(alerted)
+                    end))
+                end
+            else
+                table.clear(flags)
+                table.clear(alerted)
+            end
+        end
+    })
+    Tolerance = CheatDetector:CreateSlider({
+        Name = 'Reach Tolerance',
+        Min = 0, Max = 6, Default = 2, Decimal = 10,
+        Suffix = function() return 'studs' end,
+        Tooltip = 'Extra studs allowed on top of the exact 14.4 legit reach before a hit is flagged (accounts for body size / interpolation). Lower = stricter/more precise.'
+    })
+    FlagThreshold = CheatDetector:CreateSlider({
+        Name = 'Flag Threshold',
+        Min = 1, Max = 15, Default = 3,
+        Suffix = function(v) return v == 1 and 'hit' or 'hits' end,
+        Tooltip = 'How many over-reach hits before a player is called out (higher = fewer false positives).'
+    })
+    ResetOnMatch = CheatDetector:CreateToggle({
+        Name = 'Reset Each Match',
+        Default = true,
+        Tooltip = 'Clear the violation counts when a match ends.'
     })
 end)
 
