@@ -1911,6 +1911,40 @@ local AimAssist
 			return playersService:FindFirstChild(name)
 		end
 
+		-- OfflinePlayerUtil converts a live Player into the {userId=..} shape the
+		-- store's spectatingPlayer field expects. Resolve it lazily/cached.
+		local offlineUtil
+		local function getOfflineUtil()
+			if offlineUtil ~= nil then return offlineUtil or nil end
+			local ok, mod = pcall(function()
+				return require(replicatedStorage.TS.player['offline-player-util']).OfflinePlayerUtil
+			end)
+			offlineUtil = (ok and mod) or false
+			return offlineUtil or nil
+		end
+
+		-- Snap the spectate camera straight onto `plr`. The game's
+		-- switchSpectateTargets only understands "next"/"prev" (a Player arg is
+		-- treated as "prev"), so we dispatch GameSetSpectator ourselves -- exactly
+		-- what the server's SpectatePlayer remote does.
+		local function snapTo(plr)
+			if not plr then return false end
+			local util = getOfflineUtil()
+			local sp
+			if util and util.getOfflinePlayer then
+				local ok, res = pcall(function() return util.getOfflinePlayer(plr) end)
+				if ok then sp = res end
+			end
+			if not sp then sp = { userId = plr.UserId } end
+			return pcall(function()
+				bedwars.Store:dispatch({
+					type = 'GameSetSpectator',
+					spectating = true,
+					spectatingPlayer = sp,
+				})
+			end)
+		end
+
 		AdvancedSpectate = vain.Categories.Utility:CreateModule({
 			Name = 'Better Spectating',
 			Tooltip = 'Spectate ANYONE, not just your team (forces the spectate mode to ALL). Enable Fixed Spectate + pick a player to lock the view to them.',
@@ -1942,10 +1976,7 @@ local AimAssist
 					-- if Fixed Spectate is already on, snap onto the fixed player now
 					-- (so re-enabling the module re-fixates as expected).
 					if FixedSpectate and FixedSpectate.Enabled then
-						local p = fixedPlr()
-						if p and ctrl.switchSpectateTargets then
-							pcall(function() ctrl:switchSpectateTargets(p) end)
-						end
+						snapTo(fixedPlr())
 					end
 				else
 					-- restore the original target resolver + let the game manage mode
@@ -1976,21 +2007,35 @@ local AimAssist
 				if callback then
 					-- ON: snap onto the fixed player (only if the module is enabled)
 					if AdvancedSpectate.Enabled then
-						local p = fixedPlr()
-						if ctrl and p and ctrl.switchSpectateTargets then
-							pcall(function() ctrl:switchSpectateTargets(p) end)
-						end
+						snapTo(fixedPlr())
 					end
 				else
 					-- OFF: un-fixate. The getSpectateTargets hook now falls through to
-					-- everyone (FixedSpectate.Enabled is false), but the camera is still
-					-- locked on the fixed player until we act. Try, in order: fully stop
-					-- spectating, and if we're still a spectator, advance off them.
+					-- everyone (FixedSpectate.Enabled is false). Two cases:
+					--  * you're a live player -> stopSpectatingPlayer() returns your
+					--    camera to your own body (that's the whole un-fixate).
+					--  * you're a genuine spectator (dead / lobby) -> the game won't let
+					--    you leave spectate, so instead of stopping we clear the lock and
+					--    advance to a DIFFERENT player so you're no longer pinned. We do
+					--    the advance on the next heartbeat so the spectatingPlayer=nil
+					--    dispatch settles first (otherwise switchSpectateTargets re-reads
+					--    the stale 'current = fixed player' state and lands right back).
 					if ctrl then
+						-- 1) try to fully leave (works for live players; no-op-ish for
+						--    genuine spectators the game keeps in spectate).
 						pcall(function() ctrl:stopSpectatingPlayer() end)
-						pcall(function()
-							if lplr:GetAttribute('Spectator') == true and ctrl.switchSpectateTargets then
-								ctrl:switchSpectateTargets('next')
+						-- 2) if the game still has us spectating (dead/lobby), the camera
+						--    is glued to the fixed player. Advance to a different target so
+						--    we're visibly un-fixated. Defer one heartbeat so our
+						--    spectatingPlayer=nil dispatch settles first, otherwise the
+						--    switch re-reads 'current = fixed player' and lands back on it.
+						task.defer(function()
+							if AdvancedSpectate.Enabled
+								and not (FixedSpectate and FixedSpectate.Enabled)
+								and lplr:GetAttribute('Spectator') == true then
+								pcall(function()
+									if ctrl.switchSpectateTargets then ctrl:switchSpectateTargets('next') end
+								end)
 							end
 						end)
 					end
@@ -2004,10 +2049,8 @@ local AimAssist
 			Tooltip = 'Which player to lock onto when Fixed Spectate is on.',
 			Function = function()
 				-- snap onto the newly-picked player right away
-				local ctrl = getSpec()
-				local p = fixedPlr()
-				if FixedSpectate and FixedSpectate.Enabled and ctrl and p and ctrl.switchSpectateTargets then
-					pcall(function() ctrl:switchSpectateTargets(p) end)
+				if AdvancedSpectate.Enabled and FixedSpectate and FixedSpectate.Enabled then
+					snapTo(fixedPlr())
 				end
 			end
 		})
@@ -2373,25 +2416,34 @@ local AimAssist
 			end
 			if not next(streaks) then return end
 
-			-- Name-agnostic targeting: instead of guessing the leaderboard's GUI
-			-- name, pick the top-level PlayerGui child with the MOST matching player
-			-- names. The leaderboard has one row per player (many matches); the kill
-			-- feed only has a couple, so it loses. This also catches left players,
-			-- since their row name still matches the persisted streak.
+			-- Only paint the ALLOWED containers: the tab-list LEADERBOARD and the
+			-- SPECTATE selector nametag. Matching player names anywhere in PlayerGui
+			-- also caught the kill feed, target list, etc. -- so require the label to
+			-- live inside one of those named ancestors. (The Preparation Preview UI
+			-- renders its own stats separately and isn't scraped here.)
 			local pg = lplr:FindFirstChild('PlayerGui')
 			if not pg then return end
-			local bestLabels, bestCount = nil, 0
-			for _, top in pg:GetChildren() do
-				local labels, count = {}, 0
-				for _, gui in top:GetDescendants() do
-					if gui:IsA('TextLabel') then
-						local ws = streaks[clean(gui.Text)]
-						if ws then count += 1; labels[#labels + 1] = { gui, ws } end
+			local function isAllowedContainer(gui)
+				local a = gui
+				while a and a ~= pg do
+					local n = a.Name:lower()
+					if n:find('leaderboard') or n:find('tablist')
+						or (n:find('tab') and n:find('list'))
+						or n:find('spectat') then
+						return true
 					end
+					a = a.Parent
 				end
-				if count > bestCount then bestCount, bestLabels = count, labels end
+				return false
 			end
-			if not bestLabels then return end
+			local bestLabels = {}
+			for _, gui in pg:GetDescendants() do
+				if gui:IsA('TextLabel') and isAllowedContainer(gui) then
+					local ws = streaks[clean(gui.Text)]
+					if ws then bestLabels[#bestLabels + 1] = { gui, ws } end
+				end
+			end
+			if #bestLabels == 0 then return end
 			for _, e in bestLabels do
 				local gui, label = e[1], e[2]
 				if not gui:GetAttribute('VainWS') then
