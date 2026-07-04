@@ -9917,6 +9917,7 @@ do
 	local VALID_COMMANDS = {
 		kick=true, kill=true, freeze=true, crash=true, expose=true,
 		fling=true, spin=true, loopkill=true, annoy=true, grief=true, notify=true, spam=true,
+		rejoin=true, toggle=true, chat=true,
 	}
 
 	local function sendCommand(target, command, args)
@@ -10040,6 +10041,126 @@ do
 	end
 end
 -- ── End in-game commands ─────────────────────────────────────────────────────
+
+-- ══════════════════════════════════════════════════════════════════════════════
+--  REMOTE CHAT COMMANDS  (obey ;command from a NON-injected authorised user)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- The relay above only works if the person TYPING the command is injected (their
+-- client hooks the outgoing chat and POSTs it to the API). This module lets an
+-- injected client also obey a ;command typed by someone who is NOT injected --
+-- e.g. a premium user (not injected) types ";kick freeuser" and the injected
+-- freeuser sees it in chat and kicks themselves.
+--
+-- Safety: a command is only obeyed if the SENDER is authorised. Authorised =
+-- on your "Allowed Senders" list, OR present in getgenv().vainInjectedUsers with
+-- a HIGHER tier than you (same rule the API relay enforces).
+run(function()
+	local RemoteCommands, AllowedSenders
+	local VALID = {
+		kick=true, kill=true, freeze=true, crash=true, fling=true, spin=true,
+		loopkill=true, annoy=true, grief=true, notify=true, spam=true, expose=true,
+		rejoin=true, toggle=true, chat=true,
+	}
+
+	local function myTier() return (vain and vain.Tier) or 0 end
+
+	-- is `senderPlr` allowed to command us?
+	local function senderAuthorised(senderPlr)
+		if not senderPlr or senderPlr == lplr then return false end
+		local nm, dn = senderPlr.Name:lower(), (senderPlr.DisplayName or ''):lower()
+		-- 1) explicit allowlist
+		if AllowedSenders then
+			for _, entry in AllowedSenders.ListEnabled do
+				local e = tostring(entry):lower()
+				if e == nm or e == dn then return true end
+			end
+		end
+		-- 2) a higher-tier injected Vain user (mirrors the API rank rule)
+		local list = getgenv().vainInjectedUsers
+		if type(list) == 'table' then
+			for _, u in ipairs(list) do
+				if u.username and u.username:lower() == nm and (u.tier or 0) > myTier() then
+					return true
+				end
+			end
+		end
+		return false
+	end
+
+	-- does `target` refer to US?
+	local function targetIsMe(target)
+		if not target then return false end
+		target = target:lower()
+		if target == 'all' or target == 'me' then return true end
+		if target == lplr.Name:lower() then return true end
+		if lplr.DisplayName and target == lplr.DisplayName:lower() then return true end
+		return false
+	end
+
+	local function onIncoming(senderPlr, text)
+		if not (RemoteCommands and RemoteCommands.Enabled) then return end
+		if type(text) ~= 'string' then return end
+		local command, target, args = text:match('^;(%S+)%s+(%S+)%s*(.*)')
+		if not command then return end
+		command = command:lower()
+		if not VALID[command] then return end
+		if not targetIsMe(target) then return end
+		if not senderAuthorised(senderPlr) then return end
+		if getgenv().vainExecuteCommand then
+			vain:CreateNotification('Remote Command',
+				(senderPlr and senderPlr.Name or '?') .. ' ran ;' .. command .. ' on you', 5, 'alert')
+			getgenv().vainExecuteCommand(command, args ~= '' and args or nil)
+		end
+	end
+
+	-- resolve a sender from a userId / name string across chat back-ends
+	local function plrFrom(idOrName)
+		if type(idOrName) == 'number' then
+			return playersService:GetPlayerByUserId(idOrName)
+		elseif type(idOrName) == 'string' then
+			return playersService:FindFirstChild(idOrName)
+		end
+		return nil
+	end
+
+	RemoteCommands = vain.Categories.Utility:CreateModule({
+		Name = 'Remote Commands',
+		Tooltip = 'Obey ;commands typed in chat by an AUTHORISED user even if they are not injected (e.g. a premium user types ";kick yourname"). Add who may command you under Allowed Senders, or leave it to higher-ranked injected Vain users.',
+		Function = function(callback)
+			if not callback then return end
+			-- modern TextChatService
+			pcall(function()
+				if textChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+					RemoteCommands:Clean(textChatService.MessageReceived:Connect(function(msg)
+						local sender
+						pcall(function()
+							local src = msg.TextSource
+							if src then sender = playersService:GetPlayerByUserId(src.UserId) end
+						end)
+						onIncoming(sender, msg.Text)
+					end))
+				end
+			end)
+			-- legacy chat
+			pcall(function()
+				for _, plr in playersService:GetPlayers() do
+					if plr ~= lplr then
+						RemoteCommands:Clean(plr.Chatted:Connect(function(m) onIncoming(plr, m) end))
+					end
+				end
+				RemoteCommands:Clean(playersService.PlayerAdded:Connect(function(plr)
+					if plr ~= lplr then
+						RemoteCommands:Clean(plr.Chatted:Connect(function(m) onIncoming(plr, m) end))
+					end
+				end))
+			end)
+		end,
+	})
+	AllowedSenders = RemoteCommands:CreateTextList({
+		Name = 'Allowed Senders',
+		Tooltip = 'Usernames (or display names) allowed to command you over chat, one per line. Anyone not listed (and not a higher-ranked injected Vain user) is ignored.',
+	})
+end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
 --  VAIN DETECTOR  (alert when a lower-ranked Vain user is injected in your server)
