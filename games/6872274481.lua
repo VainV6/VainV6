@@ -20934,6 +20934,40 @@ run(function()
 	local espobjs = {}
 	local espfold = Instance.new("Folder")
 	espfold.Parent = vain.gui
+	local Tracers
+	local tracerLines = {} -- [adornee part] = Drawing 'Line'
+	local tracerConn
+	local function clearTracers()
+		for _, ln in tracerLines do pcall(function() ln:Remove() end) end
+		table.clear(tracerLines)
+	end
+	local function updateTracers()
+		if not (Tracers and Tracers.Enabled) then return end
+		local view = gameCamera.ViewportSize
+		local ox, oy = view.X / 2, view.Y
+		local col = (Color and Color.Hue) and Color3.fromHSV(Color.Hue, Color.Sat, Color.Value) or Color3.new(1, 1, 1)
+		for part, ln in tracerLines do
+			if not espobjs[part] or (typeof(part) == 'Instance' and not part.Parent) then
+				pcall(function() ln:Remove() end)
+				tracerLines[part] = nil
+			end
+		end
+		for part in espobjs do
+			if typeof(part) == 'Instance' and part:IsA('BasePart') then
+				local sp, vis = gameCamera:WorldToViewportPoint(part.Position)
+				local ln = tracerLines[part]
+				if vis and sp.Z > 0 then
+					if not ln then ln = Drawing.new('Line') ln.Thickness = 1 tracerLines[part] = ln end
+					ln.Color = col
+					ln.From = Vector2.new(ox, oy)
+					ln.To = Vector2.new(sp.X, sp.Y)
+					ln.Visible = true
+				elseif ln then
+					ln.Visible = false
+				end
+			end
+		end
+	end
 
 	local function espadd(v, icon)
 		if not v then return end -- adornee (e.g. a model's PrimaryPart) may be nil
@@ -20959,19 +20993,31 @@ run(function()
 		espobjs[v] = billboard
 	end
 
+	-- Resolve the part to adorn: tagged kit objects are sometimes a Model (use its
+	-- PrimaryPart) and sometimes a BasePart itself (use it directly). The old code
+	-- always used v.PrimaryPart, so BasePart-tagged objects (e.g. bees) resolved to
+	-- nil -> nothing was ever shown.
+	local function adorneeOf(v)
+		if typeof(v) ~= 'Instance' then return nil end
+		if v:IsA('BasePart') then return v end
+		if v:IsA('Model') then return v.PrimaryPart or v:FindFirstChildWhichIsA('BasePart', true) end
+		return v:FindFirstChildWhichIsA('BasePart', true)
+	end
+
 	local function addKit(tag, icon, custom)
 		if (not custom) then
 			KitESP:Clean(collectionService:GetInstanceAddedSignal(tag):Connect(function(v)
-				espadd(v.PrimaryPart, icon)
+				espadd(adorneeOf(v), icon)
 			end))
 			KitESP:Clean(collectionService:GetInstanceRemovedSignal(tag):Connect(function(v)
-				if espobjs[v.PrimaryPart] then
-					espobjs[v.PrimaryPart]:Destroy()
-					espobjs[v.PrimaryPart] = nil
+				local a = adorneeOf(v)
+				if a and espobjs[a] then
+					espobjs[a]:Destroy()
+					espobjs[a] = nil
 				end
 			end))
 			for i,v in pairs(collectionService:GetTagged(tag)) do
-				espadd(v.PrimaryPart, icon)
+				espadd(adorneeOf(v), icon)
 			end
 		else
 			local function check(v)
@@ -21043,6 +21089,8 @@ run(function()
 				kitESPCurrent = nil
 				espfold:ClearAllChildren()
 				table.clear(espobjs)
+				if tracerConn then tracerConn:Disconnect() end
+				tracerConn = runService.RenderStepped:Connect(updateTracers)
 				task.spawn(function()
 					-- Rebuild whenever the equipped kit changes, so it works when
 					-- enabled MID-MATCH (kit already equipped) and after a new match /
@@ -21077,6 +21125,8 @@ run(function()
 				espfold:ClearAllChildren()
 				table.clear(espobjs)
 				kitESPCurrent = nil
+				if tracerConn then tracerConn:Disconnect() tracerConn = nil end
+				clearTracers()
 			end
 		end
 	})
@@ -21085,6 +21135,12 @@ run(function()
 		Name = 'Notify',
 		Tooltip = 'Announce which kit was detected and whether it has ESP objects',
 		Default = false
+	})
+	Tracers = KitESP:CreateToggle({
+		Name = 'Tracers',
+		Tooltip = 'Draw a line from the bottom of your screen to each tracked object',
+		Default = false,
+		Function = function(callback) if not callback then clearTracers() end end
 	})
 	Background = KitESP:CreateToggle({
 		Name = 'Background',
