@@ -10674,7 +10674,7 @@ run(function()
         { key = 'bee',       item = 'bee',           color = Color3.fromRGB(255, 210, 60)  },
         { key = 'arrow',     item = 'arrow',         color = Color3.fromRGB(230, 230, 230) },
         { key = 'block',     match = 'wool_', icon = 'wool_white', off = true, color = Color3.fromRGB(235, 235, 235) },
-        { key = 'tesla',     match = 'tesla', icon = 'tesla',      off = true, color = Color3.fromRGB(120, 220, 255) },
+        { key = 'tesla',     match = 'tesla', icon = 'tesla', iconAlt = 'tesla_trap', off = true, color = Color3.fromRGB(120, 220, 255) },
     }
     -- exact itemType -> key
     local ITEM_TO_KEY = {}
@@ -10685,10 +10685,19 @@ run(function()
         local id = r.icon or r.item or r.match
         if iconCache[id] ~= nil then return iconCache[id] end
         local img = ''
-        pcall(function()
-            local meta = bedwars.ItemMeta and bedwars.ItemMeta[id]
-            if meta and meta.image then img = meta.image end
-        end)
+        -- try each candidate itemType via getIcon (same resolver Storage ESP uses)
+        -- then ItemMeta.image, so an item whose exact key differs still gets an icon.
+        for _, cand in { id, r.iconAlt } do
+            if cand and img == '' then
+                pcall(function()
+                    if bedwars.getIcon then img = bedwars.getIcon({ itemType = cand }, true) or '' end
+                    if img == '' then
+                        local meta = bedwars.ItemMeta and bedwars.ItemMeta[cand]
+                        if meta and meta.image then img = meta.image end
+                    end
+                end)
+            end
+        end
         iconCache[id] = img
         return img
     end
@@ -10750,11 +10759,13 @@ run(function()
         classNameCache[classId] = name or false
         return name
     end
-    -- the class name of the kit a player is currently using (via PlayingAsKit)
+    -- the class name of the kit a player is currently using. The game uses BOTH
+    -- 'PlayingAsKits' (plural) and 'PlayingAsKit' depending on version -- check
+    -- both (this is why only "Any" worked before: the plural attr was ignored).
     local function playerClassName(plr)
         if not plr then return nil end
-        local kit = plr:GetAttribute('PlayingAsKit')
-        if not kit then return nil end
+        local kit = plr:GetAttribute('PlayingAsKits') or plr:GetAttribute('PlayingAsKit')
+        if not kit or kit == 'none' then return nil end
         local meta = bedwars.BedwarsKitMeta and bedwars.BedwarsKitMeta[kit]
         return meta and classDisplay(meta.kitClass)
     end
