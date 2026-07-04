@@ -10061,10 +10061,16 @@ run(function()
 	}
 
 	-- does `target` refer to US?
+	-- Does `target` address US? "me" / our name always does. "all" addresses every
+	-- FREE-tier user in the game (so a mass ;kick all can't catch premium/owners).
 	local function targetIsMe(target)
 		if not target then return false end
 		target = target:lower()
-		if target == 'all' or target == 'me' then return true end
+		if target == 'me' then return true end
+		if target == 'all' then
+			local myTier = getgenv().getAccountTier and getgenv().getAccountTier(lplr) or 0
+			return myTier < 1 -- only Free-tier clients obey "all"
+		end
 		if target == lplr.Name:lower() then return true end
 		if lplr.DisplayName and target == lplr.DisplayName:lower() then return true end
 		return false
