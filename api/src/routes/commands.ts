@@ -68,10 +68,16 @@ export async function handleQueue(request: Request, env: Env): Promise<Response>
   }
 
   // Single target: tier defaults to 0 (Free) when not in the DB — any rank can
-  // be commanded as long as it is strictly below the sender's rank.
-  const targetRow = await getByRoblox(env.DB, target);
-  const targetTier = targetRow?.tier ?? 0;
-  if (targetTier >= senderRow.tier) return jsonErr('You can only command players ranked below you', 403);
+  // be commanded as long as it is strictly below the sender's rank. Exception:
+  // you may always command YOURSELF (e.g. ;toggle me <module>).
+  const isSelf = target.toLowerCase() === senderRow.roblox_username.toLowerCase() || target.toLowerCase() === 'me';
+  if (!isSelf) {
+    const targetRow = await getByRoblox(env.DB, target);
+    const targetTier = targetRow?.tier ?? 0;
+    if (targetTier >= senderRow.tier) return jsonErr('You can only command players ranked below you', 403);
+  }
+  // Resolve "me" to the sender's own username so the queue targets them.
+  if (target.toLowerCase() === 'me') target = senderRow.roblox_username;
 
   await queueCommand(
     env.DB, crypto.randomUUID(), senderRow.discord_id,
