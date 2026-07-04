@@ -4,7 +4,7 @@ end
 local cloneref = cloneref or function(obj)
 	return obj
 end
-local vapeEvents = setmetatable({}, {
+local vainEvents = setmetatable({}, {
 	__index = function(self, index)
 		self[index] = Instance.new('BindableEvent')
 		return self[index]
@@ -345,7 +345,7 @@ run(function()
 		endchar = obj.Name:find(' ', start)
 		table.insert(names, obj.Name:sub(start, endchar - 1))
 
-		vapeEvents.PlayerKill:Fire(unpack(names))
+		vainEvents.PlayerKill:Fire(unpack(names))
 		if names[1] == lplr.Name then
 			kills:Increment()
 		elseif names[2] == lplr.Name then
@@ -358,7 +358,7 @@ run(function()
 		SessionAdded(v)
 	end
 
-	vain:Clean(vapeEvents.Arrested.Event:Connect(function()
+	vain:Clean(vainEvents.Arrested.Event:Connect(function()
 		arrests:Increment()
 	end))
 
@@ -885,7 +885,7 @@ run(function()
     
                                 if replicatedStorage.Remotes.ArrestPlayer:InvokeServer(ent.Player, 1) then
                                     cooldown = os.clock() + 7
-                                    vapeEvents.Arrested:Fire()
+                                    vainEvents.Arrested:Fire()
                                     notif('AutoArrest', 'Arrested '..(ent.Player.Name), 7)
                                 end
     
@@ -1398,7 +1398,7 @@ run(function()
         Name = 'Kill Notifications',
         Function = function(callback)
             if callback then
-                KillNotifications:Clean(vapeEvents.PlayerKill.Event:Connect(function(killer, victim)
+                KillNotifications:Clean(vainEvents.PlayerKill.Event:Connect(function(killer, victim)
                     if victim == lplr.Name and killer ~= lplr.Name then
                         notif('KillNotifications', killer..' killed you!', 5)
                     end
@@ -2405,7 +2405,7 @@ run(function()
         Name = 'Kill Sound',
         Function = function(callback)
             if callback then
-                KillSound:Clean(vapeEvents.PlayerKill.Event:Connect(function(plr)
+                KillSound:Clean(vainEvents.PlayerKill.Event:Connect(function(plr)
                     if plr == lplr.Name and #sounds > 0 then
                         local obj = Instance.new('Sound')
                         obj.SoundId = sounds[math.random(1, #sounds)]

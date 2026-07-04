@@ -4,7 +4,7 @@ end
 local cloneref = cloneref or function(obj)
 	return obj
 end
-local vapeEvents = setmetatable({}, {
+local vainEvents = setmetatable({}, {
 	__index = function(self, index)
 		self[index] = Instance.new('BindableEvent')
 		return self[index]
@@ -61,9 +61,9 @@ run(function()
 	local function updateMap()
 		if mapval.Value then
 			mapobj = mapval.Value
-			vapeEvents.MapAdded:Fire(mapobj)
+			vainEvents.MapAdded:Fire(mapobj)
 		elseif mapobj then
-			vapeEvents.MapRemoved:Fire(mapobj)
+			vainEvents.MapRemoved:Fire(mapobj)
 			mapobj = nil
 		end
 	end
@@ -656,8 +656,8 @@ run(function()
         Name = 'Computer ESP',
         Function = function(callback)
             if callback then
-                ComputerESP:Clean(vapeEvents.MapAdded.Event:Connect(MapAdded))
-                ComputerESP:Clean(vapeEvents.MapRemoved.Event:Connect(function()
+                ComputerESP:Clean(vainEvents.MapAdded.Event:Connect(MapAdded))
+                ComputerESP:Clean(vainEvents.MapRemoved.Event:Connect(function()
                     for _, v in Reference do
                         Removed(v)
                     end

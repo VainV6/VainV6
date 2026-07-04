@@ -4,7 +4,7 @@ end
 local cloneref = cloneref or function(obj)
 	return obj
 end
-local vapeEvents = setmetatable({}, {
+local vainEvents = setmetatable({}, {
 	__index = function(self, index)
 		self[index] = Instance.new('BindableEvent')
 		return self[index]
@@ -330,7 +330,7 @@ run(function()
 
 	local function updateStore(newStore, oldStore)
 		if newStore.GameCurrency ~= oldStore.GameCurrency then
-			vapeEvents.CurrencyChange:Fire(table.clone(newStore.GameCurrency.Quantities))
+			vainEvents.CurrencyChange:Fire(table.clone(newStore.GameCurrency.Quantities))
 		end
 
 		if newStore.ActiveSlot ~= oldStore.ActiveSlot then
@@ -344,7 +344,7 @@ run(function()
 			store.hand = store.hand and skywars.ItemMeta[store.hand.Type] or {}
 			store.tools.sword = getSword()
 			store.tools.pickaxe = getPickaxe()
-			vapeEvents.InventoryAmountChanged:Fire()
+			vainEvents.InventoryAmountChanged:Fire()
 		end
 
 		if oldStore.Profile and oldStore.Profile.WasTeleporting and newStore.Profile.Stats ~= oldStore.Profile.Stats then
@@ -387,12 +387,12 @@ run(function()
 	end
 
 	vain:Clean(function()
-		for _, v in vapeEvents do
+		for _, v in vainEvents do
 			v:Destroy()
 		end
 		table.clear(ControllerTable)
 		table.clear(RemoteTable)
-		table.clear(vapeEvents)
+		table.clear(vainEvents)
 		table.clear(skywars)
 		table.clear(store.blocks)
 		table.clear(store)
@@ -1476,7 +1476,7 @@ run(function()
 		Name = 'AutoBuy',
 		Function = function(callback)
 			if callback then
-				AutoBuy:Clean(vapeEvents.CurrencyChange.Event:Connect(buyCheck))
+				AutoBuy:Clean(vainEvents.CurrencyChange.Event:Connect(buyCheck))
 				buyCheck(table.clone(skywars.Store:getState().GameCurrency.Quantities))
 			end
 		end,
@@ -1554,7 +1554,7 @@ run(function()
 		Name = 'AutoConsume',
 		Function = function(callback)
 			if callback then
-				AutoConsume:Clean(vapeEvents.InventoryAmountChanged.Event:Connect(consumeCheck))
+				AutoConsume:Clean(vainEvents.InventoryAmountChanged.Event:Connect(consumeCheck))
 				AutoConsume:Clean(lplr:GetAttributeChangedSignal('Shield'):Connect(consumeCheck))
 				consumeCheck()
 			end
