@@ -2035,12 +2035,21 @@ local AimAssist
 			return bedwars.BedwarsKitMeta and bedwars.BedwarsKitMeta[kitId]
 		end
 
+		local dbgOnce = false
 		local function build()
 			if gui then gui:Destroy() gui = nil end
 			local ok, state = pcall(function() return bedwars.Store:getState() end)
 			if not ok or type(state) ~= 'table' then return end
 			local teams = state.Game and state.Game.teams
-			if type(teams) ~= 'table' or not next(teams) then return end
+			if type(teams) ~= 'table' or not next(teams) then
+				-- teams not populated during this draft phase -> tell us once so we
+				-- know it's a data problem, not a rendering one.
+				if not dbgOnce then
+					dbgOnce = true
+					notif('Preparation Preview', 'No team data in the store yet (Game.teams empty). If this persists during the draft, the data path differs.', 6, 'warning')
+				end
+				return
+			end
 			local draft = state.Draft or {}
 			local kitSel = (draft.teamData and draft.teamData.kitSelection) or {}
 			local kitBans = (draft.sharedData and draft.sharedData.kitBans) or {}
@@ -2049,8 +2058,16 @@ local AimAssist
 			gui.Name = 'VainPrepPreview'
 			gui.ResetOnSpawn = false
 			gui.IgnoreGuiInset = true
-			gui.DisplayOrder = 50
-			gui.Parent = vain.gui
+			gui.DisplayOrder = 2147483647 -- above the game's draft UI
+			gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+			-- parent to a real GUI root, NOT vain.gui (a ScreenGui inside a ScreenGui
+			-- doesn't render) -- this is why the overlay never showed.
+			pcall(function()
+				gui.Parent = (gethui and gethui()) or cloneref(game:GetService('CoreGui'))
+			end)
+			if not gui.Parent then
+				gui.Parent = cloneref(game:GetService('Players')).LocalPlayer:WaitForChild('PlayerGui')
+			end
 
 			-- collect teams into a stable ordered list
 			local teamList = {}
