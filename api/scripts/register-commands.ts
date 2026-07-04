@@ -26,22 +26,35 @@ async function main() {
     },
   ];
 
-  const url = GUILD_ID
-    ? `https://discord.com/api/v10/applications/${APPLICATION_ID}/guilds/${GUILD_ID}/commands`
-    : `https://discord.com/api/v10/applications/${APPLICATION_ID}/commands`;
+  const headers = { 'Authorization': `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' };
+  const guildUrl  = `https://discord.com/api/v10/applications/${APPLICATION_ID}/guilds/${GUILD_ID}/commands`;
+  const globalUrl = `https://discord.com/api/v10/applications/${APPLICATION_ID}/commands`;
 
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: { 'Authorization': `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(commands),
-  });
-
-  if (res.ok) {
-    console.log(`Commands registered ${GUILD_ID ? 'to guild ' + GUILD_ID : 'globally'}.`);
-  } else {
-    console.error('Failed:', res.status, await res.text());
+  // A PUT fully REPLACES the command set at a scope. In the past commands got
+  // registered to BOTH the guild and global scopes, so Discord showed every
+  // command twice and left orphans (e.g. an old /players the bot no longer
+  // handles) lingering in whichever scope wasn't re-PUT. Fix + prevent recurrence
+  // by owning both scopes every run: put the real commands on the guild (updates
+  // instantly, right for a single-server bot) and wipe the global scope to [].
+  if (!GUILD_ID) {
+    console.error('Set DISCORD_GUILD_ID (commands are registered guild-scoped).');
     process.exit(1);
   }
+
+  const guildRes = await fetch(guildUrl, { method: 'PUT', headers, body: JSON.stringify(commands) });
+  if (!guildRes.ok) {
+    console.error('Guild register failed:', guildRes.status, await guildRes.text());
+    process.exit(1);
+  }
+  console.log(`Registered ${commands.length} command(s) to guild ${GUILD_ID}.`);
+
+  // Wipe any stale GLOBAL commands (removes duplicates + orphaned /players).
+  const globalRes = await fetch(globalUrl, { method: 'PUT', headers, body: JSON.stringify([]) });
+  if (!globalRes.ok) {
+    console.error('Global wipe failed:', globalRes.status, await globalRes.text());
+    process.exit(1);
+  }
+  console.log('Cleared global command scope (removed duplicates / orphaned commands).');
 }
 
 main();
