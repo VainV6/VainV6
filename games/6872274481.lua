@@ -10653,7 +10653,7 @@ end)
 -- offset a little higher than the head, and Name Tags sits at the head, so the
 -- rows stack cleanly instead of overlapping.
 run(function()
-    local LootDisplay, Highlight, TargetClass, ClassDropdown
+    local LootDisplay, Highlight, TargetClass, ClassDropdown, SizeSlider
     local LootShow = {}       -- resource key -> "Show X" toggle
     local LootThresholds = {} -- resource key -> threshold slider
 
@@ -10681,13 +10681,14 @@ run(function()
     for _, r in LOOT_RES do if r.item then ITEM_TO_KEY[r.item] = r.key end end
 
     local iconCache = {}
-    local function lootIcon(r)
-        local id = r.icon or r.item or r.match
+    -- realItem = the concrete itemType actually seen in inventory (best source).
+    local function lootIcon(r, realItem)
+        local id = realItem or r.icon or r.item or r.match
         if iconCache[id] ~= nil then return iconCache[id] end
         local img = ''
-        -- try each candidate itemType via getIcon (same resolver Storage ESP uses)
+        -- try candidates in order via getIcon (same resolver Storage ESP uses)
         -- then ItemMeta.image, so an item whose exact key differs still gets an icon.
-        for _, cand in { id, r.iconAlt } do
+        for _, cand in { realItem, r.icon, r.item, r.iconAlt } do
             if cand and img == '' then
                 pcall(function()
                     if bedwars.getIcon then img = bedwars.getIcon({ itemType = cand }, true) or '' end
@@ -10702,8 +10703,10 @@ run(function()
         return img
     end
 
+    -- returns counts[key] and seen[key] = the concrete itemType actually carried
+    -- (so the icon can be resolved from the real item, not a guessed key).
     local function tally(plr)
-        local counts = {}
+        local counts, seen = {}, {}
         for _, r in LOOT_RES do counts[r.key] = 0 end
         local inv = plr and store.inventories[plr]
         if inv and type(inv.items) == 'table' then
@@ -10711,21 +10714,19 @@ run(function()
                 if v and v.itemType then
                     local amt = tonumber(v.amount) or 0
                     local key = ITEM_TO_KEY[v.itemType]
+                    if not key then
+                        for _, r in LOOT_RES do
+                            if r.match and v.itemType:sub(1, #r.match) == r.match then key = r.key break end
+                        end
+                    end
                     if key then
                         counts[key] = counts[key] + amt
-                    else
-                        -- prefix-matched groups (blocks)
-                        for _, r in LOOT_RES do
-                            if r.match and v.itemType:sub(1, #r.match) == r.match then
-                                counts[r.key] = counts[r.key] + amt
-                                break
-                            end
-                        end
+                        seen[key] = seen[key] or v.itemType
                     end
                 end
             end
         end
-        return counts
+        return counts, seen
     end
     local function resShown(key)
         local t = LootShow[key]
@@ -10857,7 +10858,7 @@ run(function()
             if playerClassName(plr) ~= ClassDropdown.Value then clear(ent) return end
         end
 
-        local counts = tally(plr)
+        local counts, seen = tally(plr)
 
         local bb = Reference[ent]
         if not bb then
@@ -10901,7 +10902,16 @@ run(function()
             Reference[ent] = bb
         end
         bb.Adornee = adornee
-        local row = bb.Plate.Row
+        -- size multiplier from the slider (100 = base). Scale every element off it.
+        local scale = (SizeSlider and SizeSlider.Value or 100) / 100
+        local H = math.floor(34 * scale)         -- cell/plate height
+        local ICON = math.floor(30 * scale)      -- icon px
+        local TXT = math.max(8, math.floor(22 * scale)) -- text px
+        bb.Size = UDim2.fromOffset(math.floor(640 * scale), math.floor(40 * scale))
+        local plate = bb.Plate
+        plate.Size = UDim2.fromOffset(0, H + 4)
+        local row = plate.Row
+        row.Size = UDim2.fromOffset(0, H + 4)
         for _, c in row:GetChildren() do
             if not c:IsA('UIListLayout') then c:Destroy() end
         end
@@ -10916,29 +10926,29 @@ run(function()
                 local cell = Instance.new('Frame')
                 cell.BackgroundTransparency = 1
                 cell.AutomaticSize = Enum.AutomaticSize.X
-                cell.Size = UDim2.fromOffset(0, 34)
+                cell.Size = UDim2.fromOffset(0, H)
                 cell.LayoutOrder = i
                 local cl = Instance.new('UIListLayout')
                 cl.FillDirection = Enum.FillDirection.Horizontal
                 cl.VerticalAlignment = Enum.VerticalAlignment.Center
-                cl.Padding = UDim.new(0, 3)
+                cl.Padding = UDim.new(0, math.floor(3 * scale))
                 cl.Parent = cell
                 local icon = Instance.new('ImageLabel')
                 icon.BackgroundTransparency = 1
-                icon.Size = UDim2.fromOffset(30, 30)
+                icon.Size = UDim2.fromOffset(ICON, ICON)
                 icon.LayoutOrder = 1
-                icon.Image = lootIcon(r)
+                icon.Image = lootIcon(r, seen[r.key])
                 icon.Parent = cell
                 local amt = Instance.new('TextLabel')
                 amt.BackgroundTransparency = 1
                 amt.AutomaticSize = Enum.AutomaticSize.X
-                amt.Size = UDim2.fromOffset(0, 34)
+                amt.Size = UDim2.fromOffset(0, H)
                 amt.LayoutOrder = 2
                 amt.Text = tostring(n)
                 amt.TextColor3 = Color3.new(1, 1, 1)
                 amt.TextStrokeColor3 = Color3.new(0, 0, 0)
                 amt.TextStrokeTransparency = 0
-                amt.TextSize = 22
+                amt.TextSize = TXT
                 amt.Font = Enum.Font.GothamBold
                 amt.TextXAlignment = Enum.TextXAlignment.Left
                 amt.Parent = cell
@@ -10980,6 +10990,12 @@ run(function()
     local function rebuild()
         for _, ent in entitylib.List do pcall(refresh, ent) end
     end
+    SizeSlider = LootDisplay:CreateSlider({
+        Name = 'Size',
+        Tooltip = 'Scale of the loot plate (100 = default).',
+        Min = 30, Max = 200, Default = 65, Suffix = '%',
+        Function = rebuild,
+    })
     LootShow.iron = LootDisplay:CreateToggle({ Name = 'Show Iron', Default = true, Function = rebuild })
     LootShow.gold = LootDisplay:CreateToggle({ Name = 'Show Gold', Default = true, Function = rebuild })
     LootShow.emerald = LootDisplay:CreateToggle({ Name = 'Show Emeralds', Default = true, Function = rebuild })
