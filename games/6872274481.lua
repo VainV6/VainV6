@@ -2075,17 +2075,18 @@ local AimAssist
 			table.sort(teamList, function(a, b) return tostring(a.id) < tostring(b.id) end)
 
 			local cols = math.max(#teamList, 1)
-			local COL_W = 240
+			local COL_W = 420
+			local ROW_H = 92
 			local root = Instance.new('Frame')
 			root.AnchorPoint = Vector2.new(0.5, 0)
-			root.Position = UDim2.new(0.5, 0, 0, 60)
-			root.Size = UDim2.fromOffset(COL_W * cols + (cols - 1) * 10, 0)
+			root.Position = UDim2.new(0.5, 0, 0, 80)
+			root.Size = UDim2.fromOffset(COL_W * cols + (cols - 1) * 16, 0)
 			root.AutomaticSize = Enum.AutomaticSize.Y
 			root.BackgroundTransparency = 1
 			root.Parent = gui
 			local rootlist = Instance.new('UIListLayout')
 			rootlist.FillDirection = Enum.FillDirection.Horizontal
-			rootlist.Padding = UDim.new(0, 10)
+			rootlist.Padding = UDim.new(0, 16)
 			rootlist.HorizontalAlignment = Enum.HorizontalAlignment.Center
 			rootlist.Parent = root
 
@@ -2093,124 +2094,118 @@ local AimAssist
 				local col = Instance.new('Frame')
 				col.Size = UDim2.fromOffset(COL_W, 0)
 				col.AutomaticSize = Enum.AutomaticSize.Y
-				col.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
-				col.BackgroundTransparency = 0.15
+				col.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+				col.BackgroundTransparency = 0.1
 				col.BorderSizePixel = 0
+				local cc = Instance.new('UICorner') cc.CornerRadius = UDim.new(0, 12) cc.Parent = col
+				local cs = Instance.new('UIStroke') cs.Color = Color3.fromRGB(90, 90, 110) cs.Transparency = 0.4 cs.Parent = col
 				col.Parent = root
-				local cc = Instance.new('UICorner') cc.CornerRadius = UDim.new(0, 8) cc.Parent = col
 				local pad = Instance.new('UIPadding')
-				pad.PaddingTop = UDim.new(0, 8) pad.PaddingBottom = UDim.new(0, 8)
-				pad.PaddingLeft = UDim.new(0, 8) pad.PaddingRight = UDim.new(0, 8)
+				pad.PaddingTop = UDim.new(0, 14) pad.PaddingBottom = UDim.new(0, 14)
+				pad.PaddingLeft = UDim.new(0, 14) pad.PaddingRight = UDim.new(0, 14)
 				pad.Parent = col
 				local collist = Instance.new('UIListLayout')
-				collist.Padding = UDim.new(0, 6)
+				collist.Padding = UDim.new(0, 10)
 				collist.Parent = col
 
-				-- team header (colored by TeamColor if resolvable)
 				local header = Instance.new('TextLabel')
-				header.Size = UDim2.new(1, 0, 0, 22)
+				header.Size = UDim2.new(1, 0, 0, 32)
 				header.BackgroundTransparency = 1
 				header.Text = (team.name and tostring(team.name)) or ('Team ' .. tostring(team.id))
 				header.TextColor3 = Color3.new(1, 1, 1)
-				header.TextSize = 16
+				header.TextSize = 26
 				header.Font = Enum.Font.GothamBold
 				header.TextXAlignment = Enum.TextXAlignment.Left
 				header.LayoutOrder = 0
 				header.Parent = col
 
-				-- banned kits line for this team
 				local bans = kitBans[tostring(team.id)] or kitBans[team.id]
 				if type(bans) == 'table' and next(bans) then
 					local names = {}
-					for _, k in pairs(bans) do
-						local m = kitMeta(k)
-						names[#names + 1] = (m and m.name) or tostring(k)
-					end
+					for _, k in pairs(bans) do local m = kitMeta(k) names[#names + 1] = (m and m.name) or tostring(k) end
 					local banlbl = Instance.new('TextLabel')
-					banlbl.Size = UDim2.new(1, 0, 0, 16)
+					banlbl.Size = UDim2.new(1, 0, 0, 20)
 					banlbl.BackgroundTransparency = 1
 					banlbl.Text = 'Banned: ' .. table.concat(names, ', ')
-					banlbl.TextColor3 = Color3.fromRGB(230, 120, 120)
-					banlbl.TextSize = 11
+					banlbl.TextColor3 = Color3.fromRGB(235, 120, 120)
+					banlbl.TextSize = 14
 					banlbl.Font = Enum.Font.Gotham
 					banlbl.TextXAlignment = Enum.TextXAlignment.Left
-					banlbl.TextTruncate = Enum.TextTruncate.AtEnd
+					banlbl.TextWrapped = true
 					banlbl.LayoutOrder = 1
 					banlbl.Parent = col
 				end
 
-				-- player rows
 				local members = team.members
 				if type(members) == 'table' then
 					local order = 2
 					for _, mem in members do
 						local uid = mem.userId or mem.UserId or mem
 						local row = Instance.new('Frame')
-						row.Size = UDim2.new(1, 0, 0, 34)
-						row.BackgroundColor3 = Color3.fromRGB(32, 32, 38)
-						row.BackgroundTransparency = 0.25
+						row.Size = UDim2.new(1, 0, 0, ROW_H)
+						row.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+						row.BackgroundTransparency = 0.2
 						row.BorderSizePixel = 0
 						row.LayoutOrder = order
 						row.Parent = col
-						local rc = Instance.new('UICorner') rc.CornerRadius = UDim.new(0, 6) rc.Parent = row
+						local rc = Instance.new('UICorner') rc.CornerRadius = UDim.new(0, 10) rc.Parent = row
 						order = order + 1
 
-						-- avatar
 						local av = Instance.new('ImageLabel')
-						av.Size = UDim2.fromOffset(28, 28)
-						av.Position = UDim2.fromOffset(3, 3)
+						av.Size = UDim2.fromOffset(ROW_H - 20, ROW_H - 20)
+						av.Position = UDim2.fromOffset(10, 10)
 						av.BackgroundTransparency = 1
-						av.Image = 'rbxthumb://type=AvatarHeadShot&id=' .. tostring(uid) .. '&w=48&h=48'
+						av.Image = 'rbxthumb://type=AvatarHeadShot&id=' .. tostring(uid) .. '&w=150&h=150'
 						av.Parent = row
+						local avc = Instance.new('UICorner') avc.CornerRadius = UDim.new(0, 8) avc.Parent = av
 
-						-- name
 						local plr = playersService:GetPlayerByUserId(uid)
 						local nm = Instance.new('TextLabel')
-						nm.Size = UDim2.new(1, -110, 1, 0)
-						nm.Position = UDim2.fromOffset(36, 0)
+						nm.Size = UDim2.new(1, -(ROW_H - 20) - 24 - (ROW_H + 90), 0, 24)
+						nm.Position = UDim2.fromOffset(ROW_H, 16)
 						nm.BackgroundTransparency = 1
 						nm.Text = plr and (plr.DisplayName ~= '' and plr.DisplayName or plr.Name) or ('#' .. tostring(uid))
 						nm.TextColor3 = Color3.new(1, 1, 1)
-						nm.TextSize = 13
-						nm.Font = Enum.Font.Gotham
+						nm.TextSize = 18
+						nm.Font = Enum.Font.GothamBold
 						nm.TextXAlignment = Enum.TextXAlignment.Left
 						nm.TextTruncate = Enum.TextTruncate.AtEnd
 						nm.Parent = row
 
-						-- selected kit (icon + name)
 						local kitId = kitSel[tostring(uid)] or kitSel[uid]
 						local m = kitMeta(kitId)
 						if m then
 							if m.renderImage and m.renderImage ~= '' then
 								local ki = Instance.new('ImageLabel')
-								ki.Size = UDim2.fromOffset(24, 24)
+								ki.Size = UDim2.fromOffset(ROW_H - 12, ROW_H - 12)
 								ki.AnchorPoint = Vector2.new(1, 0.5)
-								ki.Position = UDim2.new(1, -68, 0.5, 0)
+								ki.Position = UDim2.new(1, -96, 0.5, 0)
 								ki.BackgroundTransparency = 1
+								ki.ScaleType = Enum.ScaleType.Fit
 								ki.Image = m.renderImage
 								ki.Parent = row
 							end
 							local kn = Instance.new('TextLabel')
 							kn.AnchorPoint = Vector2.new(1, 0.5)
-							kn.Size = UDim2.fromOffset(64, 34)
-							kn.Position = UDim2.new(1, -2, 0.5, 0)
+							kn.Size = UDim2.fromOffset(90, ROW_H)
+							kn.Position = UDim2.new(1, -6, 0.5, 0)
 							kn.BackgroundTransparency = 1
 							kn.Text = m.name or tostring(kitId)
-							kn.TextColor3 = Color3.fromRGB(120, 200, 255)
-							kn.TextSize = 11
-							kn.Font = Enum.Font.GothamMedium
+							kn.TextColor3 = Color3.fromRGB(130, 205, 255)
+							kn.TextSize = 15
+							kn.Font = Enum.Font.GothamBold
 							kn.TextXAlignment = Enum.TextXAlignment.Right
-							kn.TextTruncate = Enum.TextTruncate.AtEnd
+							kn.TextWrapped = true
 							kn.Parent = row
 						else
 							local kn = Instance.new('TextLabel')
 							kn.AnchorPoint = Vector2.new(1, 0.5)
-							kn.Size = UDim2.fromOffset(70, 34)
-							kn.Position = UDim2.new(1, -2, 0.5, 0)
+							kn.Size = UDim2.fromOffset(120, ROW_H)
+							kn.Position = UDim2.new(1, -12, 0.5, 0)
 							kn.BackgroundTransparency = 1
-							kn.Text = 'picking…'
+							kn.Text = 'picking...'
 							kn.TextColor3 = Color3.fromRGB(150, 150, 150)
-							kn.TextSize = 11
+							kn.TextSize = 15
 							kn.Font = Enum.Font.Gotham
 							kn.TextXAlignment = Enum.TextXAlignment.Right
 							kn.Parent = row
