@@ -6525,19 +6525,10 @@ local function showPatchNotes(force)
 		rowStroke.Color = hue
 		rowStroke.Transparency = 0.8
 		rowStroke.Parent = rowc
-		-- left accent bar
-		local bar = Instance.new('Frame')
-		bar.Size = UDim2.new(0, 3, 1, -14)
-		bar.Position = UDim2.fromOffset(9, 7)
-		bar.BackgroundColor3 = hue
-		bar.BackgroundTransparency = 0.25
-		bar.BorderSizePixel = 0
-		bar.Parent = rowc
-		addCorner(bar, UDim.new(1, 0))
 		local rpad = Instance.new('UIPadding')
 		rpad.PaddingTop = UDim.new(0, 10)
 		rpad.PaddingBottom = UDim.new(0, 10)
-		rpad.PaddingLeft = UDim.new(0, 22)
+		rpad.PaddingLeft = UDim.new(0, 14)
 		rpad.PaddingRight = UDim.new(0, 12)
 		rpad.Parent = rowc
 		local text = Instance.new('TextLabel')
@@ -6554,7 +6545,7 @@ local function showPatchNotes(force)
 		text.LineHeight = 1.1
 		text.FontFace = uipallet.Font
 		text.Parent = rowc
-		rows[#rows + 1] = {row = rowc, kind = 'card', text = text, bar = bar, stroke = rowStroke}
+		rows[#rows + 1] = {row = rowc, kind = 'card', text = text, stroke = rowStroke}
 	end
 
 	if #feats > 0 then
@@ -6571,7 +6562,6 @@ local function showPatchNotes(force)
 		r.row.Position = r.row.Position + UDim2.fromOffset(0, 8)
 		if r.kind == 'card' then
 			r.text.TextTransparency = 1
-			r.bar.BackgroundTransparency = 1
 			r.row.BackgroundTransparency = 1
 			r.stroke.Transparency = 1
 		else
@@ -6596,7 +6586,6 @@ local function showPatchNotes(force)
 			tweenService:Create(r.row, TweenInfo.new(0.32, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = baseY}):Play()
 			if r.kind == 'card' then
 				tweenService:Create(r.text, TweenInfo.new(0.34), {TextTransparency = 0}):Play()
-				tweenService:Create(r.bar, TweenInfo.new(0.34), {BackgroundTransparency = 0.25}):Play()
 				tweenService:Create(r.row, TweenInfo.new(0.34), {BackgroundTransparency = 0.35}):Play()
 				tweenService:Create(r.stroke, TweenInfo.new(0.34), {Transparency = 0.8}):Play()
 				task.wait(0.05)
