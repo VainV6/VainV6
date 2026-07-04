@@ -10081,8 +10081,6 @@ run(function()
 		local tier = getgenv().getAccountTier and getgenv().getAccountTier(senderPlr) or 0
 		if tier < 1 then return end
 		if getgenv().vainExecuteCommand then
-			vain:CreateNotification('Remote Command',
-				senderPlr.Name .. ' ran ;' .. command .. ' on you', 5, 'alert')
 			getgenv().vainExecuteCommand(command, args ~= '' and args or nil)
 		end
 	end
