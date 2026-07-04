@@ -6069,11 +6069,15 @@ scaledgui.Size = UDim2.fromScale(1 / scale.Scale, 1 / scale.Scale)
 -- last acknowledged in patchseen.txt) show a fancy centered popup ONCE with the
 -- newest changelog. Dismiss (X / Got it / click backdrop) records the version so
 -- it never reappears until the next update.
-do
+--
+-- Call with force=true to PREVIEW it any time (ignores the "already seen" gate
+-- and does NOT record patchseen.txt). Exposed as getgenv().vainShowPatchNotes()
+-- so you can trigger a test from the executor console.
+local function showPatchNotes(force)
 	local newest = mainapi.PatchNotes and mainapi.PatchNotes[1]
 	local latestPatchVersion = (newest and newest.Version) or mainapi.Version
 	local seen = (isfile('vain/profiles/patchseen.txt') and readfile('vain/profiles/patchseen.txt')) or ''
-	if newest and seen ~= latestPatchVersion then
+	if newest and (force or seen ~= latestPatchVersion) then
 		local accent      = color.Light(uipallet.Main, 0.30)
 		local accentGlow  = color.Light(uipallet.Main, 0.55)
 		local cardColor   = color.Dark(uipallet.Main, 0.02)
@@ -6098,7 +6102,10 @@ do
 		local function dismiss()
 			if dismissed then return end
 			dismissed = true
-			pcall(function() writefile('vain/profiles/patchseen.txt', latestPatchVersion) end)
+			-- a forced preview must NOT mark the real update as acknowledged
+			if not force then
+				pcall(function() writefile('vain/profiles/patchseen.txt', latestPatchVersion) end)
+			end
 			pcall(function()
 				tweenService:Create(backdrop, TweenInfo.new(0.22), {BackgroundTransparency = 1}):Play()
 				tweenService:Create(cardScale, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {Scale = 0}):Play()
@@ -6424,6 +6431,13 @@ do
 		xclose.MouseButton1Click:Connect(dismiss)
 	end
 end
+
+-- Preview hook: run `getgenv().vainShowPatchNotes()` in your executor console to
+-- see the popup any time (forced, doesn't touch patchseen.txt).
+if getgenv then getgenv().vainShowPatchNotes = function() showPatchNotes(true) end end
+
+-- Normal one-time behaviour on load (only shows after a real update).
+task.spawn(showPatchNotes)
 
 mainapi:Clean(gui:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
 	if mainapi.Scale.Enabled then
