@@ -18,18 +18,31 @@ local mainapi = {
 		{
 			Version = '4.23',
 			Date = 'July 2026',
-			Highlight = 'A big BedWars quality-of-life pass — smarter spectating, richer tab-list stats, and a preview for the kit-draft screen.',
+			Highlight = 'A huge BedWars pass — smarter spectating, richer tab-list stats, a kit-draft preview, a Shader and universal FPS Boost, a Cheat Detector, and a stack of fixes.',
 			Changes = {
 				-- Features first, then bug fixes (each tagged for the What's New panel).
+
+				-- ── FEATURES ──────────────────────────────────────────────────
 				'[feature] BedWars — Better Spectating: spectate ANYONE, not just your team. Enable Fixed Spectate and pick a player to lock the camera onto them; if they die the view snaps straight back instead of drifting to a random player.',
-				'[feature] BedWars — Show Advanced Stats: each player\'s win streak, winrate, matches, K/D and average beds-broken-per-match now sit next to their name in the tab-list and the spectate nametag. A Global Stats toggle sums every mode; individual Show Win Streak / Winrate / Matches / K/D / Bed Breaks toggles let you pick exactly what appears.',
+				'[feature] BedWars — Show Advanced Stats (formerly Tablist Winstreak): each player\'s win streak, winrate, matches, K/D and average beds-broken-per-match now sit next to their name in the tab-list and the spectate nametag. A Global Stats toggle sums every mode; individual Show Win Streak / Winrate / Matches / K/D / Bed Breaks toggles let you pick exactly what appears.',
 				'[feature] BedWars — Preparation Preview: when you spectate someone during the kit-ban / kit-select phase you now see every team\'s players, avatars and their chosen kits rendered out, instead of a blank screen.',
-				'[feature] BedWars — Storage ESP: added a Show All Items toggle to reveal every item in a storage, not just whitelisted ones, plus item quantities.',
-				'[fix] BedWars — Better Spectating now correctly un-fixates when you turn Fixed Spectate off OR toggle the whole module off (it no longer leaves you glued to the locked player).',
-				'[fix] BedWars — Fixating actually snaps onto your chosen player now (the previous build silently jumped to the wrong player).',
-				'[fix] BedWars — Advanced stats no longer leak into the kill feed, target list and other menus; they show only in the tab-list, spectate nametag and Preparation Preview.',
-				'[fix] BedWars — Advanced stats no longer flicker on and off every second.',
-				'[fix] BedWars — Kit ESP: shows targets immediately at match start (no more untoggle/retoggle), with working Tracers and new-target spawn notifications.',
+				'[feature] BedWars — Cheat Detector: flags players whose hit behaviour looks illegitimate (extended reach / out-of-view hits), with Tolerance and Flag Threshold sliders and a Reset On Match option.',
+				'[feature] New Shader module (Voidware-style) — adds atmosphere and post-processing for a nicer look.',
+				'[feature] New FPS Boost module — a universal, executor-wide performance optimiser that strips expensive rendering to raise your frame rate.',
+				'[feature] BedWars — Kit ESP: added a Tracers option (lines to each kit target in its colour) and a new-target spawn notification (e.g. "a new bee has spawned").',
+				'[feature] BedWars — Storage ESP: added a Show All Items toggle to reveal every item in a storage (not just whitelisted), and it now shows each item\'s quantity.',
+				'[feature] BedWars — Bed Plates: added a notification when a new layer of blocks is added, with a toggle to only notify when obsidian is placed.',
+				'[feature] System Settings — added per-list toggles for Target and Friend notifications, so you\'re alerted when someone on your target/friend list is in the server.',
+
+				-- ── FIXES & IMPROVEMENTS ──────────────────────────────────────
+				'[fix] BedWars — Better Spectating now correctly un-fixates when you turn Fixed Spectate off OR toggle the whole module off (it no longer leaves you glued to the locked player), and fixating actually snaps onto your chosen player.',
+				'[fix] BedWars — Advanced stats no longer leak into the kill feed, target list and other menus (they show only in the tab-list, spectate nametag and Preparation Preview), and no longer flicker on and off every second.',
+				'[fix] BedWars — Kit ESP now shows targets immediately at match start; you no longer have to un-toggle and re-toggle it, and its Tracers / spawn-notification toggles no longer error.',
+				'[fix] BedWars — merged the Breaker and Nuker modules into a single "Nuker" (kept the Breaker behaviour).',
+				'[fix] Target & Friend notifications now fire correctly.',
+				'[fix] Dex is now a clickable button instead of a toggle.',
+				'[fix] Sigrid Charge is no longer offset to the right.',
+				'[fix] The patch-notes unread dot no longer stays visible in sections (like Settings) where the patch-notes icon is hidden.',
 			},
 		},
 		{
