@@ -14564,7 +14564,8 @@ run(function()
     local Mode
     local Smart
     local Switch
-    
+    local HoleFiller
+
     local function getBedNear()
         local localPosition = entitylib.isAlive and entitylib.character.RootPart.Position or Vector3.zero
         for _, v in collectionService:GetTagged('bed') do
@@ -14691,6 +14692,93 @@ run(function()
     })
     Switch = BedProtector:CreateToggle({Name = 'Auto Switch', Tooltip = 'Automatically switches to the required tool or item'})
     Smart = BedProtector:CreateToggle({Name = 'Smart', Default = true, Tooltip = 'Uses smart detection to avoid triggering unnecessarily'})
+
+    -- ── Bed Hole Filler ──────────────────────────────────────────────────────
+    -- Reactively patches only the EXPOSED gaps in the immediate shell around your
+    -- bed (the face-adjacent cells of each bed block) rather than rebuilding the
+    -- whole pyramid. Fires the instant a block is broken near the bed, plus a
+    -- short backup scan, so someone breaking through gets the hole re-sealed
+    -- immediately. Reuses getBedNear/getBlocks/getPlacedBlock above.
+    do
+        local GRID = 3
+        local FACES = {
+            Vector3.new(GRID, 0, 0), Vector3.new(-GRID, 0, 0),
+            Vector3.new(0, GRID, 0), Vector3.new(0, -GRID, 0),
+            Vector3.new(0, 0, GRID), Vector3.new(0, 0, -GRID),
+        }
+
+        -- collect the world cells occupied by the bed (a bed spans ~2 cells).
+        local function bedCells(bed)
+            local cells = {}
+            local origin = bed.Position
+            -- probe a 3x1x3 region around the bed centre for cells that ARE the bed
+            for dx = -1, 1 do
+                for dz = -1, 1 do
+                    local p = origin + Vector3.new(dx * GRID, 0, dz * GRID)
+                    local block = getPlacedBlock(p)
+                    -- treat the bed's own blocks (and the anchor) as occupied cells
+                    if block and (block == bed or (block.GetAttribute and block:GetAttribute('Team' .. (lplr:GetAttribute('Team') or -1) .. 'NoBreak'))) then
+                        cells[#cells + 1] = p
+                    end
+                end
+            end
+            if #cells == 0 then cells[1] = origin end
+            return cells
+        end
+
+        local function fillHoles()
+            if not (HoleFiller and HoleFiller.Enabled and BedProtector.Enabled) then return end
+            if not entitylib.isAlive or not entitylib.character.RootPart then return end
+            local bed = getBedNear()
+            if not bed then return end
+            local blocks = getBlocks()
+            if #blocks == 0 then return end
+            local strongest = blocks[1] -- {itemType, health, tool}
+            local rootPos = entitylib.character.RootPart.Position
+
+            local switch = Switch.Enabled
+            local old = switch and store.hand and store.hand.tool and getHotbar(store.hand.tool) or nil
+            local hotbar = switch and getHotbar(strongest[3]) or nil
+
+            local seen = {}
+            for _, cell in bedCells(bed) do
+                for _, off in FACES do
+                    local pos = cell + off
+                    local key = tostring(bedwars.BlockController:getBlockPosition(pos))
+                    if not seen[key] then
+                        seen[key] = true
+                        -- skip if it's a bed cell itself, already filled, or out of range
+                        if not getPlacedBlock(pos)
+                            and (rootPos - pos).Magnitude <= PlaceRange.Value then
+                            if hotbar and hotbarSwitch(hotbar) then task.wait() end
+                            task.spawn(bedwars.placeBlock, pos, strongest[1], false)
+                        end
+                    end
+                end
+            end
+            if switch and old and hotbarSwitch(old) then task.wait() end
+        end
+
+        HoleFiller = BedProtector:CreateToggle({
+            Name = 'Hole Filler',
+            Tooltip = 'Instantly re-seals only the exposed gaps in the shell directly around your bed (reacts the moment a block is broken). Lighter than the full pyramid.',
+            Default = false,
+            Function = function(callback)
+                if not callback then return end
+                -- react instantly to any block break near the bed
+                BedProtector:Clean(vapeEvents.BreakBlockEvent.Event:Connect(function()
+                    task.spawn(fillHoles)
+                end))
+                -- backup scan so gaps still close even if an event is missed
+                task.spawn(function()
+                    repeat
+                        pcall(fillHoles)
+                        task.wait(0.3)
+                    until not (HoleFiller.Enabled and BedProtector.Enabled)
+                end)
+            end,
+        })
+    end
 end)
 
 run(function()
