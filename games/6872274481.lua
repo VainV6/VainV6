@@ -10867,8 +10867,8 @@ run(function()
     LootShow.bee = LootESP:CreateToggle({ Name = 'Show Bees', Default = true, Function = rebuild })
     Highlight = LootESP:CreateToggle({
         Name = 'Highlight On Threshold',
-        Tooltip = 'Turns a player\'s loot numbers red once they carry at least the threshold amount of any resource below.',
-        Visible = false,
+        Tooltip = 'Glows a player red (character Highlight) once they carry at least the threshold amount of any resource below.',
+        Default = false,
         Function = function(callback)
             for _, r in LOOT_RES do
                 local s = LootThresholds[r.key]
