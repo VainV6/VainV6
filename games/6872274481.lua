@@ -11,7 +11,7 @@ end
 local cloneref = cloneref or function(obj)
 	return obj
 end
-local vapeEvents = setmetatable({}, {
+local vainEvents = setmetatable({}, {
 	__index = function(self, index)
 		self[index] = Instance.new('BindableEvent')
 		return self[index]
@@ -454,7 +454,7 @@ local function hotbarSwitch(slot)
 			type = 'InventorySelectHotbarSlot',
 			slot = slot
 		})
-		vapeEvents.InventoryChanged.Event:Wait()
+		vainEvents.InventoryChanged.Event:Wait()
 		return true
 	end
 	return false
@@ -827,7 +827,7 @@ run(function()
 					entitylib.isAlive = true
 					entitylib.Events.LocalAdded:Fire(entity)
 					table.insert(entitylib.Connections, char.AttributeChanged:Connect(function(attr)
-						vapeEvents.AttributeChanged:Fire(attr)
+						vainEvents.AttributeChanged:Fire(attr)
 					end))
 				else
 					entity.Targetable = entitylib.targetCheck(entity)
@@ -1442,11 +1442,11 @@ run(function()
 			store.inventory = newinv
 
 			if newinv ~= oldinv then
-				vapeEvents.InventoryChanged:Fire()
+				vainEvents.InventoryChanged:Fire()
 			end
 
 			if newinv.inventory.items ~= oldinv.inventory.items then
-				vapeEvents.InventoryAmountChanged:Fire()
+				vainEvents.InventoryAmountChanged:Fire()
 				store.tools.sword = getSword()
 				for _, v in {'stone', 'wood', 'wool'} do
 					store.tools[v] = getTool(v)
@@ -1476,13 +1476,13 @@ run(function()
 		if not vain.Connections then return end
 		bedwars.Client:WaitFor(event):andThen(function(connection)
 			vain:Clean(connection:Connect(function(...)
-				vapeEvents[event]:Fire(...)
+				vainEvents[event]:Fire(...)
 			end))
 		end)
 	end
 
 	vain:Clean(bedwars.ZapNetworking.EntityDamageEventZap.On(function(...)
-		vapeEvents.EntityDamageEvent:Fire({
+		vainEvents.EntityDamageEvent:Fire({
 			entityInstance = ...,
 			damage = select(2, ...),
 			damageType = select(3, ...),
@@ -1523,7 +1523,7 @@ run(function()
 					cache[i] = nil
 				end
 			end
-			vapeEvents[event]:Fire(data)
+			vainEvents[event]:Fire(data)
 		end))
 	end
 
@@ -1582,7 +1582,7 @@ run(function()
 									cache[i] = nil
 								end
 							end
-							vapeEvents.PlaceBlockEvent:Fire(data)
+							vainEvents.PlaceBlockEvent:Fire(data)
 						end
 					end)
 				end))
@@ -1590,19 +1590,19 @@ run(function()
 		end)
 	end)
 
-	vain:Clean(vapeEvents.BedwarsBedBreak.Event:Connect(function(bedTable)
+	vain:Clean(vainEvents.BedwarsBedBreak.Event:Connect(function(bedTable)
 		if bedTable.player and bedTable.player.UserId == lplr.UserId then
 			beds:Increment()
 		end
 	end))
 
-	vain:Clean(vapeEvents.MatchEndEvent.Event:Connect(function(winTable)
+	vain:Clean(vainEvents.MatchEndEvent.Event:Connect(function(winTable)
 		if (bedwars.Store:getState().Game.myTeam or {}).id == winTable.winningTeamId or lplr.Neutral then
 			wins:Increment()
 		end
 	end))
 
-	vain:Clean(vapeEvents.EntityDeathEvent.Event:Connect(function(deathTable)
+	vain:Clean(vainEvents.EntityDeathEvent.Event:Connect(function(deathTable)
 		local killer = playersService:GetPlayerFromCharacter(deathTable.fromEntity)
 		local killed = playersService:GetPlayerFromCharacter(deathTable.entityInstance)
 		if not killed or not killer then return end
@@ -1662,7 +1662,7 @@ run(function()
 		Client.Get = OldGet
 		bedwars.BlockController.isBlockBreakable = OldBreak
 		store.blockPlacer:disable()
-		for _, v in vapeEvents do
+		for _, v in vainEvents do
 			v:Destroy()
 		end
 		for _, v in cache do
@@ -1670,7 +1670,7 @@ run(function()
 			table.clear(v)
 		end
 		table.clear(store.blockPlacer)
-		table.clear(vapeEvents)
+		table.clear(vainEvents)
 		table.clear(bedwars)
 		table.clear(store)
 		table.clear(cache)
@@ -3826,7 +3826,7 @@ run(function()
     		Tooltip = 'Extends your melee and placement ranges server-side',
     		Function = function(callback)
     			if callback then
-    				Reach:Clean(vapeEvents.CEAttacked.Event:Connect(function()
+    				Reach:Clean(vainEvents.CEAttacked.Event:Connect(function()
     					local doAttack
     					if not bedwars.AppController:isLayerOpen(bedwars.UILayers.MAIN) then
     						if
@@ -4585,7 +4585,7 @@ run(function()
 		Function = function(callback)
 			if callback then
 				old = bedwars.KnockbackUtil.applyKnockback
-				Velocity:Clean(vapeEvents.TakeKnockback.Event:Connect(function(root, mass, dir, knockback, ...)
+				Velocity:Clean(vainEvents.TakeKnockback.Event:Connect(function(root, mass, dir, knockback, ...)
 					local args = {...}
 					local clone = table.clone(knockback)
 
@@ -4620,7 +4620,7 @@ run(function()
 						knockback = knockback or {}
 						if Mode.Value == 'Lag' then
 							if chance < Chance.Value then
-								return vapeEvents.TakeKnockback:Fire(root, mass, dir, knockback, ...)
+								return vainEvents.TakeKnockback:Fire(root, mass, dir, knockback, ...)
 							end
 						else
 							local horiz = (knockback.horizontal or 1) * (Horizontal.Value / 100)
@@ -5602,7 +5602,7 @@ run(function()
     	Tooltip = 'Boosts the damage you deal to enemies',
     	Function = function(callback)
     		if callback then
-    			DamageBoost:Clean(vapeEvents.EntityDamageEvent.Event:Connect(function(damageTable)
+    			DamageBoost:Clean(vainEvents.EntityDamageEvent.Event:Connect(function(damageTable)
     				if entitylib.isAlive and tick() > (stack or 0) and damageTable.entityInstance == lplr.Character and not LongJump.Enabled then
     					local horizontal = (damageTable.knockbackMultiplier and damageTable.knockbackMultiplier.horizontal or 0)
     					knockbackSpeed = bedwars.KnockbackUtil.calculateKnockbackVelocity(Vector3.one, 1, {
@@ -5694,9 +5694,9 @@ run(function()
             if callback then
                 table.clear(flags)
                 table.clear(alerted)
-                CheatDetector:Clean(vapeEvents.EntityDamageEvent.Event:Connect(onDamage))
+                CheatDetector:Clean(vainEvents.EntityDamageEvent.Event:Connect(onDamage))
                 if ResetOnMatch and ResetOnMatch.Enabled then
-                    CheatDetector:Clean(vapeEvents.MatchEndEvent.Event:Connect(function()
+                    CheatDetector:Clean(vainEvents.MatchEndEvent.Event:Connect(function()
                         table.clear(flags)
                         table.clear(alerted)
                     end))
@@ -5943,7 +5943,7 @@ run(function()
                 if lplr.Character and (lplr.Character:GetAttribute('InflatedBalloons') or 0) == 0 and getItem('balloon') then
                     bedwars.BalloonController:inflateBalloon()
                 end
-                Fly:Clean(vapeEvents.AttributeChanged.Event:Connect(function(changed)
+                Fly:Clean(vainEvents.AttributeChanged.Event:Connect(function(changed)
                     if changed == 'InflatedBalloons' and (lplr.Character:GetAttribute('InflatedBalloons') or 0) == 0 and getItem('balloon') then
                         bedwars.BalloonController:inflateBalloon()
                     end
@@ -7287,7 +7287,7 @@ run(function()
             end)
         end,
         cat = function(_, _, dir)
-            LongJump:Clean(vapeEvents.CatPounce.Event:Connect(function()
+            LongJump:Clean(vainEvents.CatPounce.Event:Connect(function()
                 JumpSpeed = 4 * Value.Value
                 JumpTick = tick() + 2.5
                 Direction = Vector3.new(dir.X, 0, dir.Z).Unit
@@ -7359,7 +7359,7 @@ run(function()
             frictionTable.LongJump = callback or nil
             updateVelocity()
             if callback then
-                LongJump:Clean(vapeEvents.EntityDamageEvent.Event:Connect(function(damageTable)
+                LongJump:Clean(vainEvents.EntityDamageEvent.Event:Connect(function(damageTable)
                     if damageTable.entityInstance == lplr.Character and damageTable.fromEntity == lplr.Character and (not damageTable.knockbackMultiplier or not damageTable.knockbackMultiplier.disabled) then
                         local knockbackBoost = bedwars.KnockbackUtil.calculateKnockbackVelocity(Vector3.one, 1, {
                             vertical = 0,
@@ -7376,7 +7376,7 @@ run(function()
                         end
                     end
                 end))
-                LongJump:Clean(vapeEvents.GrapplingHookFunctions.Event:Connect(function(dataTable)
+                LongJump:Clean(vainEvents.GrapplingHookFunctions.Event:Connect(function(dataTable)
                     if dataTable.hookFunction == 'PLAYER_IN_TRANSIT' then
                         local vec = entitylib.character.RootPart.CFrame.LookVector
                         JumpSpeed = 2.5 * Value.Value
@@ -7500,7 +7500,7 @@ run(function()
     					root.Velocity = Vector3.zero
     					root.CFrame = CFrame.new(localPosition)
     
-    					MouseTP:Clean(vapeEvents.EntityDamageEvent.Event:Connect(function(damageTable)
+    					MouseTP:Clean(vainEvents.EntityDamageEvent.Event:Connect(function(damageTable)
     						if damageTable.entityInstance == lplr.Character and damageTable.fromEntity == lplr.Character and (not damageTable.knockbackMultiplier or not damageTable.knockbackMultiplier.disabled) then
     							local knockbackBoost = bedwars.KnockbackUtil.calculateKnockbackVelocity(Vector3.one, 1, {
     								vertical = 0,
@@ -9638,7 +9638,7 @@ run(function()
     			label.Font = Enum.Font.Arial
     			label.Parent = vain.gui
     			Health:Clean(label)
-    			Health:Clean(vapeEvents.AttributeChanged.Event:Connect(function()
+    			Health:Clean(vainEvents.AttributeChanged.Event:Connect(function()
     				label.Text = entitylib.isAlive and math.round(lplr.Character:GetAttribute('Health')) .. ' ❤️' or ''
     				label.TextColor3 = entitylib.isAlive and Color3.fromHSV((lplr.Character:GetAttribute('Health') / lplr.Character:GetAttribute('MaxHealth')) / 2.8, 0.86, 1) or Color3.new()
     			end))
@@ -11268,7 +11268,7 @@ run(function()
                 until store.map or not SkinChanger.Enabled
                 if not SkinChanger.Enabled then return end
                 
-                SkinChanger:Clean(vapeEvents.InventoryHeldChanged.Event:Connect(function(Tool)
+                SkinChanger:Clean(vainEvents.InventoryHeldChanged.Event:Connect(function(Tool)
                     for _, v in Saved do
                         pcall(function()
                             v:Destroy()
@@ -12110,7 +12110,7 @@ run(function()
         cat = function()
             local old = bedwars.CatController.leap
             bedwars.CatController.leap = function(...)
-                vapeEvents.CatPounce:Fire()
+                vainEvents.CatPounce:Fire()
                 return old(...)
             end
     
@@ -12949,12 +12949,12 @@ run(function()
         Tooltip = 'Enables the Auto Play module',
         Function = function(callback)
             if callback then
-                AutoPlay:Clean(vapeEvents.EntityDeathEvent.Event:Connect(function(deathTable)
+                AutoPlay:Clean(vainEvents.EntityDeathEvent.Event:Connect(function(deathTable)
                     if deathTable.finalKill and deathTable.entityInstance == lplr.Character and isEveryoneDead() and store.matchState ~= 2 then
                         joinQueue()
                     end
                 end))
-                AutoPlay:Clean(vapeEvents.MatchEndEvent.Event:Connect(joinQueue))
+                AutoPlay:Clean(vainEvents.MatchEndEvent.Event:Connect(joinQueue))
             end
         end,
         Tooltip = 'Automatically queues after the match ends.'
@@ -13358,7 +13358,7 @@ run(function()
 		Tooltip = 'Only works in first person mode'
 	})
 	
-	vain:Clean(vapeEvents.InventoryChanged.Event:Connect(function()
+	vain:Clean(vainEvents.InventoryChanged.Event:Connect(function()
 		lastInventoryUpdate = 0
 	end))
 end)
@@ -13393,7 +13393,7 @@ run(function()
         Tooltip = 'Automatically sends configured chat messages',
         Function = function(callback)
             if callback then
-                AutoToxic:Clean(vapeEvents.BedwarsBedBreak.Event:Connect(function(bedTable)
+                AutoToxic:Clean(vainEvents.BedwarsBedBreak.Event:Connect(function(bedTable)
                     if Toggles.BedDestroyed.Enabled and bedTable.brokenBedTeam.id == lplr:GetAttribute('Team') then
                         sendMessage('BedDestroyed', (bedTable.player.DisplayName or bedTable.player.Name), 'how dare you >:( | <obj>')
                     elseif Toggles.Bed.Enabled and bedTable.player.UserId == lplr.UserId then
@@ -13401,7 +13401,7 @@ run(function()
                         sendMessage('Bed', team and team.displayName:lower() or 'white', 'nice bed lul | <obj>')
                     end
                 end))
-                AutoToxic:Clean(vapeEvents.EntityDeathEvent.Event:Connect(function(deathTable)
+                AutoToxic:Clean(vainEvents.EntityDeathEvent.Event:Connect(function(deathTable)
                     if deathTable.finalKill then
                         local killer = playersService:GetPlayerFromCharacter(deathTable.fromEntity)
                         local killed = playersService:GetPlayerFromCharacter(deathTable.entityInstance)
@@ -13416,7 +13416,7 @@ run(function()
                         end
                     end
                 end))
-                AutoToxic:Clean(vapeEvents.MatchEndEvent.Event:Connect(function(winstuff)
+                AutoToxic:Clean(vainEvents.MatchEndEvent.Event:Connect(function(winstuff)
                     if GG.Enabled then
                         if textChatService.ChatVersion == Enum.ChatVersion.TextChatService then
                             textChatService.ChatInputBarConfiguration.TargetTextChannel:SendAsync('gg')
@@ -14949,7 +14949,7 @@ run(function()
             Function = function(callback)
                 if not callback then return end
                 -- react instantly to any block break near the bed
-                BedProtector:Clean(vapeEvents.BreakBlockEvent.Event:Connect(function()
+                BedProtector:Clean(vainEvents.BreakBlockEvent.Event:Connect(function()
                     task.spawn(fillHoles)
                 end))
                 -- backup scan so gaps still close even if an event is missed
@@ -15006,8 +15006,8 @@ run(function()
             Function = function(callback)
                 if not callback then clearGaps() return end
                 BedProtector:Clean(clearGaps)
-                BedProtector:Clean(vapeEvents.BreakBlockEvent.Event:Connect(function() task.spawn(drawGaps) end))
-                BedProtector:Clean(vapeEvents.PlaceBlockEvent.Event:Connect(function() task.spawn(drawGaps) end))
+                BedProtector:Clean(vainEvents.BreakBlockEvent.Event:Connect(function() task.spawn(drawGaps) end))
+                BedProtector:Clean(vainEvents.PlaceBlockEvent.Event:Connect(function() task.spawn(drawGaps) end))
                 task.spawn(function()
                     repeat
                         pcall(drawGaps)
@@ -15660,7 +15660,7 @@ run(function()
                                     item = store.inventory.inventory.armor[i + 1] == 'empty' and state and getBestArmor(i) or nil,
                                     armorSlot = i
                                 })
-                                vapeEvents.InventoryChanged.Event:Wait()
+                                vainEvents.InventoryChanged.Event:Wait()
                             end
                         end
                         task.wait(0.1)
@@ -15673,7 +15673,7 @@ run(function()
                             item = store.inventory.inventory.armor[i + 1] == 'empty' and getBestArmor(i) or nil,
                             armorSlot = i
                         })
-                        vapeEvents.InventoryChanged.Event:Wait()
+                        vainEvents.InventoryChanged.Event:Wait()
                     end
                 end
             end
@@ -15998,7 +15998,7 @@ run(function()
                 if BedwarsCheck.Enabled and not store.queueType:find('bedwars') then return end
     
                 local lastupgrades
-                AutoBuy:Clean(vapeEvents.InventoryAmountChanged.Event:Connect(function()
+                AutoBuy:Clean(vainEvents.InventoryAmountChanged.Event:Connect(function()
                     if (npctick - tick()) > 1 then npctick = tick() end
                 end))
     
@@ -16229,8 +16229,8 @@ run(function()
         Tooltip = 'Enables the Auto Consume module',
         Function = function(callback)
             if callback then
-                AutoConsume:Clean(vapeEvents.InventoryAmountChanged.Event:Connect(consumeCheck))
-                AutoConsume:Clean(vapeEvents.AttributeChanged.Event:Connect(function(attribute)
+                AutoConsume:Clean(vainEvents.InventoryAmountChanged.Event:Connect(consumeCheck))
+                AutoConsume:Clean(vainEvents.AttributeChanged.Event:Connect(function(attribute)
                     if attribute:find('Shield') or attribute:find('Health') or attribute == 'StatusEffect_speed' then
                         consumeCheck(attribute)
                     end
@@ -16893,7 +16893,7 @@ run(function()
     
     local function dispatch(...)
         bedwars.Store:dispatch(...)
-        vapeEvents.InventoryChanged.Event:Wait()
+        vainEvents.InventoryChanged.Event:Wait()
     end
     
     local function sortCallback()
@@ -16958,7 +16958,7 @@ run(function()
                     return
                 end
     
-                AutoHotbar:Clean(vapeEvents.InventoryAmountChanged.Event:Connect(sortCallback))
+                AutoHotbar:Clean(vainEvents.InventoryAmountChanged.Event:Connect(sortCallback))
             end
         end,
         Tooltip = 'Automatically arranges hotbar to your liking.'
@@ -17363,8 +17363,8 @@ run(function()
     			for _, v in collectionService:GetTagged('bed') do
     				task.spawn(Added, v)
     			end
-    			BedPlates:Clean(vapeEvents.PlaceBlockEvent.Event:Connect(refreshNear))
-    			BedPlates:Clean(vapeEvents.BreakBlockEvent.Event:Connect(refreshNear))
+    			BedPlates:Clean(vainEvents.PlaceBlockEvent.Event:Connect(refreshNear))
+    			BedPlates:Clean(vainEvents.BreakBlockEvent.Event:Connect(refreshNear))
     			BedPlates:Clean(collectionService:GetInstanceAddedSignal('bed'):Connect(Added))
     			BedPlates:Clean(collectionService:GetInstanceRemovedSignal('bed'):Connect(function(v)
     				if Reference[v] then
@@ -18056,7 +18056,7 @@ run(function()
     	Tooltip = 'Automates the Caitlyn kit trap ability',
     	Function = function(callback)
     		if callback then
-    			AutoCaitlyn:Clean(vapeEvents.EntityDamageEvent.Event:Connect(function(damageTable)
+    			AutoCaitlyn:Clean(vainEvents.EntityDamageEvent.Event:Connect(function(damageTable)
     				if entitylib.isAlive and damageTable.fromEntity == lplr.Character and (entitylib.character.RootPart.Position - damageTable.entityInstance.HumanoidRootPart.Position).Magnitude <= Range.Value then
     					local state = bedwars.Store:getState()
     					if not state.Kit.activeContract then
@@ -19292,7 +19292,7 @@ run(function()
     	Tooltip = 'Automates the Nyx kit stealth ability',
     	Function = function(call)
     		if call then
-    			AutoNyx:Clean(vapeEvents.EntityDamageEvent.Event:Connect(function(damageTable)
+    			AutoNyx:Clean(vainEvents.EntityDamageEvent.Event:Connect(function(damageTable)
     				if damageTable.damageType == 0 and damageTable.fromEntity and damageTable.fromEntity.Name == lplr.Name and entitylib.EntityPosition({
     					Range = Range.Value,
     					Part = 'RootPart',
@@ -20633,7 +20633,7 @@ run(function()
         Tooltip = 'Plays a visual effect when an enemy bed is broken',
         Function = function(callback)
             if callback then
-                BedBreakEffect:Clean(vapeEvents.BedwarsBedBreak.Event:Connect(function(data)
+                BedBreakEffect:Clean(vainEvents.BedwarsBedBreak.Event:Connect(function(data)
                     firesignal(bedwars.Client:Get('BedBreakEffectTriggered').instance.OnClientEvent, {
                         player = data.player,
                         position = data.bedBlockPosition * 3,
@@ -21882,7 +21882,7 @@ run(function()
         Tooltip = 'Plays a visual effect when the match ends in a win',
         Function = function(callback)
             if callback then
-                WinEffect:Clean(vapeEvents.MatchEndEvent.Event:Connect(function()
+                WinEffect:Clean(vainEvents.MatchEndEvent.Event:Connect(function()
                     for i, v in getconnections(bedwars.Client:Get('WinEffectTriggered').instance.OnClientEvent) do
                         if v.Function then
                             v.Function({
@@ -24027,7 +24027,7 @@ run(function()
 				end)
 				InvisibleCursor:Clean(renderConnection)
 
-				InvisibleCursor:Clean(vapeEvents.InventoryChanged.Event:Connect(updateCursor))
+				InvisibleCursor:Clean(vainEvents.InventoryChanged.Event:Connect(updateCursor))
             else
                 isActive = false
                 
@@ -25552,8 +25552,8 @@ run(function()
 				end)
 				table.insert(connections, entityRemovedConn)
 				
-				if vapeEvents and vapeEvents.InventoryChanged then
-					local inventoryConn = vapeEvents.InventoryChanged.Event:Connect(function()
+				if vainEvents and vainEvents.InventoryChanged then
+					local inventoryConn = vainEvents.InventoryChanged.Event:Connect(function()
 						if NoCollision.Enabled then
 							updateAllCollisions(true)
 						end
@@ -29286,12 +29286,12 @@ run(function()
 		Tooltip = 'Automatically sends honor to teammates after matches',
 		Function = function(callback)
 			if callback then
-				AutoHonor:Clean(vapeEvents.EntityDeathEvent.Event:Connect(function(deathTable)
+				AutoHonor:Clean(vainEvents.EntityDeathEvent.Event:Connect(function(deathTable)
 					if deathTable.finalKill and deathTable.entityInstance == lplr.Character and isEveryoneDead() and store.matchState ~= 2 then
 						honorPlayers()
 					end
 				end))
-				AutoHonor:Clean(vapeEvents.MatchEndEvent.Event:Connect(function(...)
+				AutoHonor:Clean(vainEvents.MatchEndEvent.Event:Connect(function(...)
 					honorPlayers()
 				end))
 			else
@@ -30682,7 +30682,7 @@ run(function()
 		Function = function(callback) end,
 		Tooltip = "Plays Bed Break emote on kill."
 	})
-	AutoEmote:Clean(vapeEvents.EntityDeathEvent.Event:Connect(function(deathTable)
+	AutoEmote:Clean(vainEvents.EntityDeathEvent.Event:Connect(function(deathTable)
 		local killer = playersService:GetPlayerFromCharacter(deathTable.fromEntity)
 		local killed = playersService:GetPlayerFromCharacter(deathTable.entityInstance)
 		if killer == lplr and killed and killed ~= lplr then

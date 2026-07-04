@@ -17,7 +17,7 @@ end
 local cloneref = cloneref or function(obj)
 	return obj
 end
-local vapeEvents = setmetatable({}, {
+local vainEvents = setmetatable({}, {
 	__index = function(self, index)
 		self[index] = Instance.new('BindableEvent')
 		return self[index]
@@ -2134,8 +2134,8 @@ run(function()
 end)
 
 vain:Clean(function()
-	for _, v in vapeEvents do
+	for _, v in vainEvents do
 		pcall(function() v:Destroy() end)
 	end
-	table.clear(vapeEvents)
+	table.clear(vainEvents)
 end)
