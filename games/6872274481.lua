@@ -2259,21 +2259,23 @@ local AimAssist
 					if not q then return end
 					local ws = tonumber(q.currentWinStreak) or 0
 					local parts = {}
-					if ws > 0 then parts[#parts + 1] = ws .. '\u{1F525}' end
-					if AdvancedStats and AdvancedStats.Enabled then
-						local wins = tonumber(q.wins) or 0
-						local matches = tonumber(q.matches) or 0
-						if matches <= 0 then matches = wins + (tonumber(q.losses) or 0) end
-						if matches > 0 then
-							parts[#parts + 1] = ('%d%% WR'):format(math.floor(wins / matches * 100 + 0.5))
-						end
-						local kills = tonumber(q.kills) or 0
-						local deaths = tonumber(q.deaths) or 0
-						if kills > 0 or deaths > 0 then
-							parts[#parts + 1] = ('%.2f KD'):format(deaths > 0 and (kills / deaths) or kills)
-						end
+				-- Winstreak (always shown when > 0)
+				if ws > 0 then parts[#parts + 1] = tostring(ws) .. ' \u{1F525}' end
+				-- Advanced stats: winrate, K/D and total matches -- icons instead of text.
+				if AdvancedStats and AdvancedStats.Enabled then
+					local wins = tonumber(q.wins) or 0
+					local matches = tonumber(q.matches) or 0
+					if matches <= 0 then matches = wins + (tonumber(q.losses) or 0) end
+					if matches > 0 then
+						parts[#parts + 1] = ('%d%% \u{1F3C6}'):format(math.floor(wins / matches * 100 + 0.5))
+						parts[#parts + 1] = ('%d \u{1F3AE}'):format(matches)
 					end
-					if #parts > 0 then label = table.concat(parts, '  ') end
+					local kills = tonumber(q.kills) or 0
+					local deaths = tonumber(q.deaths) or 0
+					if kills > 0 or deaths > 0 then
+						parts[#parts + 1] = ('%.2f \u{2694}'):format(deaths > 0 and (kills / deaths) or kills)
+					end
+				end
 				end)
 				-- private/friends-only profiles reject RequestProfileData -> label stays
 				-- nil and nothing is shown for them (no global-streak fallback).
@@ -18435,22 +18437,32 @@ run(function()
 
     local friends, enemies = {'None'}, {'None'}
 
+    -- Update a dropdown's option list safely: the dropdown object / its :Change
+    -- method may not be present when this fires (created later, or the method
+    -- differs on this build), which threw "attempt to call missing method 'Change'
+    -- of table". Guard it so a nil/method-less dropdown just no-ops.
+    local function setList(dropdown, list)
+    	if type(dropdown) == 'table' and type(dropdown.Change) == 'function' then
+    		pcall(function() dropdown:Change(list) end)
+    	end
+    end
+
     local function addConnection(plr)
     	if plr:GetAttribute('Team') == lplr:GetAttribute('Team') then
     		table.insert(friends, plr.Name)
-    		Player:Change(friends)
+    		setList(Player, friends)
     	elseif plr.Team and plr.Team.Name ~= 'Spectators' then
     		table.insert(enemies, plr.Name)
-    		Enemy:Change(enemies)
+    		setList(Enemy, enemies)
     	end
 
     	plr:GetAttributeChangedSignal('Team'):Connect(function()
     		if plr:GetAttribute('Team') == lplr:GetAttribute('Team') then
     			table.insert(friends, plr.Name)
-    			Player:Change(friends)
+    			setList(Player, friends)
     		elseif plr.Team and plr.Team.Name ~= 'Spectators' then
     			table.insert(enemies, plr.Name)
-    			Enemy:Change(enemies)
+    			setList(Enemy, enemies)
     		end
     	end)
     end
@@ -21464,6 +21476,7 @@ run(function()
 	espfold.Parent = vain.gui
 
 	local function espadd(v, icon)
+		if not v then return end -- adornee (e.g. a model's PrimaryPart) may be nil
 		local billboard = Instance.new("BillboardGui")
 		billboard.Parent = espfold
 		billboard.Name = icon
