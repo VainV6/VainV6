@@ -6389,15 +6389,17 @@ local function showPatchNotes(force)
 	blurb.ZIndex = 2
 	blurb.Parent = rail
 
-	-- vertical accent divider between rail and body
+	-- thin accent seam on the rail's own right edge (inside the rail, so it can
+	-- never overlap the changelog cards).
 	local divider = Instance.new('Frame')
 	divider.Size = UDim2.new(0, 1, 1, -40)
-	divider.Position = UDim2.new(0, RAIL_W, 0, 20)
+	divider.AnchorPoint = Vector2.new(1, 0)
+	divider.Position = UDim2.new(1, 0, 0, 20)
 	divider.BackgroundColor3 = accent
 	divider.BackgroundTransparency = 0.4
 	divider.BorderSizePixel = 0
-	divider.ZIndex = 3
-	divider.Parent = card
+	divider.ZIndex = 4
+	divider.Parent = rail
 	local divGrad = Instance.new('UIGradient')
 	divGrad.Rotation = 90
 	divGrad.Transparency = NumberSequence.new({
@@ -6556,11 +6558,11 @@ local function showPatchNotes(force)
 	end
 
 	if #feats > 0 then
-		addSectionHeader('✦  New Features', featureHue, #feats)
+		addSectionHeader('New Features', featureHue, #feats)
 		for _, l in ipairs(feats) do addChangeCard(l, featureHue) end
 	end
 	if #fixes > 0 then
-		addSectionHeader('⚙  Fixes & Improvements', fixHue, #fixes)
+		addSectionHeader('Fixes & Improvements', fixHue, #fixes)
 		for _, l in ipairs(fixes) do addChangeCard(l, fixHue) end
 	end
 
