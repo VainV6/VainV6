@@ -2225,7 +2225,15 @@ local AimAssist
 						nm.TextTruncate = Enum.TextTruncate.AtEnd
 						nm.Parent = row
 
+						-- Kit source, in priority order:
+						--  1) the draft store's kitSelection (during the pick phase)
+						--  2) the player's replicated PlayingAsKit attribute (once they've
+						--     spawned as their kit) -- this is how the game's own nametags
+						--     read everyone's kit, so it's the reliable in-match source.
 						local kitId = kitSel[tostring(uid)] or kitSel[uid]
+						if (not kitId or kitId == '') and plr then
+							kitId = plr:GetAttribute('PlayingAsKit')
+						end
 						local m = kitMeta(kitId)
 						if m then
 							if m.renderImage and m.renderImage ~= '' then
@@ -2451,13 +2459,26 @@ local AimAssist
 			end
 			for _, gui in pg:GetDescendants() do
 				if gui:IsA('TextLabel') and isAllowedContainer(gui) then
-					local label = buildLabel(statData[clean(gui.Text)])
+					-- Match on the ORIGINAL name, not the current text: once painted,
+					-- gui.Text contains the visible stat glyphs (🔥 61% ...) which
+					-- stripTags can't remove, so cleaning the live text no longer matches
+					-- the player -> the row would flip painted/restored every second.
+					local orig = gui:GetAttribute('VainWSOrig')
+					-- If Roact recycled this label to a different player it resets .Text
+					-- but keeps our attribute -> a stale orig. Detect that (current text no
+					-- longer begins with orig) and drop it so we re-key off the fresh name.
+					if orig and gui.Text:sub(1, #orig) ~= orig then
+						orig = nil
+						gui:SetAttribute('VainWSOrig', nil)
+						gui:SetAttribute('VainWS', nil)
+					end
+					local key = clean(orig or gui.Text)
+					local label = buildLabel(statData[key])
 					local painted = gui:GetAttribute('VainWS')
 					if label then
 						-- Remember the untouched text once so we always rebuild FROM the
 						-- original. Rebuilding every pass (instead of skip-if-painted) lets
 						-- the per-stat toggles take effect without a Roact re-render.
-						local orig = gui:GetAttribute('VainWSOrig')
 						if not orig then
 							orig = gui.Text
 							gui:SetAttribute('VainWSOrig', orig)
@@ -2470,7 +2491,6 @@ local AimAssist
 						end
 					elseif painted then
 						-- All of this row's stats got toggled off -> restore the original.
-						local orig = gui:GetAttribute('VainWSOrig')
 						if type(orig) == 'string' then gui.Text = orig end
 						gui:SetAttribute('VainWSOrig', nil)
 						gui:SetAttribute('VainWS', nil)
