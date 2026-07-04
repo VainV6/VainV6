@@ -2270,16 +2270,16 @@ local AimAssist
 							end
 						end
 						if matches <= 0 then matches = wins + losses end
-						if best > 0 then parts[#parts + 1] = tostring(best) .. ' \u{1F525}' end
+						if best > 0 then parts[#parts + 1] = '\u{1F525} ' .. tostring(best) end
 						if matches > 0 then
-							parts[#parts + 1] = ('%d%% \u{1F3C6}'):format(math.floor(wins / matches * 100 + 0.5))
-							parts[#parts + 1] = ('%d \u{1F3AE}'):format(matches)
+							parts[#parts + 1] = ('\u{1F3C6} %d%%'):format(math.floor(wins / matches * 100 + 0.5))
+							parts[#parts + 1] = ('\u{1F3AE} %d'):format(matches)
 						end
 						if kills > 0 or deaths > 0 then
-							parts[#parts + 1] = ('%.2f \u{2694}'):format(deaths > 0 and (kills / deaths) or kills)
+							parts[#parts + 1] = ('\u{2694} %.2f'):format(deaths > 0 and (kills / deaths) or kills)
 						end
 						if matches > 0 and beds > 0 then
-							parts[#parts + 1] = ('%.2f \u{1F6CF}'):format(beds / matches)
+							parts[#parts + 1] = ('\u{1F6CF} %.2f'):format(beds / matches)
 						end
 					else
 						-- CURRENT gamemode only.
@@ -2287,22 +2287,22 @@ local AimAssist
 						local q = qt and profile.queues[qt]
 						if not q then return end
 						local ws = tonumber(q.currentWinStreak) or 0
-						if ws > 0 then parts[#parts + 1] = tostring(ws) .. ' \u{1F525}' end
+						if ws > 0 then parts[#parts + 1] = '\u{1F525} ' .. tostring(ws) end
 						local wins = tonumber(q.wins) or 0
 						local matches = tonumber(q.matches) or 0
 						if matches <= 0 then matches = wins + (tonumber(q.losses) or 0) end
 						if matches > 0 then
-							parts[#parts + 1] = ('%d%% \u{1F3C6}'):format(math.floor(wins / matches * 100 + 0.5))
-							parts[#parts + 1] = ('%d \u{1F3AE}'):format(matches)
+							parts[#parts + 1] = ('\u{1F3C6} %d%%'):format(math.floor(wins / matches * 100 + 0.5))
+							parts[#parts + 1] = ('\u{1F3AE} %d'):format(matches)
 						end
 						local kills = tonumber(q.kills) or 0
 						local deaths = tonumber(q.deaths) or 0
 						if kills > 0 or deaths > 0 then
-							parts[#parts + 1] = ('%.2f \u{2694}'):format(deaths > 0 and (kills / deaths) or kills)
+							parts[#parts + 1] = ('\u{2694} %.2f'):format(deaths > 0 and (kills / deaths) or kills)
 						end
 						local beds = tonumber(q.bedBreaks) or 0
 						if matches > 0 and beds > 0 then
-							parts[#parts + 1] = ('%.2f \u{1F6CF}'):format(beds / matches)
+							parts[#parts + 1] = ('\u{1F6CF} %.2f'):format(beds / matches)
 						end
 					end
 					if #parts > 0 then label = table.concat(parts, '  ') end
