@@ -1946,6 +1946,11 @@ local AimAssist
 					end
 					origGetTargets = nil
 					if ctrl then
+						-- ACTUALLY LEAVE the spectate view. The game's own
+						-- stopSpectatingPlayer re-enables your character, clears the
+						-- spectate maid and snaps the camera back to your Humanoid --
+						-- without this, toggling off left you stuck spectating.
+						pcall(function() ctrl:stopSpectatingPlayer() end)
 						pcall(function()
 							local TEAM = ctrl.SpectateMode and ctrl.SpectateMode.TEAM or 1
 							if ctrl.setSpectateMode then ctrl:setSpectateMode(TEAM) else ctrl.mode = TEAM end
@@ -10296,6 +10301,15 @@ run(function()
 							table.clear(Reference)
 							if newKit ~= '' then
 								setupKit(newKit)
+								-- one-time notice so it's obvious WHAT kit was detected and
+								-- whether it's an ESP-supported kit (helps diagnose "nothing
+								-- shows" -- most kits simply have no ESP objects).
+								if Notify and Notify.Enabled then
+									local supported = ESPKits[newKit] or NONTaggedKits[newKit] or DescendantKits[newKit]
+									vain:CreateNotification('KitESP',
+										('Kit: %s (%s)'):format(newKit, supported and 'ESP supported' or 'no ESP objects for this kit'),
+										5, supported and 'check' or 'alert')
+								end
 							end
 							currentKit = newKit
 						end
