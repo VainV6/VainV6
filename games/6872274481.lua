@@ -10657,34 +10657,43 @@ run(function()
     local LootShow = {}       -- resource key -> "Show X" toggle
     local LootThresholds = {} -- resource key -> threshold slider
 
+    -- key  = display / toggle key
+    -- item = inventory itemType to tally + whose ItemMeta.image is the icon
     local LOOT_RES = {
-        { key = 'iron',      color = Color3.fromRGB(210, 210, 210) },
-        { key = 'gold',      color = Color3.fromRGB(255, 215, 90)  },
-        { key = 'emerald',   color = Color3.fromRGB(80, 235, 120)  },
-        { key = 'diamond',   color = Color3.fromRGB(120, 225, 255) },
-        { key = 'telepearl', color = Color3.fromRGB(200, 120, 255) },
+        { key = 'iron',      item = 'iron',          color = Color3.fromRGB(210, 210, 210) },
+        { key = 'gold',      item = 'gold',          color = Color3.fromRGB(255, 215, 90)  },
+        { key = 'emerald',   item = 'emerald',       color = Color3.fromRGB(80, 235, 120)  },
+        { key = 'diamond',   item = 'diamond',       color = Color3.fromRGB(120, 225, 255) },
+        { key = 'telepearl', item = 'telepearl',     color = Color3.fromRGB(200, 120, 255) },
+        { key = 'vitality',  item = 'vitality_star', color = Color3.fromRGB(140, 235, 140) },
+        { key = 'crit',      item = 'crit_star',     color = Color3.fromRGB(255, 220, 90)  },
+        { key = 'bee',       item = 'bee',           color = Color3.fromRGB(255, 210, 60)  },
     }
+    -- inventory itemType -> the LOOT_RES key that tallies it
+    local ITEM_TO_KEY = {}
+    for _, r in LOOT_RES do ITEM_TO_KEY[r.item] = r.key end
 
     local iconCache = {}
-    local function lootIcon(key)
-        if iconCache[key] ~= nil then return iconCache[key] end
+    local function lootIcon(r)
+        local id = r.item
+        if iconCache[id] ~= nil then return iconCache[id] end
         local img = ''
         pcall(function()
-            local meta = bedwars.ItemMeta and bedwars.ItemMeta[key]
+            local meta = bedwars.ItemMeta and bedwars.ItemMeta[id]
             if meta and meta.image then img = meta.image end
         end)
-        iconCache[key] = img
+        iconCache[id] = img
         return img
     end
 
     local function tally(plr)
-        local counts = { iron = 0, gold = 0, emerald = 0, diamond = 0, telepearl = 0 }
+        local counts = {}
+        for _, r in LOOT_RES do counts[r.key] = 0 end
         local inv = plr and store.inventories[plr]
         if inv and type(inv.items) == 'table' then
             for _, v in inv.items do
-                if v and counts[v.itemType] ~= nil then
-                    counts[v.itemType] = counts[v.itemType] + (tonumber(v.amount) or 0)
-                end
+                local key = v and ITEM_TO_KEY[v.itemType]
+                if key then counts[key] = counts[key] + (tonumber(v.amount) or 0) end
             end
         end
         return counts
@@ -10728,7 +10737,7 @@ run(function()
             bb = Instance.new('BillboardGui')
             bb.Name = 'LootESP'
             bb.AlwaysOnTop = true
-            bb.Size = UDim2.fromOffset(220, 22)
+            bb.Size = UDim2.fromOffset(340, 22) -- wide enough for all 8 resources
             bb.StudsOffsetWorldSpace = Vector3.new(0, 3.4, 0) -- above the head/nametag
             bb.ClipsDescendants = false
             local row = Instance.new('Frame')
@@ -10765,7 +10774,7 @@ run(function()
                 icon.BackgroundTransparency = 1
                 icon.Size = UDim2.fromOffset(18, 18)
                 icon.Position = UDim2.fromOffset(0, 1)
-                icon.Image = lootIcon(r.key)
+                icon.Image = lootIcon(r)
                 icon.Parent = cell
                 local amt = Instance.new('TextLabel')
                 amt.BackgroundTransparency = 1
@@ -10821,13 +10830,16 @@ run(function()
     LootShow.emerald = LootESP:CreateToggle({ Name = 'Show Emeralds', Default = true, Function = rebuild })
     LootShow.diamond = LootESP:CreateToggle({ Name = 'Show Diamonds', Default = true, Function = rebuild })
     LootShow.telepearl = LootESP:CreateToggle({ Name = 'Show Telepearls', Default = true, Function = rebuild })
+    LootShow.vitality = LootESP:CreateToggle({ Name = 'Show Vitality Stars', Default = true, Function = rebuild })
+    LootShow.crit = LootESP:CreateToggle({ Name = 'Show Crit Stars', Default = true, Function = rebuild })
+    LootShow.bee = LootESP:CreateToggle({ Name = 'Show Bees', Default = true, Function = rebuild })
     Highlight = LootESP:CreateToggle({
         Name = 'Highlight On Threshold',
         Tooltip = 'Turns a player\'s loot numbers red once they carry at least the threshold amount of any resource below.',
         Visible = false,
         Function = function(callback)
-            for _, r in { 'iron', 'gold', 'emerald', 'diamond', 'telepearl' } do
-                local s = LootThresholds[r]
+            for _, r in LOOT_RES do
+                local s = LootThresholds[r.key]
                 if s then s.Object.Visible = callback end
             end
             rebuild()
@@ -10838,6 +10850,9 @@ run(function()
     LootThresholds.emerald = LootESP:CreateSlider({ Name = 'Emerald Threshold', Min = 1, Max = 64, Default = 4, Suffix = 'emerald', Visible = false })
     LootThresholds.diamond = LootESP:CreateSlider({ Name = 'Diamond Threshold', Min = 1, Max = 64, Default = 5, Suffix = 'diamond', Visible = false })
     LootThresholds.telepearl = LootESP:CreateSlider({ Name = 'Telepearl Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'telepearl', Visible = false })
+    LootThresholds.vitality = LootESP:CreateSlider({ Name = 'Vitality Star Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'star', Visible = false })
+    LootThresholds.crit = LootESP:CreateSlider({ Name = 'Crit Star Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'star', Visible = false })
+    LootThresholds.bee = LootESP:CreateSlider({ Name = 'Bee Threshold', Min = 1, Max = 16, Default = 3, Suffix = 'bee', Visible = false })
 end)
 
 run(function()
