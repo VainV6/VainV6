@@ -10853,28 +10853,44 @@ run(function()
             bb = Instance.new('BillboardGui')
             bb.Name = 'LootDisplay'
             bb.AlwaysOnTop = true
-            bb.Size = UDim2.fromOffset(460, 22) -- wide enough for all resources
-            -- Sit clearly ABOVE the nametag. A larger world offset keeps a gap even
-            -- at distance (a small offset projects to too few pixels far away and
-            -- the two rows start touching).
-            bb.StudsOffsetWorldSpace = Vector3.new(0, 4.8, 0)
+            bb.Size = UDim2.fromOffset(640, 40) -- big so it stays legible far away
+            -- BELOW the head/nametag. A larger world offset keeps clear separation
+            -- from the nametag even at distance.
+            bb.StudsOffsetWorldSpace = Vector3.new(0, -3.2, 0)
             bb.ClipsDescendants = false
+            -- rounded dark plate so the row reads against any background at range
+            local plate = Instance.new('Frame')
+            plate.Name = 'Plate'
+            plate.AnchorPoint = Vector2.new(0.5, 0.5)
+            plate.Position = UDim2.fromScale(0.5, 0.5)
+            plate.AutomaticSize = Enum.AutomaticSize.X
+            plate.Size = UDim2.fromOffset(0, 38)
+            plate.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+            plate.BackgroundTransparency = 0.25
+            plate.BorderSizePixel = 0
+            local pc = Instance.new('UICorner') pc.CornerRadius = UDim.new(0, 8) pc.Parent = plate
+            local ps = Instance.new('UIStroke') ps.Color = Color3.fromRGB(0, 0, 0) ps.Thickness = 2 ps.Transparency = 0.3 ps.Parent = plate
+            local pad = Instance.new('UIPadding')
+            pad.PaddingLeft = UDim.new(0, 10) pad.PaddingRight = UDim.new(0, 10)
+            pad.Parent = plate
             local row = Instance.new('Frame')
             row.Name = 'Row'
             row.BackgroundTransparency = 1
-            row.Size = UDim2.fromScale(1, 1)
+            row.AutomaticSize = Enum.AutomaticSize.X
+            row.Size = UDim2.fromOffset(0, 38)
             local layout = Instance.new('UIListLayout')
             layout.FillDirection = Enum.FillDirection.Horizontal
             layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
             layout.VerticalAlignment = Enum.VerticalAlignment.Center
-            layout.Padding = UDim.new(0, 6)
+            layout.Padding = UDim.new(0, 10)
             layout.Parent = row
-            row.Parent = bb
+            row.Parent = plate
+            plate.Parent = bb
             bb.Parent = Folder
             Reference[ent] = bb
         end
         bb.Adornee = adornee
-        local row = bb.Row
+        local row = bb.Plate.Row
         for _, c in row:GetChildren() do
             if not c:IsA('UIListLayout') then c:Destroy() end
         end
@@ -10888,22 +10904,30 @@ run(function()
                 any = true
                 local cell = Instance.new('Frame')
                 cell.BackgroundTransparency = 1
-                cell.Size = UDim2.fromOffset(34, 20)
+                cell.AutomaticSize = Enum.AutomaticSize.X
+                cell.Size = UDim2.fromOffset(0, 34)
                 cell.LayoutOrder = i
+                local cl = Instance.new('UIListLayout')
+                cl.FillDirection = Enum.FillDirection.Horizontal
+                cl.VerticalAlignment = Enum.VerticalAlignment.Center
+                cl.Padding = UDim.new(0, 3)
+                cl.Parent = cell
                 local icon = Instance.new('ImageLabel')
                 icon.BackgroundTransparency = 1
-                icon.Size = UDim2.fromOffset(18, 18)
-                icon.Position = UDim2.fromOffset(0, 1)
+                icon.Size = UDim2.fromOffset(30, 30)
+                icon.LayoutOrder = 1
                 icon.Image = lootIcon(r)
                 icon.Parent = cell
                 local amt = Instance.new('TextLabel')
                 amt.BackgroundTransparency = 1
-                amt.Position = UDim2.fromOffset(18, 0)
-                amt.Size = UDim2.fromOffset(16, 20)
+                amt.AutomaticSize = Enum.AutomaticSize.X
+                amt.Size = UDim2.fromOffset(0, 34)
+                amt.LayoutOrder = 2
                 amt.Text = tostring(n)
                 amt.TextColor3 = Color3.new(1, 1, 1)
-                amt.TextStrokeTransparency = 0.4
-                amt.TextSize = 13
+                amt.TextStrokeColor3 = Color3.new(0, 0, 0)
+                amt.TextStrokeTransparency = 0
+                amt.TextSize = 22
                 amt.Font = Enum.Font.GothamBold
                 amt.TextXAlignment = Enum.TextXAlignment.Left
                 amt.Parent = cell
@@ -10915,7 +10939,7 @@ run(function()
 
     LootDisplay = vain.Categories.Render:CreateModule({
         Name = 'Loot Display',
-        Tooltip = 'Shows each player\'s carried iron / gold / emerald / diamond / telepearls / stars / bees on a billboard above them. Optional highlight when a resource crosses a threshold.',
+        Tooltip = 'Shows each player\'s carried resources on a large plate under their name (visible from a distance). Toggle which resources appear + highlight when a threshold is crossed.',
         Function = function(callback)
             if callback then
                 for _, ent in entitylib.List do refresh(ent) end
