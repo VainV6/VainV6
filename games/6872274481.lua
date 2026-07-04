@@ -1945,6 +1945,27 @@ local AimAssist
 			end)
 		end
 
+		-- Un-fixate / leave the spectate view. Two cases:
+		--  * live player -> stopSpectatingPlayer() returns your camera to your body.
+		--  * genuine spectator (dead / lobby) the game refuses to release -> the
+		--    camera stays glued to the locked player, so we advance to a DIFFERENT
+		--    target so you're visibly un-pinned. Deferred one heartbeat so our
+		--    spectatingPlayer=nil dispatch settles first (otherwise switchSpectateTargets
+		--    re-reads 'current = locked player' and lands right back on them).
+		-- Shared by BOTH the Fixed Spectate toggle-off AND the module toggle-off (the
+		-- latter leaves FixedSpectate.Enabled true, so it can't gate on that).
+		local function leaveSpectate(ctrl)
+			if not ctrl then return end
+			pcall(function() ctrl:stopSpectatingPlayer() end)
+			task.defer(function()
+				if lplr:GetAttribute('Spectator') == true then
+					pcall(function()
+						if ctrl.switchSpectateTargets then ctrl:switchSpectateTargets('next') end
+					end)
+				end
+			end)
+		end
+
 		AdvancedSpectate = vain.Categories.Utility:CreateModule({
 			Name = 'Better Spectating',
 			Tooltip = 'Spectate ANYONE, not just your team (forces the spectate mode to ALL). Enable Fixed Spectate + pick a player to lock the view to them.',
@@ -1985,11 +2006,9 @@ local AimAssist
 					end
 					origGetTargets = nil
 					if ctrl then
-						-- ACTUALLY LEAVE the spectate view. The game's own
-						-- stopSpectatingPlayer re-enables your character, clears the
-						-- spectate maid and snaps the camera back to your Humanoid --
-						-- without this, toggling off left you stuck spectating.
-						pcall(function() ctrl:stopSpectatingPlayer() end)
+						-- Un-fixate even if Fixed Spectate is still enabled (module off
+						-- doesn't flip that sub-toggle). Same robust leave as the toggle.
+						leaveSpectate(ctrl)
 						pcall(function()
 							local TEAM = ctrl.SpectateMode and ctrl.SpectateMode.TEAM or 1
 							if ctrl.setSpectateMode then ctrl:setSpectateMode(TEAM) else ctrl.mode = TEAM end
@@ -2020,25 +2039,7 @@ local AimAssist
 					--    the advance on the next heartbeat so the spectatingPlayer=nil
 					--    dispatch settles first (otherwise switchSpectateTargets re-reads
 					--    the stale 'current = fixed player' state and lands right back).
-					if ctrl then
-						-- 1) try to fully leave (works for live players; no-op-ish for
-						--    genuine spectators the game keeps in spectate).
-						pcall(function() ctrl:stopSpectatingPlayer() end)
-						-- 2) if the game still has us spectating (dead/lobby), the camera
-						--    is glued to the fixed player. Advance to a different target so
-						--    we're visibly un-fixated. Defer one heartbeat so our
-						--    spectatingPlayer=nil dispatch settles first, otherwise the
-						--    switch re-reads 'current = fixed player' and lands back on it.
-						task.defer(function()
-							if AdvancedSpectate.Enabled
-								and not (FixedSpectate and FixedSpectate.Enabled)
-								and lplr:GetAttribute('Spectator') == true then
-								pcall(function()
-									if ctrl.switchSpectateTargets then ctrl:switchSpectateTargets('next') end
-								end)
-							end
-						end)
-					end
+					leaveSpectate(ctrl)
 				end
 			end
 		})
