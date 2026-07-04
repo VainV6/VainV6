@@ -42,6 +42,7 @@ local mainapi = {
 				'[fix] Target & Friend notifications now fire correctly.',
 				'[fix] Dex is now a clickable button instead of a toggle.',
 				'[fix] Sigrid Charge is no longer offset to the right.',
+				'[fix] The Vain user detector now only flags lower-ranked users, not players of the same or higher rank.',
 				'[fix] The patch-notes unread dot no longer stays visible in sections (like Settings) where the patch-notes icon is hidden.',
 			},
 		},
