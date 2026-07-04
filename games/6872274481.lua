@@ -1893,6 +1893,7 @@ local AimAssist
 	-- tab-list, re-applying on a loop since the tab-list is Roact and re-renders.
 	do
 		local TablistWinstreak
+		local AdvancedStats
 		local fetched = {}    -- userId -> true once fetched (dedupe)
 		local fetching = {}   -- userId -> true while a request is in flight
 		local streaks = {}    -- lowercased name -> winstreak number (persists after they leave)
@@ -1921,7 +1922,23 @@ local AimAssist
 					local q = qt and profile.queues[qt]
 					if q then
 						local ws = tonumber(q.currentWinStreak) or 0
-						if ws > 0 then label = ws .. '\u{1F525}' end
+						local parts = {}
+						if ws > 0 then parts[#parts + 1] = ws .. '\u{1F525}' end
+						-- Advanced stats: winrate + K/D from the same queue profile.
+						if AdvancedStats and AdvancedStats.Enabled then
+							local wins = tonumber(q.wins) or 0
+							local losses = tonumber(q.losses) or 0
+							local games = wins + losses
+							if games > 0 then
+								parts[#parts + 1] = ('%d%%WR'):format(math.floor(wins / games * 100 + 0.5))
+							end
+							local kills = tonumber(q.kills) or 0
+							local deaths = tonumber(q.deaths) or 0
+							if kills > 0 or deaths > 0 then
+								parts[#parts + 1] = ('%.2fKD'):format(deaths > 0 and (kills / deaths) or kills)
+							end
+						end
+						if #parts > 0 then label = table.concat(parts, ' ') end
 					end
 				end
 				-- private/friends-only profiles reject RequestProfileData -> label stays
@@ -1977,6 +1994,10 @@ local AimAssist
 			for _, e in bestLabels do
 				local gui, label = e[1], e[2]
 				if not gui:GetAttribute('VainWS') then
+					-- remember the untouched text so a later re-paint (e.g. after the
+					-- Advanced Stats toggle) rebuilds from the original instead of
+					-- appending onto an already-appended label.
+					gui:SetAttribute('VainWSOrig', gui.Text)
 					gui:SetAttribute('VainWS', true)
 					gui.RichText = true
 					gui.Text = gui.Text .. "  <font color='#FFD24D'>" .. label .. "</font>"
@@ -2013,8 +2034,8 @@ local AimAssist
 		end
 
 		TablistWinstreak = vain.Categories.Render:CreateModule({
-			Name = 'Tablist Winstreak',
-			Tooltip = "Shows each player's current-gamemode winstreak, winrate and K/D next to their name in the tab-list (Tab key). Players with a private profile show nothing. Fetches once per player and caches.",
+			Name = 'Show Advanced Stats',
+			Tooltip = "Shows each player's current-gamemode winstreak next to their name in the tab-list (Tab key), plus winrate and K/D when 'Advanced Stats' is on. Private profiles show nothing. Fetches once per player and caches.",
 			Function = function(callback)
 				if callback then
 					table.clear(fetched)
@@ -2028,6 +2049,29 @@ local AimAssist
 						until not TablistWinstreak.Enabled
 						removeNotifFilter()
 					end)
+				end
+			end
+		})
+		AdvancedStats = TablistWinstreak:CreateToggle({
+			Name = 'Advanced Stats',
+			Tooltip = 'Also show current-gamemode winrate and K/D (not just winstreak). Re-fetches when toggled.',
+			Default = false,
+			Function = function()
+				-- labels depend on this toggle, so wipe the cache to rebuild them and
+				-- clear any tags we already painted onto the tab-list rows
+				table.clear(fetched)
+				table.clear(fetching)
+				table.clear(streaks)
+				local pg = lplr:FindFirstChild('PlayerGui')
+				if pg then
+					for _, gui in pg:GetDescendants() do
+						if gui:IsA('TextLabel') and gui:GetAttribute('VainWS') then
+							local orig = gui:GetAttribute('VainWSOrig')
+							if type(orig) == 'string' then gui.Text = orig end
+							gui:SetAttribute('VainWSOrig', nil)
+							gui:SetAttribute('VainWS', nil)
+						end
+					end
 				end
 			end
 		})
