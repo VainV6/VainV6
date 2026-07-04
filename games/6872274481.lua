@@ -10283,10 +10283,11 @@ run(function()
     -- store.inventories[plr].items is the same list the game reads for the
     -- equipment icons, so this needs no extra server calls.
     local LOOT_RES = {
-    	{ key = 'iron',    color = 'rgb(210, 210, 210)' },
-    	{ key = 'gold',    color = 'rgb(255, 215, 90)'  },
-    	{ key = 'emerald', color = 'rgb(80, 235, 120)'  },
-    	{ key = 'diamond', color = 'rgb(120, 225, 255)' },
+    	{ key = 'iron',      color = 'rgb(210, 210, 210)' },
+    	{ key = 'gold',      color = 'rgb(255, 215, 90)'  },
+    	{ key = 'emerald',   color = 'rgb(80, 235, 120)'  },
+    	{ key = 'diamond',   color = 'rgb(120, 225, 255)' },
+    	{ key = 'telepearl', color = 'rgb(200, 120, 255)' },
     }
     -- Real BedWars resource icons (from ItemMeta.image), resolved + cached once.
     local lootIconCache = {}
@@ -10301,7 +10302,7 @@ run(function()
     	return img
     end
     local function tallyLoot(plr)
-    	local counts = { iron = 0, gold = 0, emerald = 0, diamond = 0 }
+    	local counts = { iron = 0, gold = 0, emerald = 0, diamond = 0, telepearl = 0 }
     	local inv = plr and store.inventories[plr]
     	if inv and type(inv.items) == 'table' then
     		for _, v in inv.items do
@@ -10392,7 +10393,7 @@ run(function()
     	return any
     end
     -- plain-text loot for the Drawing renderer (no ImageLabels possible there).
-    local RES_SHORT = { iron = 'I', gold = 'G', emerald = 'E', diamond = 'D' }
+    local RES_SHORT = { iron = 'I', gold = 'G', emerald = 'E', diamond = 'D', telepearl = 'P' }
     local function lootSuffixPlain(plr)
     	if not (ShowLoot and ShowLoot.Enabled and plr) then return nil end
     	local counts = tallyLoot(plr)
@@ -10463,9 +10464,9 @@ run(function()
     			local size = getfontsize(removeTags(Strings[ent]), nametag.TextSize, nametag.FontFace, Vector2.new(100000, 100000))
     			nametag.Size = UDim2.fromOffset(size.X + 8, size.Y + 7)
     			nametag.Text = Strings[ent]
-    			-- The RankIcon is placed at the text's right edge when the tag is built;
-    			-- appending loot widens the text, so re-anchor it to the new width or it
-    			-- overlaps the loot. (EnchantIcon sits on the left, unaffected.)
+    			-- Keep the RankIcon anchored to the text's right edge (the tag width can
+    			-- change as health/distance update). Loot now lives in its own row below,
+    			-- so it never pushes the rank icon.
     			local rankIcon = nametag:FindFirstChild('RankIcon')
     			if rankIcon then
     				rankIcon.Position = UDim2.fromOffset(size.X + 10, -4)
@@ -10769,10 +10770,10 @@ run(function()
     })
     ShowLoot = NameTags:CreateToggle({
     	Name = 'Show Target Loot',
-    	Tooltip = 'Shows how much iron / gold / emerald / diamond each player is carrying, next to their nametag.',
+    	Tooltip = 'Shows how much iron / gold / emerald / diamond / telepearls each player is carrying, next to their nametag.',
     	Function = function(callback)
     		Highlight.Object.Visible = callback
-    		for _, r in { 'iron', 'gold', 'emerald', 'diamond' } do
+    		for _, r in { 'iron', 'gold', 'emerald', 'diamond', 'telepearl' } do
     			if LootShow[r] then LootShow[r].Object.Visible = callback end
     			local s = LootThresholds[r]
     			if s then s.Object.Visible = callback and Highlight.Enabled end
@@ -10803,6 +10804,10 @@ run(function()
     	Name = 'Show Diamonds', Default = true, Visible = false,
     	Tooltip = 'Include diamonds in the target-loot display.', Function = rebuildTags,
     })
+    LootShow.telepearl = NameTags:CreateToggle({
+    	Name = 'Show Telepearls', Default = true, Visible = false,
+    	Tooltip = 'Include telepearls in the target-loot display.', Function = rebuildTags,
+    })
     Highlight = NameTags:CreateToggle({
     	Name = 'Highlight On Threshold',
     	Tooltip = 'Turns a player\'s whole nametag red once they carry at least the threshold amount of any resource below.',
@@ -10810,7 +10815,7 @@ run(function()
     	Function = function(callback)
     		-- reveal the per-resource threshold sliders only while both Show Target
     		-- Loot and Highlight are on
-    		for _, r in { 'iron', 'gold', 'emerald', 'diamond' } do
+    		for _, r in { 'iron', 'gold', 'emerald', 'diamond', 'telepearl' } do
     			local s = LootThresholds[r]
     			if s then s.Object.Visible = callback and ShowLoot.Enabled end
     		end
@@ -10827,6 +10832,9 @@ run(function()
     })
     LootThresholds.diamond = NameTags:CreateSlider({
     	Name = 'Diamond Threshold', Min = 1, Max = 64, Default = 5, Suffix = 'diamond', Visible = false,
+    })
+    LootThresholds.telepearl = NameTags:CreateSlider({
+    	Name = 'Telepearl Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'telepearl', Visible = false,
     })
     DisplayName = NameTags:CreateToggle({
     	Name = 'Use Displayname',
