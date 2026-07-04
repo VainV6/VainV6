@@ -16,6 +16,21 @@ local mainapi = {
 	-- { Version = '...', Date = '...', Changes = { 'line', ... } }.
 	PatchNotes = {
 		{
+			Version = '4.24',
+			Date = 'July 2026',
+			Highlight = 'BedWars loot intel — see how much iron/emerald/diamond anyone is carrying, get alerted on stacked team chests, plus spectate-by-team and a fixed kit-draft preview.',
+			Changes = {
+				-- ── FEATURES ──────────────────────────────────────────────────
+				'[feature] BedWars — Name Tags: new "Show Target Loot" displays how much iron, gold, emerald and diamond each player is carrying, right on their nametag. Turn on "Highlight On Threshold" to reveal per-resource sliders and light up a player\'s whole tag once they cross the amount you set.',
+				'[feature] BedWars — Storage ESP: new "Resource Alert" notifies you when a team chest holds at least your set number of emeralds or diamonds, with per-resource thresholds and a "Detect Own Team" toggle (off = only enemy chests).',
+				'[feature] BedWars — Better Spectating: new "Spectate Team" dropdown lets you cycle every team ("All Teams") or lock the spectate cycle to one specific team.',
+				'[feature] BedWars — Preparation Preview now shows the current draft phase (Kit Banning / Kit Selection) as a banner above the teams.',
+
+				-- ── FIXES & IMPROVEMENTS ──────────────────────────────────────
+				'[fix] BedWars — Preparation Preview now shows every team\'s picked kits, not just your own team\'s (it reads enemy teams\' selections from the correct part of the draft store).',
+			},
+		},
+		{
 			Version = '4.23',
 			Date = 'July 2026',
 			Highlight = 'A huge BedWars pass — smarter spectating, richer tab-list stats, a kit-draft preview, a Shader and universal FPS Boost, a Cheat Detector, and a stack of fixes.',
@@ -115,7 +130,7 @@ local mainapi = {
 	Scale = {Value = 1},
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
-	Version = '4.23',
+	Version = '4.24',
 	Windows = {}
 }
 
@@ -6690,9 +6705,11 @@ end
 -- see the popup any time (forced, doesn't touch patchseen.txt).
 if getgenv then getgenv().vainShowPatchNotes = function() showPatchNotes(true) end end
 
--- Normal one-time behaviour on load: shows once after a real update, then
--- records patchseen.txt so it won't reappear until the next version.
-task.spawn(showPatchNotes)
+-- TEST PREVIEW: force the panel every load so you can test the new features
+-- before publishing. It does NOT record patchseen.txt (forced), so it keeps
+-- showing until we switch this back.
+-- To restore normal one-time behaviour, change this to: task.spawn(showPatchNotes)
+task.spawn(function() task.wait(0.4) showPatchNotes(true) end)
 
 mainapi:Clean(gui:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
 	if mainapi.Scale.Enabled then
