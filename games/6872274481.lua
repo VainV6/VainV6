@@ -10116,6 +10116,8 @@ run(function()
     local Teammates
     local DistanceCheck
     local DistanceLimit
+    local ShowLoot, Highlight
+    local LootThresholds = {} -- resource key -> slider api
     local Strings, Sizes, Reference = {}, {}, {}
     local Folder = Instance.new('Folder')
     Folder.Parent = vain.gui
@@ -10275,6 +10277,66 @@ run(function()
     	end,
     }
 
+    -- ── Target loot ─────────────────────────────────────────────────────────
+    -- Tally a player's carried resources from their replicated inventory.
+    -- store.inventories[plr].items is the same list the game reads for the
+    -- equipment icons, so this needs no extra server calls.
+    local LOOT_RES = {
+    	{ key = 'iron',    label = 'Iron',    color = 'rgb(210, 210, 210)' },
+    	{ key = 'gold',    label = 'Gold',    color = 'rgb(255, 215, 90)'  },
+    	{ key = 'emerald', label = 'Emerald', color = 'rgb(80, 235, 120)'  },
+    	{ key = 'diamond', label = 'Diamond', color = 'rgb(120, 225, 255)' },
+    }
+    local function tallyLoot(plr)
+    	local counts = { iron = 0, gold = 0, emerald = 0, diamond = 0 }
+    	local inv = plr and store.inventories[plr]
+    	if inv and type(inv.items) == 'table' then
+    		for _, v in inv.items do
+    			if v and counts[v.itemType] ~= nil then
+    				counts[v.itemType] = counts[v.itemType] + (tonumber(v.amount) or 0)
+    			end
+    		end
+    	end
+    	return counts
+    end
+    -- returns (richTextSuffix, highlighted) for RichText nametags, or nil if none
+    local function lootSuffix(plr)
+    	if not (ShowLoot and ShowLoot.Enabled and plr) then return nil end
+    	local counts = tallyLoot(plr)
+    	local parts, highlighted = {}, false
+    	for _, r in LOOT_RES do
+    		local n = counts[r.key]
+    		if n > 0 then
+    			parts[#parts + 1] = ('<font color="%s">%d</font>'):format(r.color, n)
+    			-- highlight when any resource meets its threshold slider
+    			if Highlight and Highlight.Enabled then
+    				local slider = LootThresholds[r.key]
+    				if slider and n >= (slider.Value or math.huge) then highlighted = true end
+    			end
+    		end
+    	end
+    	if #parts == 0 then return nil end
+    	return ' ' .. table.concat(parts, ' '), highlighted
+    end
+    -- plain-text version for the Drawing renderer (no rich-text tags)
+    local function lootSuffixPlain(plr)
+    	if not (ShowLoot and ShowLoot.Enabled and plr) then return nil end
+    	local counts = tallyLoot(plr)
+    	local parts, highlighted = {}, false
+    	for _, r in LOOT_RES do
+    		local n = counts[r.key]
+    		if n > 0 then
+    			parts[#parts + 1] = tostring(n)
+    			if Highlight and Highlight.Enabled then
+    				local slider = LootThresholds[r.key]
+    				if slider and n >= (slider.Value or math.huge) then highlighted = true end
+    			end
+    		end
+    	end
+    	if #parts == 0 then return nil end
+    	return ' [' .. table.concat(parts, '/') .. ']', highlighted
+    end
+
     local Updated = {
     	Normal = function(ent)
     		local nametag = Reference[ent]
@@ -10317,9 +10379,23 @@ run(function()
     				nametag.EnchantIcon.Image = store.enchants[ent.Player]:async() or ''
     			end
 
+    			-- Target loot: append carried iron/gold/emerald/diamond amounts.
+    			local lootHighlight = false
+    			if ent.Player then
+    				local suffix, hl = lootSuffix(ent.Player)
+    				if suffix then
+    					Strings[ent] = Strings[ent] .. suffix
+    					lootHighlight = hl
+    				end
+    			end
+
     			local size = getfontsize(removeTags(Strings[ent]), nametag.TextSize, nametag.FontFace, Vector2.new(100000, 100000))
     			nametag.Size = UDim2.fromOffset(size.X + 8, size.Y + 7)
     			nametag.Text = Strings[ent]
+    			-- highlight the whole tag when a loot threshold is crossed
+    			if lootHighlight then
+    				nametag.TextColor3 = Color3.fromRGB(255, 90, 90)
+    			end
     		end
     	end,
     	Drawing = function(ent)
@@ -10337,6 +10413,16 @@ run(function()
     				Strings[ent] = Strings[ent] .. ' ' .. math.round(ent.Health)
     			end
 
+    			-- Target loot (plain text for the Drawing renderer).
+    			local lootHighlight = false
+    			if ent.Player then
+    				local suffix, hl = lootSuffixPlain(ent.Player)
+    				if suffix then
+    					Strings[ent] = Strings[ent] .. suffix
+    					lootHighlight = hl
+    				end
+    			end
+
     			if Distance.Enabled then
     				Strings[ent] = '[%s] ' .. Strings[ent]
     				nametag.Text.Text = entitylib.isAlive and string.format(Strings[ent], math.floor((entitylib.character.RootPart.Position - ent.RootPart.Position).Magnitude)) or Strings[ent]
@@ -10345,7 +10431,8 @@ run(function()
     			end
 
     			nametag.BG.Size = Vector2.new(nametag.Text.TextBounds.X + 8, nametag.Text.TextBounds.Y + 7)
-    			nametag.Text.Color = entitylib.getEntityColor(ent) or Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+    			nametag.Text.Color = lootHighlight and Color3.fromRGB(255, 90, 90)
+    				or entitylib.getEntityColor(ent) or Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
     		end
     	end,
     }
@@ -10586,6 +10673,46 @@ run(function()
     			NameTags:Toggle()
     		end
     	end,
+    })
+    ShowLoot = NameTags:CreateToggle({
+    	Name = 'Show Target Loot',
+    	Tooltip = 'Shows how much iron / gold / emerald / diamond each player is carrying, next to their nametag.',
+    	Function = function(callback)
+    		Highlight.Object.Visible = callback
+    		for _, r in { 'iron', 'gold', 'emerald', 'diamond' } do
+    			local s = LootThresholds[r]
+    			if s then s.Object.Visible = callback and Highlight.Enabled end
+    		end
+    		if NameTags.Enabled then
+    			NameTags:Toggle()
+    			NameTags:Toggle()
+    		end
+    	end,
+    })
+    Highlight = NameTags:CreateToggle({
+    	Name = 'Highlight On Threshold',
+    	Tooltip = 'Turns a player\'s whole nametag red once they carry at least the threshold amount of any resource below.',
+    	Visible = false,
+    	Function = function(callback)
+    		-- reveal the per-resource threshold sliders only while both Show Target
+    		-- Loot and Highlight are on
+    		for _, r in { 'iron', 'gold', 'emerald', 'diamond' } do
+    			local s = LootThresholds[r]
+    			if s then s.Object.Visible = callback and ShowLoot.Enabled end
+    		end
+    	end,
+    })
+    LootThresholds.iron = NameTags:CreateSlider({
+    	Name = 'Iron Threshold', Min = 1, Max = 128, Default = 32, Suffix = 'iron', Visible = false,
+    })
+    LootThresholds.gold = NameTags:CreateSlider({
+    	Name = 'Gold Threshold', Min = 1, Max = 128, Default = 16, Suffix = 'gold', Visible = false,
+    })
+    LootThresholds.emerald = NameTags:CreateSlider({
+    	Name = 'Emerald Threshold', Min = 1, Max = 64, Default = 4, Suffix = 'emerald', Visible = false,
+    })
+    LootThresholds.diamond = NameTags:CreateSlider({
+    	Name = 'Diamond Threshold', Min = 1, Max = 64, Default = 5, Suffix = 'diamond', Visible = false,
     })
     DisplayName = NameTags:CreateToggle({
     	Name = 'Use Displayname',
@@ -10973,10 +11100,63 @@ run(function()
     local Color
     local ShowAmount
     local ShowAll
+    local ResourceAlert, DetectOwnTeam, EmeraldThreshold, DiamondThreshold
     local Reference = {}
     local Connections = {}
+    local alertState = {} -- adornee -> { emerald = bool, diamond = bool } (debounce)
     local Folder = Instance.new('Folder')
     Folder.Parent = vain.gui
+
+    -- Attribute a chest to a team by nearest team spawn (workspace.MapCFrames has a
+    -- '<teamId>_spawn' part per team). Returns the team id, or nil if unknown.
+    local function chestTeam(adornee)
+        local ok, pos = pcall(function() return adornee:GetPivot().Position end)
+        if not ok then return nil end
+        local mapcf = workspace:FindFirstChild('MapCFrames')
+        if not mapcf then return nil end
+        local best, bestDist
+        for _, spawnpart in mapcf:GetChildren() do
+            local id = spawnpart.Name:match('^(%w+)_spawn$')
+            if id then
+                local sok, spos = pcall(function()
+                    return (spawnpart:IsA('BasePart') and spawnpart.Position) or spawnpart.Value.Position
+                end)
+                if sok and spos then
+                    local d = (spos - pos).Magnitude
+                    if not bestDist or d < bestDist then
+                        bestDist = d
+                        best = tonumber(id) or id
+                    end
+                end
+            end
+        end
+        return best
+    end
+
+    -- Fire a one-shot notification when a chest's emerald/diamond count first
+    -- crosses its threshold. Skips your own team unless Detect Own Team is on.
+    local function checkResourceAlert(adornee, counts)
+        if not (ResourceAlert and ResourceAlert.Enabled and adornee) then return end
+        local team = chestTeam(adornee)
+        if team ~= nil and not (DetectOwnTeam and DetectOwnTeam.Enabled) then
+            if team == lplr:GetAttribute('Team') then return end
+        end
+        local st = alertState[adornee]
+        if not st then st = {}; alertState[adornee] = st end
+        local function one(res, threshold)
+            local n = counts[res] or 0
+            local over = threshold and n >= threshold.Value
+            if over and not st[res] then
+                st[res] = true
+                local teamtxt = team ~= nil and (' (Team ' .. tostring(team) .. ')') or ''
+                notif('Storage ESP', ('%d %s in a team chest%s'):format(n, res, teamtxt), 8, 'warning')
+            elseif not over then
+                st[res] = false -- reset so it can fire again after dropping below
+            end
+        end
+        one('emerald', EmeraldThreshold)
+        one('diamond', DiamondThreshold)
+    end
 
     local function nearStorageItem(item)
     	for _, v in List.ListEnabled do
@@ -11008,13 +11188,20 @@ run(function()
     	-- loot is stored, not just that a type is present.
     	local counts = {}
     	local order = {}
+    	-- Separately tally emerald/diamond for the resource alert, independent of the
+    	-- display filter (the alert must work even if those aren't shown).
+    	local resCounts = { emerald = 0, diamond = 0 }
     	for _, item in chestitems do
+    		if resCounts[item.Name] ~= nil then
+    			resCounts[item.Name] = resCounts[item.Name] + (tonumber(item:GetAttribute('Amount')) or 1)
+    		end
     		if ((ShowAll and ShowAll.Enabled) or table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name)) then
     			if counts[item.Name] == nil then order[#order + 1] = item.Name end
     			local amt = tonumber(item:GetAttribute('Amount')) or 1
     			counts[item.Name] = (counts[item.Name] or 0) + amt
     		end
     	end
+    	checkResourceAlert(v.Adornee, resCounts)
     	for _, name in order do
     		v.Enabled = true
     		local blockimage = Instance.new('ImageLabel')
@@ -11040,6 +11227,7 @@ run(function()
     end
 
     local function Removing(v)
+    	alertState[v] = nil
     	local billboard = Reference[v]
     	if billboard then
     		billboard:Destroy()
@@ -11108,12 +11296,16 @@ run(function()
     	Connections[v] = {
     		layoutConnection,
     		chest.ChildAdded:Connect(function(item)
-    			if (ShowAll and ShowAll.Enabled) or table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name) then
+    			-- also refresh for emerald/diamond so the resource alert stays live
+    			-- even when those aren't in the display filter
+    			local isRes = item.Name == 'emerald' or item.Name == 'diamond'
+    			if isRes or (ShowAll and ShowAll.Enabled) or table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name) then
     				refreshAdornee(billboard)
     			end
     		end),
     		chest.ChildRemoved:Connect(function(item)
-    			if (ShowAll and ShowAll.Enabled) or table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name) then
+    			local isRes = item.Name == 'emerald' or item.Name == 'diamond'
+    			if isRes or (ShowAll and ShowAll.Enabled) or table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name) then
     				refreshAdornee(billboard)
     			end
     		end),
@@ -11192,6 +11384,33 @@ run(function()
     			task.spawn(refreshAdornee, v)
     		end
     	end,
+    })
+    ResourceAlert = StorageESP:CreateToggle({
+    	Name = 'Resource Alert',
+    	Tooltip = 'Notifies you when a team chest holds at least the threshold amount of emeralds or diamonds.',
+    	Default = false,
+    	Function = function(callback)
+    		DetectOwnTeam.Object.Visible = callback
+    		EmeraldThreshold.Object.Visible = callback
+    		DiamondThreshold.Object.Visible = callback
+    		if not callback then table.clear(alertState) end
+    		-- re-scan existing chests so an already-full chest alerts immediately
+    		if callback then
+    			for _, v in Reference do task.spawn(refreshAdornee, v) end
+    		end
+    	end,
+    })
+    DetectOwnTeam = StorageESP:CreateToggle({
+    	Name = 'Detect Own Team',
+    	Tooltip = 'Also alert for your OWN team\'s chest (off = only enemy team chests).',
+    	Default = false,
+    	Visible = false,
+    })
+    EmeraldThreshold = StorageESP:CreateSlider({
+    	Name = 'Emerald Alert', Min = 1, Max = 64, Default = 5, Suffix = 'emerald', Visible = false,
+    })
+    DiamondThreshold = StorageESP:CreateSlider({
+    	Name = 'Diamond Alert', Min = 1, Max = 64, Default = 5, Suffix = 'diamond', Visible = false,
     })
 end)
 
