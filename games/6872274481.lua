@@ -2304,9 +2304,35 @@ local AimAssist
 	do
 		local TablistWinstreak
 		local Global
+		local ShowStreak, ShowWinrate, ShowMatches, ShowKD, ShowBeds
 		local fetched = {}    -- userId -> true once fetched (dedupe)
 		local fetching = {}   -- userId -> true while a request is in flight
-		local streaks = {}    -- lowercased name -> winstreak number (persists after they leave)
+		local statData = {}   -- lowercased name -> { ws, winrate, matches, kd, beds } (persists after they leave)
+
+		-- Build the display string from raw stats, honoring the per-stat toggles.
+		-- Kept separate from the fetch so toggling a stat off/on repaints instantly
+		-- without re-requesting the (cached) profile.
+		local function buildLabel(d)
+			if not d then return nil end
+			local parts = {}
+			if (not ShowStreak or ShowStreak.Enabled) and d.ws and d.ws > 0 then
+				parts[#parts + 1] = '\u{1F525} ' .. tostring(d.ws)
+			end
+			if (not ShowWinrate or ShowWinrate.Enabled) and d.winrate then
+				parts[#parts + 1] = ('\u{1F3C6} %d%%'):format(d.winrate)
+			end
+			if (not ShowMatches or ShowMatches.Enabled) and d.matches and d.matches > 0 then
+				parts[#parts + 1] = ('\u{1F3AE} %d'):format(d.matches)
+			end
+			if (not ShowKD or ShowKD.Enabled) and d.kd then
+				parts[#parts + 1] = ('\u{2694} %.2f'):format(d.kd)
+			end
+			if (not ShowBeds or ShowBeds.Enabled) and d.beds then
+				parts[#parts + 1] = ('\u{1F6CF} %.2f'):format(d.beds)
+			end
+			if #parts > 0 then return table.concat(parts, '  ') end
+			return nil
+		end
 
 		local function displayNameOf(plr)
 			local ok, dn = pcall(function() return bedwars.GamePlayer.getGamePlayer(plr):getDisplayName() end)
@@ -2320,22 +2346,23 @@ local AimAssist
 			fetching[uid] = true
 			local dn, nm = displayNameOf(plr):lower(), plr.Name:lower()
 			task.spawn(function()
-				local label
+				local data
 				-- Full profile -> per-CURRENT-gamemode stats (winstreak, winrate, K/D).
 				-- Privacy-gated: private/friends-only users reject it; we suppress the
 				-- resulting notification (see installNotifFilter) and fall back below.
 				local ok, profile = pcall(function()
 					return bedwars.Client:Get('RequestProfileData'):CallServerAsync(plr):expect()
 				end)
-				-- Extract stats defensively: profile.queues can be proxy/userdata, and a bad
-				-- field read would kill this thread and paint NOTHING. Wrap it so any failure
-				-- just yields no label.
+				-- Extract RAW stats defensively (profile.queues can be proxy/userdata, and a
+				-- bad field read would kill this thread). We store numbers, not a string, so
+				-- the per-stat toggles can rebuild the label at paint time.
 				pcall(function()
 					if not (ok and profile and profile.queues) then return end
-					local parts = {}
+					local ws, wins, losses, matches, kills, deaths, beds
 					if Global and Global.Enabled then
 						-- GLOBAL: sum every queue's totals + highest win streak of any mode.
-						local wins, losses, matches, kills, deaths, best, beds = 0, 0, 0, 0, 0, 0, 0
+						wins, losses, matches, kills, deaths, beds = 0, 0, 0, 0, 0, 0
+						local best = 0
 						for _, v in pairs(profile.queues) do
 							if type(v) == 'table' then
 								wins    = wins    + (tonumber(v.wins) or 0)
@@ -2347,50 +2374,36 @@ local AimAssist
 								beds    = beds    + (tonumber(v.bedBreaks) or 0)
 							end
 						end
+						ws = best
 						if matches <= 0 then matches = wins + losses end
-						if best > 0 then parts[#parts + 1] = '\u{1F525} ' .. tostring(best) end
-						if matches > 0 then
-							parts[#parts + 1] = ('\u{1F3C6} %d%%'):format(math.floor(wins / matches * 100 + 0.5))
-							parts[#parts + 1] = ('\u{1F3AE} %d'):format(matches)
-						end
-						if kills > 0 or deaths > 0 then
-							parts[#parts + 1] = ('\u{2694} %.2f'):format(deaths > 0 and (kills / deaths) or kills)
-						end
-						if matches > 0 and beds > 0 then
-							parts[#parts + 1] = ('\u{1F6CF} %.2f'):format(beds / matches)
-						end
 					else
 						-- CURRENT gamemode only.
 						local qt = bedwars.Store:getState().Game.queueType
 						local q = qt and profile.queues[qt]
 						if not q then return end
-						local ws = tonumber(q.currentWinStreak) or 0
-						if ws > 0 then parts[#parts + 1] = '\u{1F525} ' .. tostring(ws) end
-						local wins = tonumber(q.wins) or 0
-						local matches = tonumber(q.matches) or 0
-						if matches <= 0 then matches = wins + (tonumber(q.losses) or 0) end
-						if matches > 0 then
-							parts[#parts + 1] = ('\u{1F3C6} %d%%'):format(math.floor(wins / matches * 100 + 0.5))
-							parts[#parts + 1] = ('\u{1F3AE} %d'):format(matches)
-						end
-						local kills = tonumber(q.kills) or 0
-						local deaths = tonumber(q.deaths) or 0
-						if kills > 0 or deaths > 0 then
-							parts[#parts + 1] = ('\u{2694} %.2f'):format(deaths > 0 and (kills / deaths) or kills)
-						end
-						local beds = tonumber(q.bedBreaks) or 0
-						if matches > 0 and beds > 0 then
-							parts[#parts + 1] = ('\u{1F6CF} %.2f'):format(beds / matches)
-						end
+						ws      = tonumber(q.currentWinStreak) or 0
+						wins    = tonumber(q.wins) or 0
+						losses  = tonumber(q.losses) or 0
+						matches = tonumber(q.matches) or 0
+						kills   = tonumber(q.kills) or 0
+						deaths  = tonumber(q.deaths) or 0
+						beds    = tonumber(q.bedBreaks) or 0
+						if matches <= 0 then matches = wins + losses end
 					end
-					if #parts > 0 then label = table.concat(parts, '  ') end
+					data = {
+						ws      = ws,
+						winrate = matches > 0 and math.floor(wins / matches * 100 + 0.5) or nil,
+						matches = matches,
+						kd      = (kills > 0 or deaths > 0) and (deaths > 0 and (kills / deaths) or kills) or nil,
+						beds    = (matches > 0 and beds > 0) and (beds / matches) or nil,
+					}
 				end)
-				-- private/friends-only profiles reject RequestProfileData -> label stays
+				-- private/friends-only profiles reject RequestProfileData -> data stays
 				-- nil and nothing is shown for them (no global-streak fallback).
 				fetched[uid] = true
 				fetching[uid] = nil
 				-- key by name so it still matches the row after the player leaves
-				if label then streaks[dn] = label; streaks[nm] = label end
+				if data then statData[dn] = data; statData[nm] = data end
 			end)
 		end
 
@@ -2414,7 +2427,7 @@ local AimAssist
 			for _, plr in playersService:GetPlayers() do
 				fetchWinstreak(plr)
 			end
-			if not next(streaks) then return end
+			if not next(statData) then return end
 
 			-- Only paint the ALLOWED containers: the tab-list LEADERBOARD and the
 			-- SPECTATE selector nametag. Matching player names anywhere in PlayerGui
@@ -2436,24 +2449,32 @@ local AimAssist
 				end
 				return false
 			end
-			local bestLabels = {}
 			for _, gui in pg:GetDescendants() do
 				if gui:IsA('TextLabel') and isAllowedContainer(gui) then
-					local ws = streaks[clean(gui.Text)]
-					if ws then bestLabels[#bestLabels + 1] = { gui, ws } end
-				end
-			end
-			if #bestLabels == 0 then return end
-			for _, e in bestLabels do
-				local gui, label = e[1], e[2]
-				if not gui:GetAttribute('VainWS') then
-					-- remember the untouched text so a later re-paint (e.g. after the
-					-- Advanced Stats toggle) rebuilds from the original instead of
-					-- appending onto an already-appended label.
-					gui:SetAttribute('VainWSOrig', gui.Text)
-					gui:SetAttribute('VainWS', true)
-					gui.RichText = true
-					gui.Text = gui.Text .. "  <font color='#FFD24D'>" .. label .. "</font>"
+					local label = buildLabel(statData[clean(gui.Text)])
+					local painted = gui:GetAttribute('VainWS')
+					if label then
+						-- Remember the untouched text once so we always rebuild FROM the
+						-- original. Rebuilding every pass (instead of skip-if-painted) lets
+						-- the per-stat toggles take effect without a Roact re-render.
+						local orig = gui:GetAttribute('VainWSOrig')
+						if not orig then
+							orig = gui.Text
+							gui:SetAttribute('VainWSOrig', orig)
+						end
+						local want = orig .. "  <font color='#FFD24D'>" .. label .. "</font>"
+						if gui.Text ~= want then
+							gui:SetAttribute('VainWS', true)
+							gui.RichText = true
+							gui.Text = want
+						end
+					elseif painted then
+						-- All of this row's stats got toggled off -> restore the original.
+						local orig = gui:GetAttribute('VainWSOrig')
+						if type(orig) == 'string' then gui.Text = orig end
+						gui:SetAttribute('VainWSOrig', nil)
+						gui:SetAttribute('VainWS', nil)
+					end
 				end
 			end
 		end
@@ -2493,7 +2514,7 @@ local AimAssist
 				if callback then
 					table.clear(fetched)
 					table.clear(fetching)
-					table.clear(streaks)
+					table.clear(statData)
 					installNotifFilter()
 					task.spawn(function()
 						repeat
@@ -2510,10 +2531,11 @@ local AimAssist
 			Tooltip = 'Show GLOBAL stats across ALL gamemodes (highest win streak of any mode, and total winrate / K-D over every match) instead of just the current mode.',
 			Default = false,
 			Function = function()
-				-- labels depend on this, so wipe the cache + our painted tags to rebuild
+				-- Global vs current-mode changes the RAW numbers, so wipe the fetch
+				-- cache + our painted tags; the paint loop rebuilds from fresh data.
 				table.clear(fetched)
 				table.clear(fetching)
-				table.clear(streaks)
+				table.clear(statData)
 				local pg = lplr:FindFirstChild('PlayerGui')
 				if pg then
 					for _, g in pg:GetDescendants() do
@@ -2526,6 +2548,29 @@ local AimAssist
 					end
 				end
 			end
+		})
+		-- Per-stat visibility toggles. These only affect the DISPLAY (buildLabel),
+		-- so no cache wipe is needed -- the 1s paint loop repaints from cached raw
+		-- numbers and rebuilds each label from its original text.
+		ShowStreak = TablistWinstreak:CreateToggle({
+			Name = 'Show Win Streak', Default = true,
+			Tooltip = 'Show the \u{1F525} win streak stat.', Function = function() end,
+		})
+		ShowWinrate = TablistWinstreak:CreateToggle({
+			Name = 'Show Winrate', Default = true,
+			Tooltip = 'Show the \u{1F3C6} winrate stat.', Function = function() end,
+		})
+		ShowMatches = TablistWinstreak:CreateToggle({
+			Name = 'Show Matches', Default = true,
+			Tooltip = 'Show the \u{1F3AE} total matches stat.', Function = function() end,
+		})
+		ShowKD = TablistWinstreak:CreateToggle({
+			Name = 'Show K/D', Default = true,
+			Tooltip = 'Show the \u{2694} kill/death ratio stat.', Function = function() end,
+		})
+		ShowBeds = TablistWinstreak:CreateToggle({
+			Name = 'Show Bed Breaks', Default = true,
+			Tooltip = 'Show the \u{1F6CF} average beds broken per match stat.', Function = function() end,
 		})
 	end
 
