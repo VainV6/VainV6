@@ -1884,6 +1884,120 @@ local AimAssist
 	end
 
 	-- ══════════════════════════════════════════════════════════════════════════
+	--  ADVANCED SPECTATE  (spectate anyone; optionally lock to one player)
+	-- ══════════════════════════════════════════════════════════════════════════
+	-- The game's SpectateController defaults to mode TEAM, which restricts the
+	-- spectate cycle to your (or the reported ticket's) team. Its SpectateMode enum
+	-- has ALL (0), TEAM (1), PLAYER (2). We simply force mode = ALL so the built-in
+	-- getSpectateTargets returns EVERY in-game player (spectators aren't in-game, so
+	-- they're naturally excluded). Fixed Spectate hooks getSpectateTargets to return
+	-- only the chosen player, so the game's own auto-next-on-death can only ever
+	-- land back on them.
+	do
+		local AdvancedSpectate, FixedSpectate, FixedPlayer
+		local origGetTargets, spec
+
+		local function getSpec()
+			if spec then return spec end
+			local ok, ctrl = pcall(function() return bedwars.SpectateController end)
+			if ok and type(ctrl) == 'table' then spec = ctrl end
+			return spec
+		end
+
+		-- resolve the currently-selected fixed player by name
+		local function fixedPlr()
+			local name = FixedPlayer and FixedPlayer.Value
+			if not name or name == 'None' then return nil end
+			return playersService:FindFirstChild(name)
+		end
+
+		AdvancedSpectate = vain.Categories.Utility:CreateModule({
+			Name = 'Advanced Spectate',
+			Tooltip = 'Spectate ANYONE, not just your team (forces the spectate mode to ALL). Enable Fixed Spectate + pick a player to lock the view to them.',
+			Function = function(callback)
+				local ctrl = getSpec()
+				if callback then
+					if not ctrl then
+						notif('Advanced Spectate', 'Spectate controller not found in this place.', 6, 'warning')
+						AdvancedSpectate:Toggle()
+						return
+					end
+					-- force ALL mode so every in-game player is spectatable
+					pcall(function()
+						local ALL = ctrl.SpectateMode and ctrl.SpectateMode.ALL or 0
+						if ctrl.setSpectateMode then ctrl:setSpectateMode(ALL) else ctrl.mode = ALL end
+					end)
+					-- keep it pinned to ALL (the game may reset mode on events) and
+					-- apply the Fixed Spectate hook.
+					if not origGetTargets and ctrl.getSpectateTargets then
+						origGetTargets = ctrl.getSpectateTargets
+						ctrl.getSpectateTargets = function(selfc, ...)
+							if FixedSpectate and FixedSpectate.Enabled then
+								local p = fixedPlr()
+								if p then return { p } end -- only ever this player
+							end
+							return origGetTargets(selfc, ...)
+						end
+					end
+				else
+					-- restore the original target resolver + let the game manage mode
+					if origGetTargets and ctrl and ctrl.getSpectateTargets ~= origGetTargets then
+						ctrl.getSpectateTargets = origGetTargets
+					end
+					origGetTargets = nil
+					if ctrl then
+						pcall(function()
+							local TEAM = ctrl.SpectateMode and ctrl.SpectateMode.TEAM or 1
+							if ctrl.setSpectateMode then ctrl:setSpectateMode(TEAM) else ctrl.mode = TEAM end
+						end)
+					end
+				end
+			end
+		})
+		FixedSpectate = AdvancedSpectate:CreateToggle({
+			Name = 'Fixed Spectate',
+			Tooltip = 'Lock spectating to the selected player. If they die, the game auto-switches — this snaps the view straight back to them.',
+			Default = false,
+			Function = function(callback)
+				-- when enabling, immediately switch onto the fixed player if possible
+				if callback then
+					local ctrl = getSpec()
+					local p = fixedPlr()
+					if ctrl and p and ctrl.switchSpectateTargets then
+						pcall(function() ctrl:switchSpectateTargets(p) end)
+					end
+				end
+			end
+		})
+		FixedPlayer = AdvancedSpectate:CreateDropdown({
+			Name = 'Fixed Player',
+			List = { 'None' },
+			Default = 'None',
+			Tooltip = 'Which player to lock onto when Fixed Spectate is on.',
+			Function = function()
+				-- snap onto the newly-picked player right away
+				local ctrl = getSpec()
+				local p = fixedPlr()
+				if FixedSpectate and FixedSpectate.Enabled and ctrl and p and ctrl.switchSpectateTargets then
+					pcall(function() ctrl:switchSpectateTargets(p) end)
+				end
+			end
+		})
+
+		-- keep the Fixed Player dropdown in sync with the server population
+		local function refreshList()
+			local names = { 'None' }
+			for _, plr in playersService:GetPlayers() do
+				if plr ~= lplr then names[#names + 1] = plr.Name end
+			end
+			pcall(function() FixedPlayer:Change(names) end)
+		end
+		refreshList()
+		vain:Clean(playersService.PlayerAdded:Connect(refreshList))
+		vain:Clean(playersService.PlayerRemoving:Connect(function() task.defer(refreshList) end))
+	end
+
+	-- ══════════════════════════════════════════════════════════════════════════
 	--  TABLIST WINSTREAK  (show each player's winstreak next to their tab-list name)
 	-- ══════════════════════════════════════════════════════════════════════════
 	-- BedWars uses a custom tab-list (the default PlayerList is disabled) and a
