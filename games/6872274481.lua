@@ -10560,6 +10560,25 @@ run(function()
     				for _, v in entitylib.List do
     					Updated[methodused](v)
     				end
+    				-- Loot amounts (iron/emerald/diamond) change WITHOUT firing
+    				-- EntityUpdated (that only tracks armor/hand swaps), so while
+    				-- Show Target Loot is on we re-fetch each player's inventory and
+    				-- rebuild their tag on a short timer to keep the counts live.
+    				task.spawn(function()
+    					while NameTags.Enabled do
+    						if ShowLoot and ShowLoot.Enabled then
+    							for _, ent in entitylib.List do
+    								if ent.Player and bedwars.getInventory then
+    									pcall(function()
+    										store.inventories[ent.Player] = bedwars.getInventory(ent.Player)
+    									end)
+    									pcall(Updated[methodused], ent)
+    								end
+    							end
+    						end
+    						task.wait(0.5)
+    					end
+    				end)
     			end
     			if ColorFunc[methodused] then
     				NameTags:Clean(vain.Categories.Friends.ColorUpdate.Event:Connect(function()
@@ -11324,6 +11343,18 @@ run(function()
     			for _, v in collectionService:GetTagged('chest') do
     				task.spawn(Added, v)
     			end
+    			-- Chest contents also change via an item's Amount ATTRIBUTE (not just
+    			-- child add/remove), which fires no ChildAdded/Removed -> the display
+    			-- and the resource alert would lag. Poll every chest on a short timer
+    			-- so counts stay fresh.
+    			task.spawn(function()
+    				while StorageESP.Enabled do
+    					for _, billboard in Reference do
+    						task.spawn(refreshAdornee, billboard)
+    					end
+    					task.wait(0.4)
+    				end
+    			end)
     		else
     			Clear()
     		end
