@@ -14740,6 +14740,7 @@ run(function()
     local Smart
     local Switch
     local HoleFiller
+    local ShowGaps
 
     local function getBedNear()
         local localPosition = entitylib.isAlive and entitylib.character.RootPart.Position or Vector3.zero
@@ -14901,6 +14902,23 @@ run(function()
             return cells
         end
 
+        -- the empty (air) shell cells around the bed that ought to be covered,
+        -- as rounded world positions. Shared by the filler and the gap visualiser.
+        local function gapPositions(bed)
+            local gaps, seen = {}, {}
+            for _, cell in bedCells(bed) do
+                for _, off in FACES do
+                    local pos = cell + off
+                    local key = tostring(bedwars.BlockController:getBlockPosition(pos))
+                    if not seen[key] then
+                        seen[key] = true
+                        if not getPlacedBlock(pos) then gaps[#gaps + 1] = pos end
+                    end
+                end
+            end
+            return gaps
+        end
+
         local function fillHoles()
             if not (HoleFiller and HoleFiller.Enabled and BedProtector.Enabled) then return end
             if not entitylib.isAlive or not entitylib.character.RootPart then return end
@@ -14915,20 +14933,10 @@ run(function()
             local old = switch and store.hand and store.hand.tool and getHotbar(store.hand.tool) or nil
             local hotbar = switch and getHotbar(strongest[3]) or nil
 
-            local seen = {}
-            for _, cell in bedCells(bed) do
-                for _, off in FACES do
-                    local pos = cell + off
-                    local key = tostring(bedwars.BlockController:getBlockPosition(pos))
-                    if not seen[key] then
-                        seen[key] = true
-                        -- skip if it's a bed cell itself, already filled, or out of range
-                        if not getPlacedBlock(pos)
-                            and (rootPos - pos).Magnitude <= PlaceRange.Value then
-                            if hotbar and hotbarSwitch(hotbar) then task.wait() end
-                            task.spawn(bedwars.placeBlock, pos, strongest[1], false)
-                        end
-                    end
+            for _, pos in gapPositions(bed) do
+                if (rootPos - pos).Magnitude <= PlaceRange.Value then
+                    if hotbar and hotbarSwitch(hotbar) then task.wait() end
+                    task.spawn(bedwars.placeBlock, pos, strongest[1], false)
                 end
             end
             if switch and old and hotbarSwitch(old) then task.wait() end
@@ -14950,6 +14958,62 @@ run(function()
                         pcall(fillHoles)
                         task.wait(0.3)
                     until not (HoleFiller.Enabled and BedProtector.Enabled)
+                end)
+            end,
+        })
+
+        -- ── Show Gaps ─────────────────────────────────────────────────────────
+        -- Draws a red box at each exposed air cell around the bed so you can see
+        -- exactly what's missing/needs fixing. Works whether or not Hole Filler
+        -- is auto-placing.
+        local GapFolder = Instance.new('Folder')
+        GapFolder.Parent = (gethui and gethui()) or cloneref(game:GetService('CoreGui'))
+        local gapBoxes = {}
+        local function clearGaps()
+            for _, b in gapBoxes do b:Destroy() end
+            table.clear(gapBoxes)
+        end
+        local function drawGaps()
+            clearGaps()
+            if not (ShowGaps and ShowGaps.Enabled and BedProtector.Enabled) then return end
+            local bed = getBedNear()
+            if not bed then return end
+            for _, pos in gapPositions(bed) do
+                local part = Instance.new('Part')
+                part.Anchored = true
+                part.CanCollide = false
+                part.CanQuery = false
+                part.Transparency = 1
+                part.Size = Vector3.new(GRID, GRID, GRID)
+                part.CFrame = CFrame.new(bedwars.BlockController:getBlockPosition(pos) * GRID)
+                local box = Instance.new('BoxHandleAdornment')
+                box.Adornee = part
+                box.Size = Vector3.new(GRID, GRID, GRID)
+                box.Color3 = Color3.fromRGB(255, 60, 60)
+                box.Transparency = 0.35
+                box.AlwaysOnTop = true
+                box.ZIndex = 0
+                box.Parent = part
+                part.Parent = GapFolder
+                gapBoxes[#gapBoxes + 1] = part
+            end
+        end
+
+        ShowGaps = BedProtector:CreateToggle({
+            Name = 'Show Gaps',
+            Tooltip = 'Highlights the missing (air) blocks around your bed in red so you can see what needs fixing.',
+            Default = false,
+            Function = function(callback)
+                if not callback then clearGaps() return end
+                BedProtector:Clean(clearGaps)
+                BedProtector:Clean(vapeEvents.BreakBlockEvent.Event:Connect(function() task.spawn(drawGaps) end))
+                BedProtector:Clean(vapeEvents.PlaceBlockEvent.Event:Connect(function() task.spawn(drawGaps) end))
+                task.spawn(function()
+                    repeat
+                        pcall(drawGaps)
+                        task.wait(0.3)
+                    until not (ShowGaps.Enabled and BedProtector.Enabled)
+                    clearGaps()
                 end)
             end,
         })
