@@ -1982,8 +1982,18 @@ local AimAssist
 						end
 					end
 				else
-					-- OFF: un-fixate -> leave the locked spectate view entirely
-					if ctrl then pcall(function() ctrl:stopSpectatingPlayer() end) end
+					-- OFF: un-fixate. The getSpectateTargets hook now falls through to
+					-- everyone (FixedSpectate.Enabled is false), but the camera is still
+					-- locked on the fixed player until we act. Try, in order: fully stop
+					-- spectating, and if we're still a spectator, advance off them.
+					if ctrl then
+						pcall(function() ctrl:stopSpectatingPlayer() end)
+						pcall(function()
+							if lplr:GetAttribute('Spectator') == true and ctrl.switchSpectateTargets then
+								ctrl:switchSpectateTargets('next')
+							end
+						end)
+					end
 				end
 			end
 		})
@@ -10727,6 +10737,7 @@ run(function()
     local Background
     local Color
     local ShowAmount
+    local ShowAll
     local Reference = {}
     local Connections = {}
     local Folder = Instance.new('Folder')
@@ -10763,7 +10774,7 @@ run(function()
     	local counts = {}
     	local order = {}
     	for _, item in chestitems do
-    		if (table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name)) then
+    		if ((ShowAll and ShowAll.Enabled) or table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name)) then
     			if counts[item.Name] == nil then order[#order + 1] = item.Name end
     			local amt = tonumber(item:GetAttribute('Amount')) or 1
     			counts[item.Name] = (counts[item.Name] or 0) + amt
@@ -10862,12 +10873,12 @@ run(function()
     	Connections[v] = {
     		layoutConnection,
     		chest.ChildAdded:Connect(function(item)
-    			if table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name) then
+    			if (ShowAll and ShowAll.Enabled) or table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name) then
     				refreshAdornee(billboard)
     			end
     		end),
     		chest.ChildRemoved:Connect(function(item)
-    			if table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name) then
+    			if (ShowAll and ShowAll.Enabled) or table.find(List.ListEnabled, item.Name) or nearStorageItem(item.Name) then
     				refreshAdornee(billboard)
     			end
     		end),
@@ -10931,6 +10942,16 @@ run(function()
     	Name = 'Show Amount',
     	Tooltip = 'Show the total quantity of each stored item on its icon (not just that it is present)',
     	Default = true,
+    	Function = function()
+    		for _, v in Reference do
+    			task.spawn(refreshAdornee, v)
+    		end
+    	end,
+    })
+    ShowAll = StorageESP:CreateToggle({
+    	Name = 'Show All Items',
+    	Tooltip = 'Show EVERY item stored in the chest, ignoring the item whitelist above',
+    	Default = false,
     	Function = function()
     		for _, v in Reference do
     			task.spawn(refreshAdornee, v)
