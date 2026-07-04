@@ -384,7 +384,16 @@ local function executeCommand(command, args)
 					end
 				end
 				if mod and mod.Toggle then
-					mod:Toggle()
+					-- Run the toggle on a fresh thread with the elevated identity that
+					-- modules expect (same context a keybind/menu click gives them);
+					-- otherwise the module's Function runs under our restricted command
+					-- thread and its effect silently no-ops.
+					task.spawn(function()
+						pcall(function()
+							if setthreadidentity then setthreadidentity(8) end
+						end)
+						mod:Toggle()
+					end)
 					if vain.CreateNotification then
 						vain:CreateNotification('Commands', 'Toggled ' .. tostring(args), 4)
 					end
