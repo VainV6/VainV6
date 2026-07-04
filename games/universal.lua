@@ -5424,6 +5424,168 @@ run(function()
 end)
 
 run(function()
+    -- FPS Boost: strips the most expensive rendering work the client is doing.
+    -- Everything here is client-side visual only. Aggressive options are behind
+    -- toggles so you can dial how much you sacrifice for frames. Original values
+    -- are captured and restored on disable where the engine allows it.
+    local FPSBoost
+    local NoParticles, NoTextures, NoShadows, LowQuality, NoPostFX
+    local terrain = workspace:FindFirstChildWhichIsA('Terrain')
+
+    -- saved originals (restored on disable)
+    local saved = {}
+    local savedTextures = {} -- [instance] = original Texture/TextureID
+    local touched = {}       -- particle-ish instances we disabled
+
+    local PARTICLE_CLASSES = {
+        ParticleEmitter = true, Trail = true, Smoke = true, Fire = true,
+        Sparkles = true, Beam = true, Explosion = true,
+    }
+
+    local function stripInstance(inst)
+        if not FPSBoost or not FPSBoost.Enabled then return end
+        local cls = inst.ClassName
+        if NoParticles and NoParticles.Enabled and PARTICLE_CLASSES[cls] then
+            if inst.Enabled ~= false then
+                touched[inst] = inst.Enabled
+                pcall(function() inst.Enabled = false end)
+            end
+        elseif NoTextures and NoTextures.Enabled then
+            if cls == 'Texture' or cls == 'Decal' then
+                if savedTextures[inst] == nil then savedTextures[inst] = inst.Texture end
+                pcall(function() inst.Texture = '' end)
+            elseif cls == 'MeshPart' then
+                if savedTextures[inst] == nil then savedTextures[inst] = inst.TextureID end
+                pcall(function() inst.TextureID = '' end)
+            elseif cls == 'SpecialMesh' then
+                if savedTextures[inst] == nil then savedTextures[inst] = inst.TextureId end
+                pcall(function() inst.TextureId = '' end)
+            end
+        end
+    end
+
+    local function applyLighting()
+        if NoShadows and NoShadows.Enabled then
+            if saved.GlobalShadows == nil then saved.GlobalShadows = lightingService.GlobalShadows end
+            if saved.FogEnd == nil then saved.FogEnd = lightingService.FogEnd end
+            pcall(function() lightingService.GlobalShadows = false end)
+        end
+        if NoPostFX and NoPostFX.Enabled then
+            for _, fx in lightingService:GetDescendants() do
+                if fx:IsA('BloomEffect') or fx:IsA('BlurEffect') or fx:IsA('SunRaysEffect')
+                    or fx:IsA('ColorCorrectionEffect') or fx:IsA('DepthOfFieldEffect') then
+                    if saved['fx_'..tostring(fx)] == nil then saved['fx_'..tostring(fx)] = fx.Enabled end
+                    pcall(function() fx.Enabled = false end)
+                end
+            end
+        end
+    end
+
+    local function applyTerrain()
+        if terrain and LowQuality and LowQuality.Enabled then
+            if saved.WaterWaveSize == nil then
+                saved.WaterWaveSize = terrain.WaterWaveSize
+                saved.WaterWaveSpeed = terrain.WaterWaveSpeed
+                saved.WaterReflectance = terrain.WaterReflectance
+                saved.WaterTransparency = terrain.WaterTransparency
+                saved.Decoration = terrain.Decoration
+            end
+            pcall(function()
+                terrain.WaterWaveSize = 0
+                terrain.WaterWaveSpeed = 0
+                terrain.WaterReflectance = 0
+                terrain.WaterTransparency = 0
+                terrain.Decoration = false
+            end)
+        end
+    end
+
+    local function applyQuality()
+        if LowQuality and LowQuality.Enabled then
+            pcall(function() sethiddenproperty(settings().Rendering, 'QualityLevel', 1) end)
+            pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+        end
+    end
+
+    FPSBoost = vain.Categories.Utility:CreateModule({
+        Name = 'FPS Boost',
+        Tooltip = 'Strips expensive rendering (particles, textures, shadows, post-processing, quality) to boost FPS. Client-visual only. Tune what to sacrifice below.',
+        Function = function(callback)
+            if callback then
+                terrain = workspace:FindFirstChildWhichIsA('Terrain')
+                applyQuality()
+                applyLighting()
+                applyTerrain()
+                -- initial sweep of the whole datamodel
+                task.spawn(function()
+                    for _, inst in workspace:GetDescendants() do
+                        if not FPSBoost.Enabled then break end
+                        stripInstance(inst)
+                    end
+                    for _, inst in lightingService:GetDescendants() do
+                        if not FPSBoost.Enabled then break end
+                        stripInstance(inst)
+                    end
+                end)
+                -- keep new instances stripped as they stream/spawn in
+                FPSBoost:Clean(workspace.DescendantAdded:Connect(stripInstance))
+                FPSBoost:Clean(lightingService.DescendantAdded:Connect(function()
+                    applyLighting()
+                end))
+            else
+                -- restore what we can
+                if saved.GlobalShadows ~= nil then
+                    pcall(function() lightingService.GlobalShadows = saved.GlobalShadows end)
+                end
+                -- restore post-fx (keys are 'fx_'<instance>)
+                for _, fx in lightingService:GetDescendants() do
+                    local k = 'fx_'..tostring(fx)
+                    if saved[k] ~= nil then pcall(function() fx.Enabled = saved[k] end) end
+                end
+                -- restore terrain
+                if terrain and saved.WaterWaveSize ~= nil then
+                    pcall(function()
+                        terrain.WaterWaveSize = saved.WaterWaveSize
+                        terrain.WaterWaveSpeed = saved.WaterWaveSpeed
+                        terrain.WaterReflectance = saved.WaterReflectance
+                        terrain.WaterTransparency = saved.WaterTransparency
+                        terrain.Decoration = saved.Decoration
+                    end)
+                end
+                -- restore particles
+                for inst, en in pairs(touched) do
+                    pcall(function() inst.Enabled = en end)
+                end
+                table.clear(touched)
+                -- restore textures
+                for inst, tex in pairs(savedTextures) do
+                    pcall(function()
+                        if inst:IsA('Texture') or inst:IsA('Decal') then inst.Texture = tex
+                        elseif inst:IsA('MeshPart') then inst.TextureID = tex
+                        elseif inst:IsA('SpecialMesh') then inst.TextureId = tex end
+                    end)
+                end
+                table.clear(savedTextures)
+                pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic end)
+                table.clear(saved)
+            end
+        end
+    })
+    NoParticles = FPSBoost:CreateToggle({ Name = 'No Particles', Default = true,
+        Tooltip = 'Disable particle emitters, trails, smoke, fire, beams.' })
+    NoTextures = FPSBoost:CreateToggle({ Name = 'No Textures', Default = false,
+        Tooltip = 'Blank out decals/textures on parts and meshes (biggest gain, ugliest).' })
+    NoShadows = FPSBoost:CreateToggle({ Name = 'No Shadows', Default = true,
+        Tooltip = 'Turn off global shadows.', Function = function() applyLighting() end })
+    NoPostFX = FPSBoost:CreateToggle({ Name = 'No Post-Processing', Default = true,
+        Tooltip = 'Disable bloom, blur, sun rays, colour correction, depth of field.',
+        Function = function() applyLighting() end })
+    LowQuality = FPSBoost:CreateToggle({ Name = 'Low Quality', Default = true,
+        Tooltip = 'Drop render quality to the lowest level + flatten water/terrain decoration.',
+        Function = function() applyQuality() applyTerrain() end })
+end)
+
+run(function()
     local GamingChair = { Enabled = false }
     local Color
     local wheelpositions = {
