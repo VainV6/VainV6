@@ -10646,14 +10646,14 @@ run(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
---  LOOT ESP  (own module: shows each player's carried resources on a billboard)
+--  LOOT DISPLAY  (own module: shows each player's carried resources on a billboard)
 -- ══════════════════════════════════════════════════════════════════════════════
 -- Split out of Name Tags so its options don't clutter that module. Renders its
 -- own BillboardGui per player so the two never fight over the same instance --
 -- offset a little higher than the head, and Name Tags sits at the head, so the
 -- rows stack cleanly instead of overlapping.
 run(function()
-    local LootESP, Highlight
+    local LootDisplay, Highlight
     local LootShow = {}       -- resource key -> "Show X" toggle
     local LootThresholds = {} -- resource key -> threshold slider
 
@@ -10757,7 +10757,7 @@ run(function()
 
     -- (re)build the row for one entity
     local function refresh(ent)
-        if not (LootESP and LootESP.Enabled) then return end
+        if not (LootDisplay and LootDisplay.Enabled) then return end
         local plr = ent.Player
         local adornee = ent.Character and (ent.Character.PrimaryPart or ent.Character:FindFirstChild('HumanoidRootPart'))
         if not (plr and adornee) then clear(ent) return end
@@ -10766,7 +10766,7 @@ run(function()
         local bb = Reference[ent]
         if not bb then
             bb = Instance.new('BillboardGui')
-            bb.Name = 'LootESP'
+            bb.Name = 'LootDisplay'
             bb.AlwaysOnTop = true
             bb.Size = UDim2.fromOffset(340, 22) -- wide enough for all 8 resources
             bb.StudsOffsetWorldSpace = Vector3.new(0, 3.4, 0) -- above the head/nametag
@@ -10825,19 +10825,19 @@ run(function()
         bb.Enabled = any
     end
 
-    LootESP = vain.Categories.Render:CreateModule({
-        Name = 'Loot ESP',
-        Tooltip = 'Shows each player\'s carried iron / gold / emerald / diamond / telepearls on a billboard above them. Optional highlight when a resource crosses a threshold.',
+    LootDisplay = vain.Categories.Render:CreateModule({
+        Name = 'Loot Display',
+        Tooltip = 'Shows each player\'s carried iron / gold / emerald / diamond / telepearls / stars / bees on a billboard above them. Optional highlight when a resource crosses a threshold.',
         Function = function(callback)
             if callback then
                 for _, ent in entitylib.List do refresh(ent) end
-                LootESP:Clean(entitylib.Events.EntityAdded:Connect(refresh))
-                LootESP:Clean(entitylib.Events.EntityUpdated:Connect(refresh))
-                LootESP:Clean(entitylib.Events.EntityRemoved:Connect(clear))
-                LootESP:Clean(clearAll)
+                LootDisplay:Clean(entitylib.Events.EntityAdded:Connect(refresh))
+                LootDisplay:Clean(entitylib.Events.EntityUpdated:Connect(refresh))
+                LootDisplay:Clean(entitylib.Events.EntityRemoved:Connect(clear))
+                LootDisplay:Clean(clearAll)
                 -- resources change without firing EntityUpdated, so poll inventories
                 task.spawn(function()
-                    while LootESP.Enabled do
+                    while LootDisplay.Enabled do
                         for _, ent in entitylib.List do
                             if ent.Player and bedwars.getInventory then
                                 pcall(function()
@@ -10857,15 +10857,15 @@ run(function()
     local function rebuild()
         for _, ent in entitylib.List do pcall(refresh, ent) end
     end
-    LootShow.iron = LootESP:CreateToggle({ Name = 'Show Iron', Default = true, Function = rebuild })
-    LootShow.gold = LootESP:CreateToggle({ Name = 'Show Gold', Default = true, Function = rebuild })
-    LootShow.emerald = LootESP:CreateToggle({ Name = 'Show Emeralds', Default = true, Function = rebuild })
-    LootShow.diamond = LootESP:CreateToggle({ Name = 'Show Diamonds', Default = true, Function = rebuild })
-    LootShow.telepearl = LootESP:CreateToggle({ Name = 'Show Telepearls', Default = true, Function = rebuild })
-    LootShow.vitality = LootESP:CreateToggle({ Name = 'Show Vitality Stars', Default = true, Function = rebuild })
-    LootShow.crit = LootESP:CreateToggle({ Name = 'Show Crit Stars', Default = true, Function = rebuild })
-    LootShow.bee = LootESP:CreateToggle({ Name = 'Show Bees', Default = true, Function = rebuild })
-    Highlight = LootESP:CreateToggle({
+    LootShow.iron = LootDisplay:CreateToggle({ Name = 'Show Iron', Default = true, Function = rebuild })
+    LootShow.gold = LootDisplay:CreateToggle({ Name = 'Show Gold', Default = true, Function = rebuild })
+    LootShow.emerald = LootDisplay:CreateToggle({ Name = 'Show Emeralds', Default = true, Function = rebuild })
+    LootShow.diamond = LootDisplay:CreateToggle({ Name = 'Show Diamonds', Default = true, Function = rebuild })
+    LootShow.telepearl = LootDisplay:CreateToggle({ Name = 'Show Telepearls', Default = true, Function = rebuild })
+    LootShow.vitality = LootDisplay:CreateToggle({ Name = 'Show Vitality Stars', Default = true, Function = rebuild })
+    LootShow.crit = LootDisplay:CreateToggle({ Name = 'Show Crit Stars', Default = true, Function = rebuild })
+    LootShow.bee = LootDisplay:CreateToggle({ Name = 'Show Bees', Default = true, Function = rebuild })
+    Highlight = LootDisplay:CreateToggle({
         Name = 'Highlight On Threshold',
         Tooltip = 'Glows a player red (character Highlight) once they carry at least the threshold amount of any resource below.',
         Default = false,
@@ -10877,14 +10877,14 @@ run(function()
             rebuild()
         end,
     })
-    LootThresholds.iron = LootESP:CreateSlider({ Name = 'Iron Threshold', Min = 1, Max = 128, Default = 32, Suffix = 'iron', Visible = false })
-    LootThresholds.gold = LootESP:CreateSlider({ Name = 'Gold Threshold', Min = 1, Max = 128, Default = 16, Suffix = 'gold', Visible = false })
-    LootThresholds.emerald = LootESP:CreateSlider({ Name = 'Emerald Threshold', Min = 1, Max = 64, Default = 4, Suffix = 'emerald', Visible = false })
-    LootThresholds.diamond = LootESP:CreateSlider({ Name = 'Diamond Threshold', Min = 1, Max = 64, Default = 5, Suffix = 'diamond', Visible = false })
-    LootThresholds.telepearl = LootESP:CreateSlider({ Name = 'Telepearl Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'telepearl', Visible = false })
-    LootThresholds.vitality = LootESP:CreateSlider({ Name = 'Vitality Star Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'star', Visible = false })
-    LootThresholds.crit = LootESP:CreateSlider({ Name = 'Crit Star Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'star', Visible = false })
-    LootThresholds.bee = LootESP:CreateSlider({ Name = 'Bee Threshold', Min = 1, Max = 16, Default = 3, Suffix = 'bee', Visible = false })
+    LootThresholds.iron = LootDisplay:CreateSlider({ Name = 'Iron Threshold', Min = 1, Max = 128, Default = 32, Suffix = 'iron', Visible = false })
+    LootThresholds.gold = LootDisplay:CreateSlider({ Name = 'Gold Threshold', Min = 1, Max = 128, Default = 16, Suffix = 'gold', Visible = false })
+    LootThresholds.emerald = LootDisplay:CreateSlider({ Name = 'Emerald Threshold', Min = 1, Max = 64, Default = 4, Suffix = 'emerald', Visible = false })
+    LootThresholds.diamond = LootDisplay:CreateSlider({ Name = 'Diamond Threshold', Min = 1, Max = 64, Default = 5, Suffix = 'diamond', Visible = false })
+    LootThresholds.telepearl = LootDisplay:CreateSlider({ Name = 'Telepearl Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'telepearl', Visible = false })
+    LootThresholds.vitality = LootDisplay:CreateSlider({ Name = 'Vitality Star Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'star', Visible = false })
+    LootThresholds.crit = LootDisplay:CreateSlider({ Name = 'Crit Star Threshold', Min = 1, Max = 16, Default = 1, Suffix = 'star', Visible = false })
+    LootThresholds.bee = LootDisplay:CreateSlider({ Name = 'Bee Threshold', Min = 1, Max = 16, Default = 3, Suffix = 'bee', Visible = false })
 end)
 
 run(function()
