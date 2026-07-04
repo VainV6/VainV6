@@ -5586,6 +5586,110 @@ run(function()
 end)
 
 run(function()
+    -- Shader: Roblox executors can't run real GLSL shaders, so (like Voidware's
+    -- "shaders") this applies a curated stack of Lighting objects + post-processing
+    -- to make the game look dramatically better -- Atmosphere, ColorCorrection,
+    -- Bloom, SunRays, DepthOfField -- with selectable presets. Everything is
+    -- parented under our own folder in Lighting and removed cleanly on disable, so
+    -- the game's original lighting is untouched.
+    local Shader
+    local Preset, Brightness, Saturation
+    local folder
+
+    -- preset = tuning for the effect stack. Values chosen to read well in most
+    -- Bedwars-style maps.
+    local PRESETS = {
+        Realistic = {
+            atmosphere = { Density = 0.35, Offset = 0.25, Color = Color3.fromRGB(199, 170, 107), Decay = Color3.fromRGB(106, 112, 125), Glare = 0.2, Haze = 1.8 },
+            cc = { Brightness = 0.02, Contrast = 0.12, Saturation = 0.08, TintColor = Color3.fromRGB(255, 250, 240) },
+            bloom = { Intensity = 0.5, Size = 24, Threshold = 0.9 },
+            sunrays = { Intensity = 0.12, Spread = 0.8 },
+            dof = { FarIntensity = 0.05, FocusDistance = 60, InFocusRadius = 90, NearIntensity = 0.1 },
+        },
+        Vibrant = {
+            atmosphere = { Density = 0.3, Offset = 0.4, Color = Color3.fromRGB(220, 210, 255), Decay = Color3.fromRGB(120, 130, 160), Glare = 0.4, Haze = 1.2 },
+            cc = { Brightness = 0.05, Contrast = 0.18, Saturation = 0.28, TintColor = Color3.fromRGB(255, 245, 255) },
+            bloom = { Intensity = 0.9, Size = 30, Threshold = 0.8 },
+            sunrays = { Intensity = 0.2, Spread = 1 },
+            dof = { FarIntensity = 0, FocusDistance = 70, InFocusRadius = 120, NearIntensity = 0 },
+        },
+        Cinematic = {
+            atmosphere = { Density = 0.42, Offset = 0.1, Color = Color3.fromRGB(180, 160, 150), Decay = Color3.fromRGB(70, 80, 100), Glare = 0.15, Haze = 2.4 },
+            cc = { Brightness = -0.02, Contrast = 0.22, Saturation = -0.05, TintColor = Color3.fromRGB(235, 240, 255) },
+            bloom = { Intensity = 0.7, Size = 28, Threshold = 0.85 },
+            sunrays = { Intensity = 0.18, Spread = 0.9 },
+            dof = { FarIntensity = 0.15, FocusDistance = 45, InFocusRadius = 60, NearIntensity = 0.2 },
+        },
+        Night = {
+            atmosphere = { Density = 0.5, Offset = 0, Color = Color3.fromRGB(90, 100, 140), Decay = Color3.fromRGB(30, 35, 55), Glare = 0.05, Haze = 2 },
+            cc = { Brightness = -0.05, Contrast = 0.15, Saturation = -0.1, TintColor = Color3.fromRGB(180, 200, 255) },
+            bloom = { Intensity = 0.6, Size = 26, Threshold = 0.95 },
+            sunrays = { Intensity = 0.05, Spread = 0.6 },
+            dof = { FarIntensity = 0.1, FocusDistance = 55, InFocusRadius = 80, NearIntensity = 0.1 },
+        },
+    }
+
+    local function build()
+        if folder then folder:Destroy() folder = nil end
+        local cfg = PRESETS[(Preset and Preset.Value) or 'Realistic'] or PRESETS.Realistic
+        folder = Instance.new('Folder')
+        folder.Name = 'VainShader'
+        folder.Parent = lightingService
+
+        local atmos = Instance.new('Atmosphere')
+        for k, val in pairs(cfg.atmosphere) do pcall(function() atmos[k] = val end) end
+        atmos.Parent = folder
+
+        local cc = Instance.new('ColorCorrectionEffect')
+        for k, val in pairs(cfg.cc) do pcall(function() cc[k] = val end) end
+        -- user overrides
+        cc.Brightness = cc.Brightness + ((Brightness and Brightness.Value or 0) / 100)
+        cc.Saturation = cc.Saturation + ((Saturation and Saturation.Value or 0) / 100)
+        cc.Parent = folder
+
+        local bloom = Instance.new('BloomEffect')
+        for k, val in pairs(cfg.bloom) do pcall(function() bloom[k] = val end) end
+        bloom.Parent = folder
+
+        local sun = Instance.new('SunRaysEffect')
+        for k, val in pairs(cfg.sunrays) do pcall(function() sun[k] = val end) end
+        sun.Parent = folder
+
+        local dof = Instance.new('DepthOfFieldEffect')
+        for k, val in pairs(cfg.dof) do pcall(function() dof[k] = val end) end
+        dof.Parent = folder
+    end
+
+    Shader = vain.Categories.Render:CreateModule({
+        Name = 'Shader',
+        Tooltip = 'Applies a cinematic lighting/post-processing stack (Atmosphere, Bloom, Color Correction, Sun Rays, Depth of Field) for a much better-looking game. Pick a preset below.',
+        Function = function(callback)
+            if callback then
+                build()
+            else
+                if folder then folder:Destroy() folder = nil end
+            end
+        end
+    })
+    Preset = Shader:CreateDropdown({
+        Name = 'Preset',
+        List = { 'Realistic', 'Vibrant', 'Cinematic', 'Night' },
+        Default = 'Realistic',
+        Function = function() if Shader.Enabled then build() end end
+    })
+    Brightness = Shader:CreateSlider({
+        Name = 'Brightness',
+        Min = -20, Max = 20, Default = 0,
+        Function = function() if Shader.Enabled then build() end end
+    })
+    Saturation = Shader:CreateSlider({
+        Name = 'Saturation',
+        Min = -30, Max = 50, Default = 0,
+        Function = function() if Shader.Enabled then build() end end
+    })
+end)
+
+run(function()
     local GamingChair = { Enabled = false }
     local Color
     local wheelpositions = {

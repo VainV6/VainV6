@@ -16222,9 +16222,16 @@ run(function()
     local Color
     local LayerCounter
     local LayerColor
+    local LayerNotify
+    local ObsidianOnly
     local Reference = {}
+    local prevLayers = {} -- [bedAdornee] = { [blockName] = count } from the last scan
     local Folder = Instance.new('Folder')
     Folder.Parent = vain.gui
+
+    local function isObsidian(name)
+        return tostring(name):lower():find('obsidian', 1, true) ~= nil
+    end
     
     local function getBlockLayerHealth(block)
     	local meta = bedwars.ItemMeta[block]
@@ -16266,6 +16273,29 @@ run(function()
     	local alreadygot = {}
     	scanSide(v.Adornee, start, layers)
     	scanSide(v.Adornee, start + Vector3.new(0, 0, 3), layers)
+
+    	-- Notify when a NEW layer is added (a block type's count went up vs the last
+    	-- scan of this bed). ObsidianOnly restricts the alert to obsidian layers.
+    	-- Skip the FIRST scan of a bed (prevLayers[bed] == nil) so pre-existing
+    	-- layers don't all fire as "new" the moment you enable the module.
+    	if LayerNotify and LayerNotify.Enabled and prevLayers[v.Adornee] then
+    		local prev = prevLayers[v.Adornee]
+    		for block, amount in layers do
+    			local before = prev[block] or 0
+    			if amount > before then
+    				local obs = isObsidian(block)
+    				if (not (ObsidianOnly and ObsidianOnly.Enabled)) or obs then
+    					local added = amount - before
+    					local nice = tostring(block):gsub('_', ' ')
+    					vain:CreateNotification('Bed Plates',
+    						('+%d %s layer%s (%d total)'):format(added, nice, added == 1 and '' or 's', amount),
+    						3, obs and 'alert' or nil)
+    				end
+    			end
+    		end
+    	end
+    	prevLayers[v.Adornee] = layers
+
     	for block, amount in layers do
     		table.insert(alreadygot, {block, amount})
     	end
@@ -16372,9 +16402,11 @@ run(function()
     					Reference[v]:ClearAllChildren()
     					Reference[v] = nil
     				end
+    				prevLayers[v] = nil
     			end))
     		else
     			table.clear(Reference)
+    			table.clear(prevLayers)
     			Folder:ClearAllChildren()
     		end
     	end,
@@ -16425,6 +16457,16 @@ run(function()
     		updateLayerTextColor()
     	end,
     	Visible = LayerCounter.Enabled,
+    })
+    LayerNotify = BedPlates:CreateToggle({
+    	Name = 'Notify New Layer',
+    	Tooltip = 'Notifies you when a new layer of blocks is added to a bed',
+    	Default = false,
+    })
+    ObsidianOnly = BedPlates:CreateToggle({
+    	Name = 'Obsidian Only',
+    	Tooltip = 'Only notify when the added layer is obsidian (requires Notify New Layer)',
+    	Default = false,
     })
 end)
 
