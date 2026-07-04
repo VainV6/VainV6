@@ -2667,7 +2667,12 @@ function mainapi:CreateGUI()
 	patchdot.ZIndex = 5
 	patchdot.Parent = patchbutton
 	addCorner(patchdot, UDim.new(1, 0))
-	patchdot.Visible = ((isfile('vain/profiles/patchseen.txt') and readfile('vain/profiles/patchseen.txt')) or '') ~= latestPatchVersion
+	-- The dot's ZIndex (5) sits ABOVE the settings/patch panes, so it kept showing
+	-- on top of them even though the patch-notes icon underneath was covered. Track
+	-- the real unread state and only show the dot when unread AND no covering pane
+	-- is open (refreshPatchDot is wired to both panes once they exist, below).
+	local patchUnread = ((isfile('vain/profiles/patchseen.txt') and readfile('vain/profiles/patchseen.txt')) or '') ~= latestPatchVersion
+	patchdot.Visible = patchUnread
 	local settingspane = Instance.new('TextButton')
 	settingspane.Size = UDim2.fromScale(1, 1)
 	settingspane.BackgroundColor3 = color.Dark(uipallet.Main, 0.02)
@@ -2744,6 +2749,13 @@ function mainapi:CreateGUI()
 	patchback.ZIndex = 2
 	patchback.Parent = patchpane
 	addCorner(patchpane)
+	-- Now that both covering panes exist, keep the unread dot hidden whenever
+	-- either is open (its high ZIndex would otherwise float over them).
+	local function refreshPatchDot()
+		patchdot.Visible = patchUnread and not settingspane.Visible and not patchpane.Visible
+	end
+	settingspane:GetPropertyChangedSignal('Visible'):Connect(refreshPatchDot)
+	patchpane:GetPropertyChangedSignal('Visible'):Connect(refreshPatchDot)
 	local patchscroll = Instance.new('ScrollingFrame')
 	patchscroll.Name = 'Children'
 	patchscroll.Size = UDim2.new(1, -8, 1, -45)
@@ -4000,7 +4012,8 @@ function mainapi:CreateGUI()
 	end)
 	patchbutton.MouseButton1Click:Connect(function()
 		patchpane.Visible = true
-		patchdot.Visible = false
+		patchUnread = false
+		refreshPatchDot()
 		pcall(function() writefile('vain/profiles/patchseen.txt', latestPatchVersion) end)
 	end)
 	patchback.MouseEnter:Connect(function()
@@ -4343,12 +4356,25 @@ function mainapi:CreateCategory(categorysettings)
 		-- Gold "PREMIUM" badge after the name. Purely cosmetic (does NOT block
 		-- clicks) -- the actual Premium gate lives in the module's own logic.
 		function moduleapi:MarkPremium()
-			-- Colour-ONLY RichText span: same font, size and weight as the name,
-			-- so it shares the exact baseline. A <b> (bold) or size= span changes
-			-- the glyph metrics and shifts the badge up -> the "offset" look. Just
-			-- recolour the word, no other tags.
-			modulebutton.RichText = true
-			modulebutton.Text = '            ' .. modulesettings.Name .. "  <font color='#FFC53D'>PREMIUM</font>"
+			-- Render PREMIUM as a SEPARATE label appended after the name, rather than
+			-- an inline RichText span. Enabling RichText on the button re-measured the
+			-- 12 leading spaces differently, which shifted the whole name to the right
+			-- (the reported offset). Keeping the button plain-text (no RichText) and
+			-- putting the badge in its own label keeps the name aligned exactly like
+			-- every other module.
+			local nameWidth = getfontsize(modulebutton.Text, 14, uipallet.Font).X
+			local premium = Instance.new('TextLabel')
+			premium.Name = 'Premium'
+			premium.AutomaticSize = Enum.AutomaticSize.X
+			premium.Size = UDim2.fromOffset(0, 40)
+			premium.Position = UDim2.fromOffset(nameWidth + 8, 0)
+			premium.BackgroundTransparency = 1
+			premium.Text = 'PREMIUM'
+			premium.TextColor3 = Color3.fromRGB(255, 197, 61)
+			premium.TextSize = 14
+			premium.FontFace = uipallet.Font
+			premium.TextXAlignment = Enum.TextXAlignment.Left
+			premium.Parent = modulebutton
 		end
 
 		for i, v in components do
@@ -4425,6 +4451,21 @@ function mainapi:CreateCategory(categorysettings)
 		end)
 		modulebutton.MouseButton1Click:Connect(function()
 			if moduleapi.Locked then return end
+			-- Button modules are momentary: clicking fires the Function once and the
+			-- module never latches "on" (no persistent enabled state / gradient). Used
+			-- for one-shot actions like Dex Explorer.
+			if modulesettings.Button then
+				if mainapi.ThreadFix then setthreadidentity(8) end
+				-- brief visual press feedback, then revert
+				gradient.Enabled = true
+				modulebutton.BackgroundColor3 = color.Light(uipallet.Main, 0.02)
+				task.delay(0.12, function()
+					gradient.Enabled = false
+					modulebutton.BackgroundColor3 = (hovered or modulechildren.Visible) and color.Light(uipallet.Main, 0.02) or uipallet.Main
+				end)
+				task.spawn(modulesettings.Function, true)
+				return
+			end
 			moduleapi:Toggle()
 		end)
 		modulebutton.MouseButton2Click:Connect(function()
@@ -7432,6 +7473,16 @@ modules:CreateToggle({
 			mainapi.Libraries.entity.refresh()
 		end
 	end
+})
+modules:CreateToggle({
+	Name = 'Friend notifications',
+	Tooltip = 'Notify when someone on your Friends list is in the server (joins/leaves)',
+	Default = true
+})
+modules:CreateToggle({
+	Name = 'Target notifications',
+	Tooltip = 'Notify when someone on your Targets list is in the server (joins/leaves)',
+	Default = true
 })
 
 --[[
