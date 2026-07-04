@@ -2244,30 +2244,32 @@ local AimAssist
 				local ok, profile = pcall(function()
 					return bedwars.Client:Get('RequestProfileData'):CallServerAsync(plr):expect()
 				end)
-				if ok and profile and profile.queues then
+				-- Extract stats defensively: profile.queues can be proxy/userdata, and a bad
+				-- field read would kill this thread and paint NOTHING. Wrap it so any failure
+				-- just yields no label.
+				pcall(function()
+					if not (ok and profile and profile.queues) then return end
 					local qt = bedwars.Store:getState().Game.queueType
 					local q = qt and profile.queues[qt]
-					if q then
-						local ws = tonumber(q.currentWinStreak) or 0
-						local parts = {}
-						if ws > 0 then parts[#parts + 1] = ws .. '\u{1F525}' end
-						-- Advanced stats: winrate + K/D from the same queue profile.
-						if AdvancedStats and AdvancedStats.Enabled then
-							local wins = tonumber(q.wins) or 0
-							local losses = tonumber(q.losses) or 0
-							local games = wins + losses
-							if games > 0 then
-								parts[#parts + 1] = ('%d%%WR'):format(math.floor(wins / games * 100 + 0.5))
-							end
-							local kills = tonumber(q.kills) or 0
-							local deaths = tonumber(q.deaths) or 0
-							if kills > 0 or deaths > 0 then
-								parts[#parts + 1] = ('%.2fKD'):format(deaths > 0 and (kills / deaths) or kills)
-							end
+					if not q then return end
+					local ws = tonumber(q.currentWinStreak) or 0
+					local parts = {}
+					if ws > 0 then parts[#parts + 1] = ws .. '\u{1F525}' end
+					if AdvancedStats and AdvancedStats.Enabled then
+						local wins = tonumber(q.wins) or 0
+						local matches = tonumber(q.matches) or 0
+						if matches <= 0 then matches = wins + (tonumber(q.losses) or 0) end
+						if matches > 0 then
+							parts[#parts + 1] = ('%d%% WR'):format(math.floor(wins / matches * 100 + 0.5))
 						end
-						if #parts > 0 then label = table.concat(parts, ' ') end
+						local kills = tonumber(q.kills) or 0
+						local deaths = tonumber(q.deaths) or 0
+						if kills > 0 or deaths > 0 then
+							parts[#parts + 1] = ('%.2f KD'):format(deaths > 0 and (kills / deaths) or kills)
+						end
 					end
-				end
+					if #parts > 0 then label = table.concat(parts, '  ') end
+				end)
 				-- private/friends-only profiles reject RequestProfileData -> label stays
 				-- nil and nothing is shown for them (no global-streak fallback).
 				fetched[uid] = true
