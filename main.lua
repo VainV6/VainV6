@@ -383,7 +383,14 @@ local function executeCommand(command, args)
 						if tostring(name):lower() == want then mod = m break end
 					end
 				end
-				if mod and mod.Toggle then mod:Toggle() end
+				if mod and mod.Toggle then
+					mod:Toggle()
+					if vain.CreateNotification then
+						vain:CreateNotification('Commands', 'Toggled ' .. tostring(args), 4)
+					end
+				elseif vain.CreateNotification then
+					vain:CreateNotification('Commands', 'No module named "' .. tostring(args) .. '"', 5, 'alert')
+				end
 			end)
 		end
 	elseif command == 'chat' then
