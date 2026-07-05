@@ -80,17 +80,23 @@ do
 		-- Everything anchored to the SCREEN CENTRE. The V is a HUGE TextScaled glyph
 		-- in a 500px box so it fills a big chunk of the screen.
 		local vLabel = Instance.new('TextLabel')
+		-- Roblox caps plain TextSize at ~100px, so a fixed TextSize can never look big.
+		-- TextScaled bypasses that cap; a UITextSizeConstraint keeps it from
+		-- overflowing. The glyph fills a fixed 300px box.
 		vLabel.AnchorPoint = Vector2.new(0.5, 0.5)
 		vLabel.Position = UDim2.new(0.5, 0, 0.5, -120)
-		vLabel.Size = UDim2.fromOffset(900, 900)
+		vLabel.Size = UDim2.fromOffset(300, 300)
 		vLabel.BackgroundTransparency = 1
 		vLabel.Text = 'V'
 		vLabel.Font = Enum.Font.GothamBlack
-		vLabel.TextSize = 100 -- animated up to 600 in the intro
+		vLabel.TextScaled = true
 		vLabel.TextColor3 = Color3.new(1, 1, 1)
 		vLabel.TextTransparency = 1
 		vLabel.ZIndex = 3
 		vLabel.Parent = root
+		local vConstraint = Instance.new('UITextSizeConstraint')
+		vConstraint.MaxTextSize = 300
+		vConstraint.Parent = vLabel
 		gradient = Instance.new('UIGradient')
 		gradient.Color = ColorSequence.new({
 			ColorSequenceKeypoint.new(0.00, Color3.fromRGB(154, 61, 10)),
@@ -148,8 +154,10 @@ do
 		statusLabel.ZIndex = 3
 		statusLabel.Parent = root
 
-		-- intro animation: the V's TextSize grows to a huge 600 with a bounce.
-		tween(vLabel, 0.9, { TextSize = 600, TextTransparency = 0 }, Enum.EasingStyle.Back)
+		-- intro animation: the V box grows from small to 300px with a bounce
+		-- (TextScaled fills it, so the glyph scales up with the box).
+		vLabel.Size = UDim2.fromOffset(60, 60)
+		tween(vLabel, 0.9, { Size = UDim2.fromOffset(300, 300), TextTransparency = 0 }, Enum.EasingStyle.Back)
 		task.delay(0.4, function()
 			tween(wordmark, 0.6, { TextTransparency = 0 })
 			tween(barTrack, 0.6, { BackgroundTransparency = 0.75 })
