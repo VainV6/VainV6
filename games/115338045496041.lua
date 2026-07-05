@@ -921,25 +921,81 @@ end)
 
 run(function()
 	-- ── Highlight Formables ─────────────────────────────────────────────────────
-	-- CONFIRMED from the decompiled place file (BuildFormables, Line 3829):
-	--   Formables are rendered under PlayerGui.MainUI ... Formables.Container, each a
-	--   frame with a `Button` holding `NAME`, `IMG`, `EQ`, `LOCKED`, `REQ2`. The game
-	--   does NOT keep a persistent "you owned this formable" flag on the entries --
-	--   it only tracks the formable your country is CURRENTLY transformed into
-	--   (CountryRegistry[MyCountry] attribute "TRANSFORMEDINTO", shown as a special
-	--   "1RESET" revert entry) and, separately, aggregate milestone progress. So the
-	--   meaningful, real states we can mark per entry are:
-	--     * CURRENT  -> the "1RESET" entry = the formable you are transformed into now
-	--     * READY    -> Button.EQ.NAME.Text == "Transform" and Button.LOCKED not shown
-	--                   (you own every required region -- you can transform right now)
-	--     * LOCKED   -> Button.LOCKED shown / no working EQ (requirements not met)
-	--   We stamp a blue star on the current one and a green check + outline on every
-	--   ready one, and (optionally) tint locked ones so the menu reads at a glance.
+	-- CONFIRMED from the decompiled place file. Rather than guess the live UI's
+	-- element states, we compute readiness the way the game does -- from the
+	-- ReplicatedStorage data modules `Formables` and `CountryData` plus region
+	-- ownership -- and then mark the matching menu entries. Each rendered entry has
+	-- Button.NAME.Text == (formable.DN or key) and a "DN" attribute, so we map an
+	-- entry back to its formable by that name. States we mark:
+	--   * READY   -> you own every required region & are allowed -> green check
+	--   * CURRENT -> the formable your country is transformed into now -> blue star
+	-- (This game keeps no persistent "formed in the past" flag, so past transforms
+	-- cannot be shown -- only the current one.)
 	local HighlightFormables
 	local MarkReady, MarkCurrent, DimLocked
-	local CHECK_ICON = 'rbxassetid://6031094667'  -- material "check_circle"
-	local STAR_ICON  = 'rbxassetid://6031068421'  -- material "star"
+	local CHECK_ICON = 'rbxassetid://6031094667'
+	local STAR_ICON  = 'rbxassetid://6031068421'
+	local GREEN = Color3.fromRGB(80, 220, 110)
+	local BLUE  = Color3.fromRGB(65, 150, 255)
 	local marked = {}
+
+	local formablesMod, countryMod
+	local function findModule(name)
+		local m = replicatedStorage:FindFirstChild(name, true)
+		return (m and m:IsA('ModuleScript')) and m or nil
+	end
+	local function loadFormables()
+		if not formablesMod then formablesMod = findModule('Formables') end
+		local ok, data = pcall(function() return require(formablesMod) end)
+		return ok and data or nil
+	end
+
+	local function currentTransform(country)
+		local cf = countryFolder(country)
+		return cf and cf:GetAttribute('TRANSFORMEDINTO') or nil
+	end
+	local function ownsAllRegions(v, myCountry)
+		local regions = workspace:FindFirstChild('Regions')
+		if not regions then return false end
+		if not (v.CountriesREQ or v.CitiesREQ) then return true end
+		for _, tile in regions:GetChildren() do
+			if tile:GetAttribute('Country') ~= myCountry then
+				local core = tile:GetAttribute('Core')
+				if (v.CountriesREQ and core ~= nil and table.find(v.CountriesREQ, core))
+					or (v.CitiesREQ and table.find(v.CitiesREQ, tile.Name)) then
+					return false
+				end
+			end
+		end
+		return true
+	end
+	-- readySet[displayName] = true for every formable you can transform into now;
+	-- curName = the display name of your current transform (or nil)
+	local function computeReady(myCountry)
+		local formables = loadFormables()
+		local ready, curName = {}, nil
+		if not formables then return ready, curName end
+		local cur = currentTransform(myCountry)
+		for i, v in formables do
+			local dn = v.DN or i
+			if cur == i then curName = dn end
+			local allowed = not v.WhoCanForm or table.find(v.WhoCanForm, myCountry)
+			if allowed and cur ~= i and not v.SPECIAL and ownsAllRegions(v, myCountry) then
+				ready[tostring(dn)] = true
+			end
+		end
+		return ready, curName
+	end
+
+	-- resolve a menu entry to its formable display name
+	local function entryName(entry)
+		local dn = entry:GetAttribute('DN')
+		if dn then return tostring(dn) end
+		local btn = entry:FindFirstChild('Button')
+		local nm = btn and btn:FindFirstChild('NAME')
+		if nm and nm:IsA('TextLabel') then return nm.Text end
+		return nil
+	end
 
 	local function container()
 		local pg = lplr:FindFirstChild('PlayerGui')
@@ -949,31 +1005,17 @@ run(function()
 		return formables and (formables:FindFirstChild('Container') or formables) or nil
 	end
 
-	local function entryButton(entry)
-		local btn = entry:FindFirstChild('Button')
-		if btn and btn:FindFirstChild('NAME') then return btn end
-		return nil
-	end
-
-	-- READY = a working Transform action was built (requirements met, not locked)
-	local function isReady(btn)
-		local locked = btn:FindFirstChild('LOCKED')
-		if locked and locked:IsA('GuiObject') and locked.Visible then return false end
-		local eq = btn:FindFirstChild('EQ')
-		if not (eq and eq:IsA('GuiObject') and eq.Visible) then return false end
-		local nm = eq:FindFirstChild('NAME')
-		return nm and nm:IsA('TextLabel') and nm.Text:lower():find('transform') ~= nil
-	end
-
 	local function clearMark(target)
 		local m = target:FindFirstChild('VainFormMark')
 		if m then m:Destroy() end
 		local s = target:FindFirstChild('VainFormStroke')
 		if s then s:Destroy() end
+		local btn = target:FindFirstChild('Button')
+		if btn and btn:FindFirstChild('VainDim') then btn.VainDim:Destroy() end
 	end
-
 	local function stamp(target, icon, col)
-		clearMark(target)
+		if target:FindFirstChild('VainFormMark') then target.VainFormMark:Destroy() end
+		if target:FindFirstChild('VainFormStroke') then target.VainFormStroke:Destroy() end
 		local badge = Instance.new('ImageLabel')
 		badge.Name = 'VainFormMark'
 		badge.AnchorPoint = Vector2.new(1, 0)
@@ -982,7 +1024,7 @@ run(function()
 		badge.BackgroundTransparency = 1
 		badge.Image = icon
 		badge.ImageColor3 = col
-		badge.ZIndex = 50
+		badge.ZIndex = 60
 		badge.Parent = target
 		local stroke = Instance.new('UIStroke')
 		stroke.Name = 'VainFormStroke'
@@ -992,43 +1034,40 @@ run(function()
 		stroke.Parent = target
 	end
 
-	local GREEN = Color3.fromRGB(80, 220, 110)
-	local BLUE  = Color3.fromRGB(65, 150, 255)
-
 	local function refresh()
 		if not (HighlightFormables and HighlightFormables.Enabled) then return end
+		local myCountry = lplr:GetAttribute('MyCountry')
 		local cont = container()
-		if not cont then return end
+		if not (myCountry and cont) then return end
+		local ready, curName = computeReady(myCountry)
 		for _, entry in cont:GetChildren() do
-			if entry:IsA('GuiObject') then
-				local btn = entryButton(entry)
-				if btn then
-					marked[entry] = true
-					if entry.Name == '1RESET' then
-						-- the current transform (revert entry)
-						if MarkCurrent.Enabled then stamp(entry, STAR_ICON, BLUE) else clearMark(entry) end
-					elseif isReady(btn) then
-						if MarkReady.Enabled then stamp(entry, CHECK_ICON, GREEN) else clearMark(entry) end
-						if btn:FindFirstChild('VainDim') then btn.VainDim:Destroy() end
-					else
-						clearMark(entry)
-						-- optionally dim locked ones
-						local existing = btn:FindFirstChild('VainDim')
-						if DimLocked.Enabled then
-							if not existing then
-								local dim = Instance.new('Frame')
-								dim.Name = 'VainDim'
-								dim.Size = UDim2.fromScale(1, 1)
-								dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-								dim.BackgroundTransparency = 0.55
-								dim.BorderSizePixel = 0
-								dim.ZIndex = 40
-								dim.Parent = btn
-							end
-						elseif existing then
-							existing:Destroy()
-						end
+			if entry:IsA('GuiObject') and entry:FindFirstChild('Button') then
+				marked[entry] = true
+				local name = entryName(entry)
+				local isCurrent = entry.Name == '1RESET' or (curName and name == curName)
+				local isReady = name ~= nil and ready[name] == true
+				if isCurrent and MarkCurrent.Enabled then
+					stamp(entry, STAR_ICON, BLUE)
+				elseif isReady and MarkReady.Enabled then
+					stamp(entry, CHECK_ICON, GREEN)
+				else
+					clearMark(entry)
+				end
+				-- optional dim of not-ready, not-current entries
+				local btn = entry:FindFirstChild('Button')
+				if DimLocked.Enabled and not isReady and not isCurrent then
+					if btn and not btn:FindFirstChild('VainDim') then
+						local dim = Instance.new('Frame')
+						dim.Name = 'VainDim'
+						dim.Size = UDim2.fromScale(1, 1)
+						dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+						dim.BackgroundTransparency = 0.55
+						dim.BorderSizePixel = 0
+						dim.ZIndex = 55
+						dim.Parent = btn
 					end
+				elseif btn and btn:FindFirstChild('VainDim') then
+					btn.VainDim:Destroy()
 				end
 			end
 		end
@@ -1036,10 +1075,9 @@ run(function()
 
 	HighlightFormables = vain.Categories.Utility:CreateModule({
 		Name = 'Highlight Formables',
-		Tooltip = "Marks up the transformation menu: a green check on every formable you can transform into RIGHT NOW (you own all required regions), and a blue star on the one you're currently transformed into. Note: this game does not keep a permanent 'owned' flag on formables you transformed into in the past -- only your current transform is tracked -- so past ones can't be marked as owned.",
+		Tooltip = "In the transformation menu: a green check on every formable you can transform into RIGHT NOW (computed from the game's Formables data + your regions) and a blue star on your current transform. The game keeps no 'formed in the past' flag, so past transforms can't be marked. Open the menu so the entries exist.",
 		Function = function(callback)
 			if callback then
-				refresh()
 				HighlightFormables:Clean(task.spawn(function()
 					while HighlightFormables.Enabled do
 						refresh()
@@ -1048,11 +1086,7 @@ run(function()
 				end))
 			else
 				for entry in marked do
-					if entry and entry.Parent then
-						clearMark(entry)
-						local btn = entry:FindFirstChild('Button')
-						if btn and btn:FindFirstChild('VainDim') then btn.VainDim:Destroy() end
-					end
+					if entry and entry.Parent then clearMark(entry) end
 				end
 				table.clear(marked)
 			end
@@ -1062,143 +1096,161 @@ run(function()
 	MarkReady = HighlightFormables:CreateToggle({ Name = 'Mark Ready', Default = true,
 		Tooltip = 'Green check + outline on every formable you can transform into right now.' })
 	MarkCurrent = HighlightFormables:CreateToggle({ Name = 'Mark Current', Default = true,
-		Tooltip = "Blue star on the formable your country is currently transformed into (the revert entry)." })
+		Tooltip = 'Blue star on the formable your country is currently transformed into.' })
 	DimLocked = HighlightFormables:CreateToggle({ Name = 'Dim Locked', Default = false,
-		Tooltip = 'Darken formables whose requirements you have not met yet, so the ready ones stand out.' })
+		Tooltip = 'Darken formables you cannot form yet, so the ready ones stand out.' })
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
---  AUTO TRANSFORM  (claim every formable the instant it becomes available)
+--  AUTO TRANSFORM  (transform into any formable the moment it becomes available)
 -- ══════════════════════════════════════════════════════════════════════════════
--- CONFIRMED from the decompiled place file (Formables menu, Lines 3876 / 4059):
---   Each formable is an entry parented to PlayerGui.MainUI ... Formables.Container.
---   The entry has a `Button` frame with a `NAME` label and an `EQ` button. The game
---   builds that entry as AVAILABLE only when you already own every required region
---   (`#v468 == 0`) and it is not specially locked -- in that case it sets
---   Button.EQ.NAME.Text = "Transform" and Button.LOCKED is not shown. LOCKED
---   formables instead show Button.LOCKED / Button.REQ2 and have NO working EQ.
---   Claiming fires:  Network:FireServer("TransformInto", <formableId>)
---   where <formableId> is the entry's own Name (path 1: u452.Name) / the formable
---   key (path 2: i). We read availability from that exact UI signal, then fire the
---   confirmed remote directly (and click the EQ button as a fallback).
+-- CONFIRMED from the decompiled place file (BuildFormables, Lines 4032-4075).
+-- We DON'T scrape the UI (it only exists once the menu is opened and its element
+-- names are unreliable). Instead we replicate the game's OWN availability rule from
+-- the two data ModuleScripts it uses, both in ReplicatedStorage:
+--     Formables[i]  = { WhoCanForm, CountriesREQ, CitiesREQ, SPECIAL, DN, ... }
+--     CountryData[c] = country info (DN, ...)
+-- A formable `i` is transformable RIGHT NOW when ALL of:
+--   * you are allowed: not v.WhoCanForm, or table.find(v.WhoCanForm, MyCountry)
+--   * it is not your CURRENT transform: CountryRegistry[MyCountry].TRANSFORMEDINTO ~= i
+--   * it is not SPECIAL-locked (v.SPECIAL) unless you own the "<i>_FORMABLE" item
+--   * you own EVERY required region: no region whose Core is in v.CountriesREQ (or
+--     whose Name is in v.CitiesREQ) is owned by someone else.
+-- Then transform with the game's real call:  FireServer("TransformInto", i)
 run(function()
 	local AutoTransform
 	local Interval, Notify
-	local attempted = {}   -- formable id -> last attempt tick (don't spam)
 
-	local function formablesContainer()
-		local pg = lplr:FindFirstChild('PlayerGui')
-		local mainui = pg and pg:FindFirstChild('MainUI')
-		if not mainui then return nil end
-		-- Formables.Container, wherever it sits under MainUI
-		local formables = mainui:FindFirstChild('Formables', true)
-		local container = formables and (formables:FindFirstChild('Container') or formables)
-		return container, (mainui ~= nil)
-	end
-
-	-- an entry is any child that carries a Button with a NAME label (the formable row)
-	local function entryButton(entry)
-		local btn = entry:FindFirstChild('Button')
-		if btn and btn:FindFirstChild('NAME') then return btn end
+	-- locate the two data modules in ReplicatedStorage (by name, version-proof)
+	local formablesMod, countryMod
+	local function findModule(name)
+		local direct = replicatedStorage:FindFirstChild(name, true)
+		if direct and direct:IsA('ModuleScript') then return direct end
 		return nil
 	end
-
-	-- AVAILABLE = the game built a working "Transform" action for it: Button.EQ exists
-	-- with NAME.Text == "Transform", and Button.LOCKED is not shown. This is the exact
-	-- rule the client uses (you own every required region), read straight off the UI.
-	local function isAvailable(btn)
-		local locked = btn:FindFirstChild('LOCKED')
-		if locked and locked:IsA('GuiObject') and locked.Visible then return false end
-		local eq = btn:FindFirstChild('EQ')
-		if not (eq and eq:IsA('GuiObject') and eq.Visible) then return false end
-		local nm = eq:FindFirstChild('NAME')
-		if nm and nm:IsA('TextLabel') then
-			return nm.Text:lower():find('transform') ~= nil
-		end
-		return false
+	local function loadData()
+		if not formablesMod then formablesMod = findModule('Formables') end
+		if not countryMod then countryMod = findModule('CountryData') end
+		local okF, formables = pcall(function() return require(formablesMod) end)
+		local okC, countries = pcall(function() return require(countryMod) end)
+		return okF and formables or nil, okC and countries or nil
 	end
 
-	-- the formable id to send. The transform remote takes the entry's Name; some
-	-- locked entries are renamed "_<id>", so strip a leading underscore.
-	local function formableId(entry)
-		local n = entry.Name
-		if n:sub(1, 1) == '_' then n = n:sub(2) end
-		return n
+	-- your current transform (a CountryRegistry attribute on your country)
+	local function currentTransform(country)
+		local cf = countryFolder(country)
+		return cf and cf:GetAttribute('TRANSFORMEDINTO') or nil
 	end
 
-	-- claim it: fire the confirmed remote, and also click the EQ button so we hit the
-	-- game's own handler (which sends the exact argument) as a belt-and-braces path.
-	local function claim(entry, btn)
-		local id = formableId(entry)
-		fireAction('TransformInto', id)
-		local eq = btn:FindFirstChild('EQ')
-		if eq then
-			pcall(function()
-				if type(firesignal) == 'function' then
-					firesignal(eq.MouseButton1Click)
-				elseif type(getconnections) == 'function' then
-					for _, con in getconnections(eq.MouseButton1Click) do
-						if con.Fire then con:Fire() elseif con.Function then con.Function() end
-					end
-				end
-			end)
-		end
-		return id
-	end
-
-	local function sweep()
-		local container = formablesContainer()
-		if not container then return 0, 0 end
-		local now = tick()
-		local claimed, avail = 0, 0
-		for _, entry in container:GetChildren() do
-			if entry:IsA('GuiObject') then
-				local btn = entryButton(entry)
-				if btn and isAvailable(btn) then
-					avail += 1
-					local id = formableId(entry)
-					if not attempted[id] or (now - attempted[id]) > 8 then
-						attempted[id] = now
-						claim(entry, btn)
-						claimed += 1
-						if Notify.Enabled then
-							local nm = btn:FindFirstChild('NAME')
-							local label = (nm and nm:IsA('TextLabel') and nm.Text) or id
-							notif('Auto Transform', 'Transforming into ' .. tostring(label), 3, 'success')
-						end
-						task.wait(0.3)
-					end
+	-- do you own every region this formable requires? Mirrors the game's v468 loop.
+	local function ownsAllRegions(v, myCountry)
+		local regions = workspace:FindFirstChild('Regions')
+		if not regions then return false end
+		local needCountries = v.CountriesREQ
+		local needCities = v.CitiesREQ
+		if not (needCountries or needCities) then return true end
+		for _, tile in regions:GetChildren() do
+			local owner = tile:GetAttribute('Country')
+			if owner ~= myCountry then
+				local core = tile:GetAttribute('Core')
+				local reqByCore = needCountries and core ~= nil and table.find(needCountries, core)
+				local reqByCity = needCities and table.find(needCities, tile.Name)
+				if reqByCore or reqByCity then
+					return false   -- a required region is owned by someone else
 				end
 			end
 		end
-		return claimed, avail
+		return true
+	end
+
+	local function ownsFormableItem(i)
+		-- SPECIAL formables unlock via a "<i>_FORMABLE" BoughtItem. We can't read the
+		-- client BoughtItems list, so we simply DON'T auto-fire SPECIAL ones (the
+		-- server would reject them anyway). Returns false => treat SPECIAL as locked.
+		return false
+	end
+
+	-- is formable `i` (definition v) transformable right now for myCountry?
+	local function canForm(i, v, myCountry, cur)
+		if cur == i then return false end
+		if v.WhoCanForm and not table.find(v.WhoCanForm, myCountry) then return false end
+		if v.SPECIAL and not ownsFormableItem(i) then return false end
+		if not ownsAllRegions(v, myCountry) then return false end
+		return true
+	end
+
+	-- list every formable key you can transform into right now
+	local function availableFormables()
+		local myCountry = lplr:GetAttribute('MyCountry')
+		if not myCountry then return {}, myCountry end
+		local formables = select(1, loadData())
+		if not formables then return {}, myCountry end
+		local cur = currentTransform(myCountry)
+		local out = {}
+		for i, v in formables do
+			if canForm(i, v, myCountry, cur) then table.insert(out, i) end
+		end
+		return out, myCountry
+	end
+
+	local attempted = {}
+
+	-- the game pops an "Are you sure?" dialog whose confirm button fires
+	-- FireServer("TransformInto", i). We fire that call directly, so no dialog needed.
+	local function doTransform(i)
+		fireAction('TransformInto', i)
+	end
+
+	local function sweep()
+		local list, myCountry = availableFormables()
+		if not myCountry then return 0, 0 end
+		local now = tick()
+		local fired = 0
+		for _, i in list do
+			if not attempted[i] or (now - attempted[i]) > 10 then
+				attempted[i] = now
+				doTransform(i)
+				fired += 1
+				if Notify.Enabled then
+					local formables = select(1, loadData())
+					local dn = formables and formables[i] and (formables[i].DN or i) or i
+					notif('Auto Transform', 'Transforming into ' .. tostring(dn), 3, 'success')
+				end
+				-- after a successful transform the country's TRANSFORMEDINTO changes,
+				-- so re-evaluate on the next sweep; one per sweep is plenty.
+				task.wait(0.5)
+				break
+			end
+		end
+		return fired, #list
 	end
 
 	AutoTransform = vain.Categories.Utility:CreateModule({
 		Name = 'Auto Transform',
-		Tooltip = "Automatically transforms your country into any formable the instant it becomes available. It reads the transformation menu for formables the game has marked ready (you own every required region) and fires the game's real TransformInto call. Keep the transform menu opened at least once so the entries exist.",
+		Tooltip = "Automatically transforms your country into any formable the instant its requirements are met -- it reads the game's own Formables / CountryData modules and region ownership (no need to open the menu) and fires the real TransformInto call. Skips your current transform and formables locked to other countries or behind SPECIAL unlocks.",
 		Function = function(callback)
 			if callback then
-				local container, hasUI = formablesContainer()
-				local _, avail = sweep()
+				table.clear(attempted)
+				local formables, countries = loadData()
+				local list, myCountry = availableFormables()
 				notif('Auto Transform', string.format(
-					'%s | available formables: %d%s',
-					getActionRemote() and (container and 'Ready' or 'open the Transform menu once')
-						or 'NO REMOTE',
-					avail, container and '' or ' (menu not loaded yet)'),
-					7, (getActionRemote() and container) and nil or 'warning')
+					'%s | data %s | country %s | available now: %d',
+					getActionRemote() and 'Remote OK' or 'NO REMOTE',
+					(formables and countries) and 'loaded' or 'MODULES NOT FOUND',
+					tostring(myCountry), #list),
+					7, (getActionRemote() and formables and myCountry) and nil or 'warning')
 				AutoTransform:Clean(task.spawn(function()
 					while AutoTransform.Enabled do
 						sweep()
-						task.wait(Interval and Interval.Value or 3)
+						task.wait(Interval and Interval.Value or 4)
 					end
 				end))
 			end
 		end
 	})
 
-	Interval = AutoTransform:CreateSlider({ Name = 'Check Interval', Min = 1, Max = 30, Default = 3, Suffix = 'sec',
-		Tooltip = 'How often to re-scan the transformation menu for a newly-available formable.' })
+	Interval = AutoTransform:CreateSlider({ Name = 'Check Interval', Min = 1, Max = 30, Default = 4, Suffix = 'sec',
+		Tooltip = 'How often to re-evaluate which formables you can transform into.' })
 	Notify = AutoTransform:CreateToggle({ Name = 'Notify', Default = true,
-		Tooltip = 'Notify when it transforms your country into a formable.' })
+		Tooltip = 'Notify each time it transforms your country into a formable.' })
 end)
