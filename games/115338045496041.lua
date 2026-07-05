@@ -807,7 +807,7 @@ end)
 -- deposit, so attempting a name it doesn't know is harmless.
 run(function()
 	local AutoAllianceBank
-	local KeepReserve, ManualCap, Threshold, Interval, Notify
+	local KeepReserve, ManualCap, Threshold, Interval, LearnDeposit, Notify
 
 	-- read the manpower cap for a country: a sibling Value, then an attribute, then
 	-- the manual override slider (in thousands). Returns nil if genuinely unknown.
@@ -828,20 +828,150 @@ run(function()
 		return nil
 	end
 
-	-- discover an alliance-related RemoteEvent once (cached), so we can fire it
-	-- directly in addition to the generic action remote.
+	-- ── learned deposit call ──────────────────────────────────────────────────
+	-- We can't verify a blind FireServer, so the reliable path is to LEARN the real
+	-- call the game uses. When "Learn Deposit" is on we hook FireServer/InvokeServer
+	-- and, the next time YOU manually deposit manpower into the alliance bank, we
+	-- capture the exact remote + argument layout and replay it afterwards. The learned
+	-- call is persisted to a file so it survives rejoins.
+	local LEARN_FILE = 'vain/controleurope_alliance_deposit.txt'
+	local learned      -- { remote = Instance, args = {...}, amountIndex = n }
+
+	-- where in a captured arg list the deposited number sits, so we can swap our
+	-- amount in. Picks the largest number that plausibly is a manpower figure.
+	local function findAmountIndex(args)
+		local bestI, bestV
+		for i, a in ipairs(args) do
+			if type(a) == 'number' and a >= 1 and (not bestV or a > bestV) then
+				bestI, bestV = i, a
+			end
+		end
+		return bestI
+	end
+
+	local function saveLearned()
+		if not (learned and typeof(writefile) == 'function') then return end
+		-- persist by remote full path + amount index + literal (non-instance) args
+		local safeArgs = {}
+		for i, a in ipairs(learned.args) do
+			local t = type(a)
+			if t == 'number' or t == 'boolean' then safeArgs[i] = { t, a }
+			elseif t == 'string' then safeArgs[i] = { 'string', a }
+			else safeArgs[i] = { 'skip' } end
+		end
+		local ok, blob = pcall(function()
+			return game:GetService('HttpService'):JSONEncode({
+				path = learned.remote:GetFullName(),
+				amountIndex = learned.amountIndex,
+				args = safeArgs,
+			})
+		end)
+		if ok then pcall(writefile, LEARN_FILE, blob) end
+	end
+
+	local function resolveByPath(path)
+		local node = game
+		for part in string.gmatch(path, '[^%.]+') do
+			if node == game then
+				node = game:GetService(part) or game:FindFirstChild(part)
+			else
+				node = node and node:FindFirstChild(part)
+			end
+			if not node then return nil end
+		end
+		return node
+	end
+
+	local function loadLearned()
+		if learned then return end
+		if typeof(readfile) ~= 'function' then return end
+		local ok, blob = pcall(readfile, LEARN_FILE)
+		if not (ok and type(blob) == 'string' and #blob > 0) then return end
+		local ok2, data = pcall(function() return game:GetService('HttpService'):JSONDecode(blob) end)
+		if not (ok2 and type(data) == 'table' and data.path) then return end
+		local remote = resolveByPath(data.path)
+		if not remote then return end
+		local args = {}
+		for i, pair in ipairs(data.args or {}) do
+			if pair[1] == 'skip' then args[i] = false else args[i] = pair[2] end
+		end
+		learned = { remote = remote, args = args, amountIndex = data.amountIndex }
+	end
+
+	-- install the learning hook (idempotent); active only while the toggle is on.
+	-- classify a captured (remote, args) OFF the hook thread -- GetFullName / IsA are
+	-- themselves namecalls, so doing them inside the hook would recurse. We only look
+	-- at ones we know we fired ourselves? No -- we skip our own by a flag.
+	local firingLearned = false
+	local function classifyCapture(remote, args)
+		if learned ~= nil then return end
+		local okName, n = pcall(function() return (remote.Name or ''):lower() end)
+		local full = ''
+		pcall(function() full = remote:GetFullName():lower() end)
+		if not (okName and (n:find('alliance') or full:find('alliance') or full:find('bank'))) then return end
+		local ai = findAmountIndex(args)
+		if not ai then return end
+		learned = { remote = remote, args = args, amountIndex = ai }
+		saveLearned()
+		if vain and vain.CreateNotification then
+			vain:CreateNotification('Auto Alliance Bank',
+				'Learned deposit call: ' .. tostring(n) .. ' (amount = arg #' .. ai .. '). It will replay this automatically now.', 6, 'success')
+		end
+	end
+
+	local learnHookInstalled = false
+	local function installLearnHook()
+		if learnHookInstalled then return end
+		if type(hookmetamethod) ~= 'function' or type(getnamecallmethod) ~= 'function' then return end
+		learnHookInstalled = true
+		local oldNamecall
+		oldNamecall = hookmetamethod(game, '__namecall', function(self, ...)
+			-- keep the hook body free of any namecalls on `self` (they'd recurse).
+			-- Only read the method + capture args here; classify on another thread.
+			if learned == nil and not firingLearned and type(self) == 'userdata' then
+				local method = getnamecallmethod()
+				if method == 'FireServer' or method == 'InvokeServer' then
+					local args = { ... }
+					local remote = self
+					task.spawn(classifyCapture, remote, args)
+				end
+			end
+			return oldNamecall(self, ...)
+		end)
+	end
+
+	-- replay the learned call with our amount swapped in. Returns true if it fired.
+	local function fireLearned(amount)
+		if not (learned and learned.remote and learned.remote.Parent) then return false end
+		local args = {}
+		for i, a in ipairs(learned.args) do args[i] = a end
+		args[learned.amountIndex] = amount
+		-- any skipped (instance) args we couldn't persist -> drop cleanly if false
+		firingLearned = true
+		local ok = pcall(function()
+			if learned.remote:IsA('RemoteFunction') then
+				learned.remote:InvokeServer(unpack(args))
+			else
+				learned.remote:FireServer(unpack(args))
+			end
+		end)
+		firingLearned = false
+		return ok
+	end
+
+	-- best-effort blind deposit for when nothing has been learned yet: try the
+	-- plausible action names + any alliance-named remote. NOT verifiable.
 	local allianceRemote
 	local function getAllianceRemote()
 		if allianceRemote and allianceRemote.Parent then return allianceRemote end
 		for _, r in replicatedStorage:GetDescendants() do
 			if (r:IsA('RemoteEvent') or r:IsA('RemoteFunction')) then
-				local n = r.Name:lower()
-				if n:find('alliance') and (n:find('deposit') or n:find('bank') or n:find('donate') or n:find('manpower')) then
+				local nm = r.Name:lower()
+				if nm:find('alliance') and (nm:find('deposit') or nm:find('bank') or nm:find('donate') or nm:find('manpower')) then
 					allianceRemote = r return r
 				end
 			end
 		end
-		-- weaker match: anything alliance-y
 		for _, r in replicatedStorage:GetDescendants() do
 			if (r:IsA('RemoteEvent') or r:IsA('RemoteFunction')) and r.Name:lower():find('alliance') then
 				allianceRemote = r return r
@@ -849,19 +979,12 @@ run(function()
 		end
 		return nil
 	end
-
-	-- fire a deposit of `amount` manpower into the alliance bank across every
-	-- plausible channel; server ignores the ones that don't apply.
-	local function deposit(amount)
-		amount = math.floor(amount)
-		if amount <= 0 then return false end
+	local function blindDeposit(amount)
 		local fired = false
-		-- 1) generic action remote with the likely action names
 		for _, action in { 'DepositManpower', 'AllianceDeposit', 'DepositToAlliance', 'DonateManpower', 'AllianceBankDeposit', 'BankDeposit' } do
 			if fireAction(action, 'Manpower', amount) then fired = true end
 			fireAction(action, amount)
 		end
-		-- 2) a discovered alliance remote, a couple of arg shapes
 		local ar = getAllianceRemote()
 		if ar then
 			pcall(function()
@@ -875,6 +998,20 @@ run(function()
 			fired = true
 		end
 		return fired
+	end
+
+	-- deposit `amount`, then VERIFY by re-reading manpower. Returns the actual amount
+	-- that left your reserve (0 if nothing moved), and whether the learned call was used.
+	local function deposit(mine, amount)
+		amount = math.floor(amount)
+		if amount <= 0 then return 0, false end
+		local before = select(2, getBalance(mine)) or 0
+		local usedLearned = fireLearned(amount)
+		if not usedLearned then blindDeposit(amount) end
+		task.wait(0.35)   -- let the server replicate the new manpower value back
+		local after = select(2, getBalance(mine)) or before
+		local moved = math.max(0, before - after)
+		return moved, usedLearned
 	end
 
 	local function sweep()
@@ -896,12 +1033,19 @@ run(function()
 		if not trigger then return end
 
 		local overflow = manpower - keep
-		if cap then overflow = math.min(overflow, manpower - keep) end
 		if overflow <= 0 then return end
 
-		if deposit(overflow) and Notify.Enabled then
-			notif('Alliance Bank', string.format('Deposited %s manpower (was at %s%s)',
-				fmtNum(overflow), fmtNum(manpower), cap and ('/' .. fmtNum(cap)) or ''), 4, 'success')
+		local moved = deposit(mine, overflow)
+		if moved > 0 then
+			if Notify.Enabled then
+				notif('Alliance Bank', string.format('Deposited %s manpower (was at %s%s)',
+					fmtNum(moved), fmtNum(manpower), cap and ('/' .. fmtNum(cap)) or ''), 4, 'success')
+			end
+		elseif not learned and Notify.Enabled then
+			-- honest failure: we fired blind and manpower did NOT drop
+			notif('Alliance Bank',
+				"Couldn't deposit -- the game's deposit call isn't known. Turn on \"Learn Deposit\", then deposit once manually so it can capture the real call.",
+				7, 'warning')
 		end
 	end
 
@@ -910,17 +1054,20 @@ run(function()
 		Tooltip = "Once your country's manpower hits its cap it stops growing and is wasted -- this deposits the overflow into your alliance bank automatically. It finds your manpower cap from CountryRegistry (or use the manual cap if the game exposes none), and always keeps your reserve. Requires you to actually be in an alliance.",
 		Function = function(callback)
 			if callback then
+				loadLearned()
+				if LearnDeposit.Enabled then installLearnHook() end
 				local mine = lplr:GetAttribute('MyCountry')
 				local _, mp = getBalance(mine)
 				local cap = manpowerCap(mine)
-				local ar  = getAllianceRemote()
 				notif('Auto Alliance Bank', string.format(
-					'%s | manpower %s | cap %s | alliance remote %s',
+					'%s | manpower %s | cap %s | deposit call: %s',
 					getActionRemote() and 'Action OK' or 'NO REMOTE',
 					mp and fmtNum(mp) or '?',
 					cap and fmtNum(cap) or 'UNKNOWN (set Manual Cap)',
-					ar and ar.Name or 'not found (using action remote)'),
-					8, (getActionRemote() and mp and (cap or (ManualCap and ManualCap.Value > 0))) and nil or 'warning')
+					learned and ('LEARNED (' .. learned.remote.Name .. ')')
+						or (LearnDeposit.Enabled and 'not learned yet -- deposit once manually'
+							or 'unknown -- enable Learn Deposit')),
+					8, (getActionRemote() and mp and (cap or (ManualCap and ManualCap.Value > 0)) and learned) and nil or 'warning')
 				AutoAllianceBank:Clean(task.spawn(function()
 					while AutoAllianceBank.Enabled do
 						sweep()
@@ -939,8 +1086,11 @@ run(function()
 		Tooltip = 'Only used if the game exposes no manpower cap value. Set your known max manpower (in thousands) so the module knows when you are full. Leave at 0 to auto-detect.' })
 	Interval = AutoAllianceBank:CreateSlider({ Name = 'Interval', Min = 1, Max = 60, Default = 5, Suffix = 'sec',
 		Tooltip = 'How often to check whether manpower has hit the cap.' })
+	LearnDeposit = AutoAllianceBank:CreateToggle({ Name = 'Learn Deposit', Default = true,
+		Function = function(on) if on then installLearnHook() end end,
+		Tooltip = "The exact alliance-deposit call isn't known for this game. With this on, deposit manpower into your alliance bank MANUALLY once -- it captures the real remote + arguments and replays them automatically forever after (saved across rejoins)." })
 	Notify = AutoAllianceBank:CreateToggle({ Name = 'Notify', Default = true,
-		Tooltip = 'Notify each time it deposits manpower into the alliance bank.' })
+		Tooltip = 'Notify each time it deposits manpower into the alliance bank (verified -- only fires if your manpower actually dropped).' })
 end)
 
 run(function()
