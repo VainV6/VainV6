@@ -51,6 +51,7 @@ do
 		local bg = Instance.new('Frame')
 		bg.Size = UDim2.fromScale(1, 1)
 		bg.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+		bg.BackgroundTransparency = 1 -- transparent: show the game behind the loader
 		bg.BorderSizePixel = 0
 		bg.Parent = root
 
