@@ -5770,8 +5770,9 @@ function mainapi:CreateNotification(title, text, duration, type)
 		textParams.Width = notifWidth - 56
 		local wrappedSize = textService:GetTextBoundsAsync(textParams)
 		local textHeight = wrappedSize.Y
-		-- Body sits at y=44; ~12px bottom padding so the box hugs the content.
-		local notifHeight = math.max(62, 44 + textHeight + 12)
+		-- Body sits at y=40; small bottom padding so the box hugs the content
+		-- (trims the big empty strip that used to sit under the message).
+		local notifHeight = math.max(56, 40 + textHeight + 8)
 
 		-- Insert into stack before computing Y so concurrent notifications stack correctly
 		local entry = {notification = nil, height = notifHeight}
@@ -5841,7 +5842,7 @@ function mainapi:CreateNotification(title, text, duration, type)
 		local titlelabel = Instance.new('TextLabel')
 		titlelabel.Name = 'Title'
 		titlelabel.Size = UDim2.new(1, -56, 0, 20)
-		titlelabel.Position = UDim2.fromOffset(46, 16)
+		titlelabel.Position = UDim2.fromOffset(46, 14)
 		titlelabel.ZIndex = 5
 		titlelabel.BackgroundTransparency = 1
 		titlelabel.Text = "<stroke color='#FFFFFF' joins='round' thickness='0.3' transparency='0.5'>"..title..'</stroke>'
@@ -5855,7 +5856,7 @@ function mainapi:CreateNotification(title, text, duration, type)
 		local textshadow = titlelabel:Clone()
 		textshadow.Name = 'Text'
 		textshadow.Size = UDim2.new(1, -56, 0, textHeight)
-		textshadow.Position = UDim2.fromOffset(47, 44)
+		textshadow.Position = UDim2.fromOffset(47, 40)
 		textshadow.Text = removeTags(text)
 		textshadow.TextColor3 = Color3.new()
 		textshadow.TextTransparency = 0.5
