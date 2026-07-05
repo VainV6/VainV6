@@ -86,27 +86,33 @@ do
 		wordmark.ZIndex = 3
 		wordmark.Parent = root
 
-		-- same 5-keypoint metallic orange gradient + 115 deg rotation as the logo, but
-		-- a DARKER deep-orange base with a bright near-white sheen peak so the shimmer
-		-- reads clearly on the big title.
+		-- Deep-orange title with a NARROW, bright near-white sheen band that travels
+		-- across it. The base orange fills almost the whole gradient so the text is
+		-- always clearly orange; only a thin white stripe (0.44-0.56) is bright, and
+		-- sweeping the Offset makes that stripe strafe across the glyphs -> a clearly
+		-- visible shimmer. 115 deg rotation gives it the diagonal logo look.
+		local baseCol = Color3.fromRGB(210, 100, 18)   -- readable deep orange
 		local wmGrad = Instance.new('UIGradient')
 		wmGrad.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0.00, Color3.fromRGB(120, 48, 6)),
-			ColorSequenceKeypoint.new(0.28, Color3.fromRGB(200, 96, 16)),
-			ColorSequenceKeypoint.new(0.48, Color3.fromRGB(255, 240, 210)), -- bright sheen peak
-			ColorSequenceKeypoint.new(0.68, Color3.fromRGB(200, 96, 16)),
-			ColorSequenceKeypoint.new(1.00, Color3.fromRGB(96, 38, 4)),
+			ColorSequenceKeypoint.new(0.00, baseCol),
+			ColorSequenceKeypoint.new(0.42, baseCol),
+			ColorSequenceKeypoint.new(0.50, Color3.fromRGB(255, 255, 255)), -- bright white sheen peak
+			ColorSequenceKeypoint.new(0.58, baseCol),
+			ColorSequenceKeypoint.new(1.00, baseCol),
 		})
 		wmGrad.Rotation = 115
 		wmGrad.Parent = wordmark
 
-		-- slow shimmer sweep across the glyphs (identical technique to the logo)
+		-- sweep the sheen band across the glyphs. Offset X is driven a bit past the
+		-- edges (-1.1 -> 1.1) so the white stripe enters from one side and fully exits
+		-- the other, then loops -> a continuous travelling shine (like the Vain logo).
 		task.spawn(function()
 			while wordmark.Parent and not finished do
-				wmGrad.Offset = Vector2.new(-1, 0)
-				local t = TweenService:Create(wmGrad, TweenInfo.new(2.4, Enum.EasingStyle.Linear), { Offset = Vector2.new(1, 0) })
+				wmGrad.Offset = Vector2.new(-1.1, 0)
+				local t = TweenService:Create(wmGrad, TweenInfo.new(2, Enum.EasingStyle.Linear), { Offset = Vector2.new(1.1, 0) })
 				t:Play()
 				t.Completed:Wait()
+				task.wait(0.4)   -- brief pause between sweeps
 			end
 		end)
 
@@ -114,8 +120,8 @@ do
 		local letters = { wordmark }
 
 		-- ── linear progress bar ───────────────────────────────────────────────
-		-- Rounded track + a solid orange fill with a sweeping brighter-orange shimmer
-		-- highlight (no gradient-to-white), and the percentage centred above it.
+		-- Rounded track + a plain solid orange fill (no shimmer -- the shimmer is on
+		-- the VAIN title only), with the percentage centred above it.
 		local barW    = 320
 		local barH    = 8
 		local accent  = Color3.fromRGB(245, 150, 40)   -- orange fill
@@ -143,26 +149,7 @@ do
 		barFill.ClipsDescendants = true
 		barFill.Parent = barTrack
 		Instance.new('UICorner', barFill).CornerRadius = UDim.new(1, 0)
-
-		-- shimmer: a BRIGHT hot-orange highlight that sweeps across the fill. Fully
-		-- opaque at its peak and much lighter than the fill so it clearly reads as a
-		-- moving sheen, soft-edged via a gradient mask so the edges still blend.
-		local shimmer = Instance.new('Frame')
-		shimmer.AnchorPoint = Vector2.new(0.5, 0.5)
-		shimmer.Size = UDim2.new(0, 90, 1, 0)                    -- wider streak
-		shimmer.Position = UDim2.fromScale(-0.3, 0.5)
-		shimmer.BackgroundColor3 = Color3.fromRGB(255, 224, 170) -- bright, near-white hot orange
-		shimmer.BackgroundTransparency = 0                       -- fully opaque peak (gradient masks the edges)
-		shimmer.BorderSizePixel = 0
-		shimmer.ZIndex = 5
-		shimmer.Parent = barFill
-		local shimGrad = Instance.new('UIGradient')
-		shimGrad.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(0.5, 0),   -- solid bright at the center
-			NumberSequenceKeypoint.new(1, 1),
-		})
-		shimGrad.Parent = shimmer
+		-- (no shimmer on the bar -- the shimmer lives on the VAIN title only)
 
 		-- percentage centred above the bar
 		local ringPct = Instance.new('TextLabel')
@@ -184,18 +171,6 @@ do
 			tween(barFill, 0.25, { Size = UDim2.fromScale(curFrac, 1) })
 			ringPct.Text = tostring(math.floor(curFrac * 100 + 0.5)) .. '%'
 		end
-
-		-- sweep the shimmer highlight across the fill on a gentle loop
-		task.spawn(function()
-			while barTrack.Parent and not finished do
-				shimmer.Position = UDim2.fromScale(-0.3, 0.5)
-				local t = TweenService:Create(shimmer,
-					TweenInfo.new(1.2, Enum.EasingStyle.Linear), { Position = UDim2.fromScale(1.3, 0.5) })
-				t:Play()
-				t.Completed:Wait()
-				task.wait(0.5)
-			end
-		end)
 
 		-- status text UNDER the bar (kept for API compatibility, hidden for now)
 		statusLabel = Instance.new('TextLabel')
