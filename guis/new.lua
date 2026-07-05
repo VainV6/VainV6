@@ -6073,6 +6073,20 @@ function mainapi:Load(skipgui, profile)
 		image.Image = getcustomasset('vain/assets/new/vain.png')
 		image.ImageTransparency = hide and 1 or 0
 		image.Parent = button
+		-- Fallback "V" behind the image, so the button is never blank if the icon
+		-- asset fails to load (moderated id / executor without getcustomasset).
+		local fallback = Instance.new('TextLabel')
+		fallback.AnchorPoint = Vector2.new(0.5, 0.5)
+		fallback.Position = UDim2.fromScale(0.5, 0.5)
+		fallback.Size = UDim2.fromOffset(24, 24)
+		fallback.BackgroundTransparency = 1
+		fallback.Text = 'V'
+		fallback.Font = Enum.Font.GothamBlack
+		fallback.TextSize = 18
+		fallback.TextColor3 = Color3.fromRGB(255, 106, 31)
+		fallback.TextTransparency = hide and 1 or 0
+		fallback.ZIndex = 0
+		fallback.Parent = button
 		local buttoncorner = Instance.new('UICorner')
 		buttoncorner.Parent = button
 		self.VapeButton = button
@@ -6097,10 +6111,11 @@ function mainapi:Load(skipgui, profile)
 		if guipane then
 			guipane:CreateToggle({
 				Name = 'Hide Vain button',
-				Default = hide or false,
+				Default = hide == true, -- OFF by default (only on if saved true)
 				Function = function(call)
 					button.BackgroundTransparency = call and 1 or 0.35
 					image.ImageTransparency = call and 1 or 0
+					fallback.TextTransparency = call and 1 or 0
 					writefile('vain/profiles/hide.txt', tostring(call))
 				end
 			})
