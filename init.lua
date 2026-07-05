@@ -77,26 +77,20 @@ do
 		bg.BorderSizePixel = 0
 		bg.Parent = root
 
-		-- Everything anchored to the SCREEN CENTRE. The V is a HUGE TextScaled glyph
-		-- in a 500px box so it fills a big chunk of the screen.
-		local vLabel = Instance.new('TextLabel')
-		-- Roblox caps plain TextSize at ~100px, so a fixed TextSize can never look big.
-		-- TextScaled bypasses that cap; a UITextSizeConstraint keeps it from
-		-- overflowing. The glyph fills a fixed 300px box.
-		vLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-		vLabel.Position = UDim2.new(0.5, 0, 0.5, -120)
-		vLabel.Size = UDim2.fromOffset(300, 300)
-		vLabel.BackgroundTransparency = 1
-		vLabel.Text = 'V'
-		vLabel.Font = Enum.Font.GothamBlack
-		vLabel.TextScaled = true
-		vLabel.TextColor3 = Color3.new(1, 1, 1)
-		vLabel.TextTransparency = 1
-		vLabel.ZIndex = 3
-		vLabel.Parent = root
-		local vConstraint = Instance.new('UITextSizeConstraint')
-		vConstraint.MaxTextSize = 300
-		vConstraint.Parent = vLabel
+		-- (V removed) -- centred VAIN wordmark + progress bar + status.
+		local wordmark = Instance.new('TextLabel')
+		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
+		wordmark.Position = UDim2.new(0.5, 0, 0.5, -30)
+		wordmark.Size = UDim2.fromOffset(400, 60)
+		wordmark.BackgroundTransparency = 1
+		wordmark.Font = Enum.Font.GothamBold
+		wordmark.Text = 'VAIN'
+		wordmark.TextSize = 46
+		wordmark.TextTransparency = 1
+		wordmark.TextColor3 = Color3.new(1, 1, 1)
+		wordmark.ZIndex = 3
+		wordmark.Parent = root
+		-- orange metallic gradient on the wordmark (the V's old look)
 		gradient = Instance.new('UIGradient')
 		gradient.Color = ColorSequence.new({
 			ColorSequenceKeypoint.new(0.00, Color3.fromRGB(154, 61, 10)),
@@ -105,26 +99,11 @@ do
 			ColorSequenceKeypoint.new(0.68, Color3.fromRGB(255, 106, 31)),
 			ColorSequenceKeypoint.new(1.00, Color3.fromRGB(122, 47, 8)),
 		})
-		gradient.Rotation = 115
-		gradient.Parent = vLabel
-
-		-- wordmark, fixed distance under the V
-		local wordmark = Instance.new('TextLabel')
-		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
-		wordmark.Position = UDim2.new(0.5, 0, 0.5, 250)
-		wordmark.Size = UDim2.fromOffset(320, 40)
-		wordmark.BackgroundTransparency = 1
-		wordmark.Font = Enum.Font.Gotham
-		wordmark.Text = 'VAIN'
-		wordmark.TextSize = 30
-		wordmark.TextTransparency = 1
-		wordmark.TextColor3 = Color3.new(1, 1, 1)
-		wordmark.ZIndex = 3
-		wordmark.Parent = root
+		gradient.Parent = wordmark
 
 		local barTrack = Instance.new('Frame')
 		barTrack.AnchorPoint = Vector2.new(0.5, 0.5)
-		barTrack.Position = UDim2.new(0.5, 0, 0.5, 296)
+		barTrack.Position = UDim2.new(0.5, 0, 0.5, 30)
 		barTrack.Size = UDim2.fromOffset(340, 5)
 		barTrack.BackgroundColor3 = Color3.new(1, 1, 1)
 		barTrack.BackgroundTransparency = 0.85
@@ -143,7 +122,7 @@ do
 		-- status text UNDER the progress bar
 		statusLabel = Instance.new('TextLabel')
 		statusLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-		statusLabel.Position = UDim2.new(0.5, 0, 0.5, 324)
+		statusLabel.Position = UDim2.new(0.5, 0, 0.5, 58)
 		statusLabel.Size = UDim2.fromOffset(600, 20)
 		statusLabel.BackgroundTransparency = 1
 		statusLabel.Font = Enum.Font.Gotham
@@ -154,12 +133,9 @@ do
 		statusLabel.ZIndex = 3
 		statusLabel.Parent = root
 
-		-- intro animation: the V box grows from small to 300px with a bounce
-		-- (TextScaled fills it, so the glyph scales up with the box).
-		vLabel.Size = UDim2.fromOffset(60, 60)
-		tween(vLabel, 0.9, { Size = UDim2.fromOffset(300, 300), TextTransparency = 0 }, Enum.EasingStyle.Back)
-		task.delay(0.4, function()
-			tween(wordmark, 0.6, { TextTransparency = 0 })
+		-- intro animation: wordmark + bar fade in.
+		tween(wordmark, 0.6, { TextTransparency = 0 })
+		task.delay(0.25, function()
 			tween(barTrack, 0.6, { BackgroundTransparency = 0.75 })
 		end)
 
@@ -210,9 +186,9 @@ do
 			end
 		end)
 
-		-- shimmer sweep across the V
+		-- shimmer sweep across the VAIN wordmark
 		task.spawn(function()
-			while vLabel.Parent do
+			while wordmark.Parent do
 				gradient.Offset = Vector2.new(-1, 0)
 				local t = TweenService:Create(gradient, TweenInfo.new(2.2, Enum.EasingStyle.Linear), { Offset = Vector2.new(1, 0) })
 				t:Play()
