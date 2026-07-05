@@ -2826,21 +2826,49 @@ local AimAssist
 
 		-- ── tab-list painting ──────────────────────────────────────────────────
 		local function stripTags(s) return (s:gsub('<[^>]->', '')) end
+		-- Clean a tab-list label to just the player name: drop rich-text tags, then
+		-- strip EVERY leading "[..]" group (level / clan / kills tags, e.g.
+		-- "[151] [nwr] Fazpala" -> "fazpala"), plus surrounding whitespace + our own
+		-- appended tag if present. This is why only some rows matched before -- names
+		-- with a clan prefix were never stripped down to the bare name.
 		local function nameKey(s)
-			return stripTags(s):gsub('^%s+', ''):gsub('%s+$', ''):lower()
+			s = stripTags(s)
+			-- remove repeated leading bracket tags
+			while true do
+				local ns = s:gsub('^%s*%b[]%s*', '')
+				if ns == s then break end
+				s = ns
+			end
+			return s:gsub('^%s+', ''):gsub('%s+$', ''):lower()
 		end
 
 		local function paintTablist(map)
 			local pg = lplr:FindFirstChild('PlayerGui')
 			if not pg then return end
-			-- name -> info from live players
-			local byName = {}
+			-- name -> info from live players (both Name and DisplayName as keys)
+			local byName, partied = {}, {}
 			for _, plr in playersService:GetPlayers() do
 				local info = map[plr.UserId]
 				if info then
 					byName[plr.Name:lower()] = info
 					if plr.DisplayName ~= '' then byName[plr.DisplayName:lower()] = info end
+					partied[#partied + 1] = { name = plr.Name:lower(), disp = plr.DisplayName:lower(), info = info }
 				end
+			end
+			-- fallback matcher: split the cleaned label into whitespace tokens and match
+			-- a token exactly against a partied player's name/displayname. This survives
+			-- any leftover prefix/suffix without fragile Lua patterns.
+			local function resolve(key)
+				local hit = byName[key]
+				if hit then return hit end
+				for token in key:gmatch('%S+') do
+					for _, p in partied do
+						if token == p.name or (p.disp ~= '' and token == p.disp) then
+							return p.info
+						end
+					end
+				end
+				return nil
 			end
 
 			local function allowed(gui)
@@ -2863,7 +2891,7 @@ local AimAssist
 						g:SetAttribute('VainPartyOrig', nil)
 						g:SetAttribute('VainParty', nil)
 					end
-					local info = byName[nameKey(orig or g.Text)]
+					local info = resolve(nameKey(orig or g.Text))
 					local painted = g:GetAttribute('VainParty')
 					if info and (not ShowTablist or ShowTablist.Enabled) then
 						if not orig then orig = g.Text g:SetAttribute('VainPartyOrig', orig) end
