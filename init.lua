@@ -118,17 +118,15 @@ do
 		gradient = letters[1]:FindFirstChildOfClass('UIGradient')
 
 		-- ── circular progress ring ────────────────────────────────────────────
-		-- Roblox has no native arc, so the ring is drawn as many thin tangent bars
-		-- placed around a circle with cos/sin. With a high segment count and each bar
-		-- rotated to lie along the circle (+ a little overlap) they merge into one
-		-- SMOOTH continuous line. Bars up to the current fraction light up with the
-		-- accent gradient; the rest stay a faint track. Starts at 12 o'clock, CW.
-		local ringSize   = 128
-		local segCount   = 140         -- high count -> reads as a continuous line
-		local segThick   = 5           -- ring stroke thickness (px)
-		local accent     = Color3.fromRGB(255, 138, 92)  -- #ff8a5c
-		local accent2    = Color3.fromRGB(255, 178, 124) -- #ffb27c
-		local trackCol   = Color3.fromRGB(255, 255, 255)
+		-- A genuinely SMOOTH ring (no dots/seams): the track is a round Frame with a
+		-- grey UIStroke; the fill is two half-circle masks, each clipping a round
+		-- Frame that carries an orange UIStroke, rotated to reveal the arc. The right
+		-- mask draws 0-180deg, the left mask 180-360deg. Anti-aliased stroke = clean
+		-- continuous line, exactly like a CSS conic/SVG ring.
+		local ringSize  = 128
+		local strokeW   = 6
+		local accent    = Color3.fromRGB(245, 150, 40)   -- orange fill
+		local trackCol  = Color3.fromRGB(210, 210, 214)  -- light grey track
 
 		local ringHolder = Instance.new('Frame')
 		ringHolder.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -138,26 +136,85 @@ do
 		ringHolder.ZIndex = 3
 		ringHolder.Parent = root
 
-		local radius = ringSize / 2 - segThick / 2 - 2 -- px radius of the stroke centre
-		-- each bar spans a touch more than one segment's arc length so neighbours
-		-- overlap and the seam disappears -> a smooth stroke.
-		local segLen = (2 * math.pi * radius) / segCount + 2
-		local segs = {}
-		for i = 1, segCount do
-			local ang = -math.pi / 2 + (i - 1) / segCount * (math.pi * 2)
-			local seg = Instance.new('Frame')
-			seg.AnchorPoint = Vector2.new(0.5, 0.5)
-			seg.Position = UDim2.new(0.5, math.cos(ang) * radius, 0.5, math.sin(ang) * radius)
-			seg.Size = UDim2.fromOffset(segLen, segThick)
-			seg.Rotation = math.deg(ang) + 90 -- tangent to the circle
-			seg.BackgroundColor3 = trackCol
-			seg.BackgroundTransparency = 0.86 -- faint track by default
-			seg.BorderSizePixel = 0
-			seg.ZIndex = 4
-			seg.Parent = ringHolder
-			Instance.new('UICorner', seg).CornerRadius = UDim.new(1, 0)
-			segs[i] = seg
+		-- faint full track ring
+		local track = Instance.new('Frame')
+		track.AnchorPoint = Vector2.new(0.5, 0.5)
+		track.Position = UDim2.fromScale(0.5, 0.5)
+		track.Size = UDim2.fromScale(1, 1)
+		track.BackgroundTransparency = 1
+		track.ZIndex = 3
+		track.Parent = ringHolder
+		Instance.new('UICorner', track).CornerRadius = UDim.new(1, 0)
+		local trackStroke = Instance.new('UIStroke')
+		trackStroke.Color = trackCol
+		trackStroke.Thickness = strokeW
+		trackStroke.Transparency = 0.7
+		trackStroke.Parent = track
+
+		-- A UIStroke ring is rotationally symmetric, so to SWEEP we need a semicircle
+		-- of stroke that rotates. Construction per half:
+		--   half     -> clips to one vertical half of the holder (limits this arc to
+		--               its 180deg sector)
+		--   rotator  -> full holder size, centred on the holder centre; rotating it
+		--               spins the semicircle around the ring centre
+		--   arcClip  -> clips to the near vertical half so `ring` shows as a semicircle
+		--   ring     -> full round Frame + orange UIStroke (the actual stroke line)
+		local function makeArcHalf(rightSide)
+			local half = Instance.new('Frame')
+			half.AnchorPoint = Vector2.new(rightSide and 0 or 1, 0.5)
+			half.Position = UDim2.fromScale(0.5, 0.5)
+			half.Size = UDim2.fromScale(0.5, 1)
+			half.BackgroundTransparency = 1
+			half.ClipsDescendants = true
+			half.ZIndex = 4
+			half.Parent = ringHolder
+
+			local rotator = Instance.new('Frame')
+			rotator.AnchorPoint = Vector2.new(rightSide and 1 or 0, 0.5)
+			rotator.Position = UDim2.fromScale(rightSide and 1 or 0, 0.5)
+			rotator.Size = UDim2.fromScale(2, 1) -- full holder (2x this half)
+			rotator.BackgroundTransparency = 1
+			rotator.Rotation = 0
+			rotator.ZIndex = 4
+			rotator.Parent = half
+
+			-- clip the rotator's own content to its near half -> a semicircle of ring
+			local arcClip = Instance.new('Frame')
+			arcClip.AnchorPoint = Vector2.new(rightSide and 0 or 1, 0.5)
+			arcClip.Position = UDim2.fromScale(rightSide and 0.5 or 0.5, 0.5)
+			arcClip.Size = UDim2.fromScale(0.5, 1)
+			arcClip.BackgroundTransparency = 1
+			arcClip.ClipsDescendants = true
+			arcClip.ZIndex = 4
+			arcClip.Parent = rotator
+
+			local ring = Instance.new('Frame')
+			ring.AnchorPoint = Vector2.new(rightSide and 1 or 0, 0.5)
+			ring.Position = UDim2.fromScale(rightSide and 1 or 0, 0.5)
+			ring.Size = UDim2.fromScale(2, 1) -- full holder again
+			ring.BackgroundTransparency = 1
+			ring.ZIndex = 4
+			ring.Parent = arcClip
+			Instance.new('UICorner', ring).CornerRadius = UDim.new(1, 0)
+			local st = Instance.new('UIStroke')
+			st.Color = accent
+			st.Thickness = strokeW
+			st.Transparency = 0
+			st.Parent = ring
+			return rotator
 		end
+		local rightArc = makeArcHalf(true)
+		local leftArc  = makeArcHalf(false)
+		-- collect the two arc UIStrokes so the shimmer can pulse their colour
+		local strokes = {}
+		for _, a in {rightArc, leftArc} do
+			for _, d in ipairs(a:GetDescendants()) do
+				if d:IsA('UIStroke') then table.insert(strokes, d) end
+			end
+		end
+		-- start hidden (0%): right sweeps -180->0 over 0-50%, left +180->0 over 50-100%
+		rightArc.Rotation = -180
+		leftArc.Rotation  = 180
 
 		-- percentage in the centre of the ring
 		local ringPct = Instance.new('TextLabel')
@@ -173,24 +230,33 @@ do
 		ringPct.ZIndex = 6
 		ringPct.Parent = ringHolder
 
-		-- drive the ring from a 0..1 fraction: light segments up to `frac`, coloured
-		-- along the accent->accent2 gradient; the rest fade back to the faint track.
+		-- drive the ring from a 0..1 fraction. Right half fills 0-50% (rotates -180->0),
+		-- left half fills 50-100% (rotates +180->0).
 		setRingProgress = function(frac)
 			frac = math.clamp(frac, 0, 1)
-			local lit = math.floor(frac * segCount + 0.5)
-			for i = 1, segCount do
-				local seg = segs[i]
-				if i <= lit then
-					local t = segCount > 1 and (i - 1) / (segCount - 1) or 0
-					seg.BackgroundColor3 = accent:Lerp(accent2, t)
-					seg.BackgroundTransparency = 0
-				else
-					seg.BackgroundColor3 = trackCol
-					seg.BackgroundTransparency = 0.86
-				end
-			end
+			local rightFrac = math.min(frac, 0.5) / 0.5           -- 0..1 over first half
+			local leftFrac  = math.max(frac - 0.5, 0) / 0.5       -- 0..1 over second half
+			rightArc.Rotation = -180 + rightFrac * 180
+			leftArc.Rotation  = 180 - leftFrac * 180
 			ringPct.Text = tostring(math.floor(frac * 100 + 0.5)) .. '%'
 		end
+
+		-- shimmer: pulse the arc stroke between two orange tones + a soft brightness
+		-- wobble so the progress ring shimmers like the wordmark.
+		task.spawn(function()
+			local accentBright = Color3.fromRGB(255, 190, 90)
+			local t = 0
+			while ringHolder.Parent and not finished do
+				t = t + 0.045
+				local m = (math.sin(t) + 1) / 2 -- 0..1
+				local col = accent:Lerp(accentBright, m)
+				for _, s in ipairs(strokes) do
+					s.Color = col
+					s.Transparency = 0.05 + (1 - m) * 0.12
+				end
+				RunService.Heartbeat:Wait()
+			end
+		end)
 
 		-- status text UNDER the ring (kept for API compatibility, hidden for now)
 		statusLabel = Instance.new('TextLabel')
