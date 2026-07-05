@@ -793,34 +793,27 @@ end)
 -- ══════════════════════════════════════════════════════════════════════════════
 --  AUTO ALLIANCE BANK  (dump overflow manpower into the alliance bank when full)
 -- ══════════════════════════════════════════════════════════════════════════════
--- Manpower is read live from CountryRegistry.<country>.Manpower (same source the
--- rest of the file uses). Manpower is capped -- we find that cap from a sibling
--- value (MaxManpower / ManpowerCap / ManpowerMax / ...) or a country attribute; if
--- the game exposes no cap value, you can set a manual "treat as max" amount so the
--- module still works. When manpower reaches the cap it would otherwise be wasted,
--- so we deposit the overflow (manpower minus a keep-reserve) into the alliance bank.
---
--- The alliance deposit action is fired through the game's action remote. We don't
--- have a decompiled place file for this game, so instead of hardcoding one name we
--- try the plausible alliance-deposit action names AND fire any alliance-specific
--- RemoteEvent we can discover in ReplicatedStorage. The server validates the
--- deposit, so attempting a name it doesn't know is harmless.
+-- CONFIRMED from the decompiled place file (Alliance menu, Line 3522):
+--   the "Add" button on the Manpower box fires
+--     Network:FireServer("AddToGuildBank", <resource>, <amount>)
+--   where <resource> is the box's parent name -- literally "Manpower" (or "Money")
+--   -- and <amount> is a plain number. The client reads the country's live balance
+--   from CountryRegistry[MyCountry].<resource>.Value and refuses to send more than
+--   it has. There is NO client-side manpower cap constant (growth is capped
+--   server-side), so "full" is detected by manpower plateauing, with an optional
+--   manual cap for an exact percentage trigger.
 run(function()
 	local AutoAllianceBank
-	local KeepReserve, ManualCap, Threshold, Interval, LearnDeposit, Notify
+	local KeepReserve, ManualCap, Threshold, Interval, Notify
 
-	-- read the manpower cap for a country: a sibling Value, then an attribute, then
-	-- the manual override slider (in thousands). Returns nil if genuinely unknown.
+	-- optional manpower cap: the game exposes none client-side, so this is either a
+	-- sibling Value if a future update adds one, or the manual override slider.
 	local function manpowerCap(country)
 		local cf = countryFolder(country)
 		if cf then
-			for _, name in { 'MaxManpower', 'ManpowerCap', 'ManpowerMax', 'MaxManpwer', 'ManpowerLimit', 'MaxMP' } do
+			for _, name in { 'MaxManpower', 'ManpowerCap', 'ManpowerMax', 'ManpowerLimit', 'MaxMP' } do
 				local v = cf:FindFirstChild(name)
 				if v and v.Value and v.Value > 0 then return v.Value end
-			end
-			for _, name in { 'MaxManpower', 'ManpowerCap', 'ManpowerMax', 'ManpowerLimit' } do
-				local a = cf:GetAttribute(name)
-				if type(a) == 'number' and a > 0 then return a end
 			end
 		end
 		local manual = (ManualCap and ManualCap.Value or 0) * 1e3
@@ -828,191 +821,22 @@ run(function()
 		return nil
 	end
 
-	-- ── learned deposit call ──────────────────────────────────────────────────
-	-- We can't verify a blind FireServer, so the reliable path is to LEARN the real
-	-- call the game uses. When "Learn Deposit" is on we hook FireServer/InvokeServer
-	-- and, the next time YOU manually deposit manpower into the alliance bank, we
-	-- capture the exact remote + argument layout and replay it afterwards. The learned
-	-- call is persisted to a file so it survives rejoins.
-	local LEARN_FILE = 'vain/controleurope_alliance_deposit.txt'
-	local learned      -- { remote = Instance, args = {...}, amountIndex = n }
-
-	-- where in a captured arg list the deposited number sits, so we can swap our
-	-- amount in. Picks the largest number that plausibly is a manpower figure.
-	local function findAmountIndex(args)
-		local bestI, bestV
-		for i, a in ipairs(args) do
-			if type(a) == 'number' and a >= 1 and (not bestV or a > bestV) then
-				bestI, bestV = i, a
-			end
-		end
-		return bestI
-	end
-
-	local function saveLearned()
-		if not (learned and typeof(writefile) == 'function') then return end
-		-- persist by remote full path + amount index + literal (non-instance) args
-		local safeArgs = {}
-		for i, a in ipairs(learned.args) do
-			local t = type(a)
-			if t == 'number' or t == 'boolean' then safeArgs[i] = { t, a }
-			elseif t == 'string' then safeArgs[i] = { 'string', a }
-			else safeArgs[i] = { 'skip' } end
-		end
-		local ok, blob = pcall(function()
-			return game:GetService('HttpService'):JSONEncode({
-				path = learned.remote:GetFullName(),
-				amountIndex = learned.amountIndex,
-				args = safeArgs,
-			})
-		end)
-		if ok then pcall(writefile, LEARN_FILE, blob) end
-	end
-
-	local function resolveByPath(path)
-		local node = game
-		for part in string.gmatch(path, '[^%.]+') do
-			if node == game then
-				node = game:GetService(part) or game:FindFirstChild(part)
-			else
-				node = node and node:FindFirstChild(part)
-			end
-			if not node then return nil end
-		end
-		return node
-	end
-
-	local function loadLearned()
-		if learned then return end
-		if typeof(readfile) ~= 'function' then return end
-		local ok, blob = pcall(readfile, LEARN_FILE)
-		if not (ok and type(blob) == 'string' and #blob > 0) then return end
-		local ok2, data = pcall(function() return game:GetService('HttpService'):JSONDecode(blob) end)
-		if not (ok2 and type(data) == 'table' and data.path) then return end
-		local remote = resolveByPath(data.path)
-		if not remote then return end
-		local args = {}
-		for i, pair in ipairs(data.args or {}) do
-			if pair[1] == 'skip' then args[i] = false else args[i] = pair[2] end
-		end
-		learned = { remote = remote, args = args, amountIndex = data.amountIndex }
-	end
-
-	-- install the learning hook (idempotent); active only while the toggle is on.
-	-- classify a captured (remote, args) OFF the hook thread -- GetFullName / IsA are
-	-- themselves namecalls, so doing them inside the hook would recurse. We only look
-	-- at ones we know we fired ourselves? No -- we skip our own by a flag.
-	local firingLearned = false
-	local function classifyCapture(remote, args)
-		if learned ~= nil then return end
-		local okName, n = pcall(function() return (remote.Name or ''):lower() end)
-		local full = ''
-		pcall(function() full = remote:GetFullName():lower() end)
-		if not (okName and (n:find('alliance') or full:find('alliance') or full:find('bank'))) then return end
-		local ai = findAmountIndex(args)
-		if not ai then return end
-		learned = { remote = remote, args = args, amountIndex = ai }
-		saveLearned()
-		if vain and vain.CreateNotification then
-			vain:CreateNotification('Auto Alliance Bank',
-				'Learned deposit call: ' .. tostring(n) .. ' (amount = arg #' .. ai .. '). It will replay this automatically now.', 6, 'success')
-		end
-	end
-
-	local learnHookInstalled = false
-	local function installLearnHook()
-		if learnHookInstalled then return end
-		if type(hookmetamethod) ~= 'function' or type(getnamecallmethod) ~= 'function' then return end
-		learnHookInstalled = true
-		local oldNamecall
-		oldNamecall = hookmetamethod(game, '__namecall', function(self, ...)
-			-- keep the hook body free of any namecalls on `self` (they'd recurse).
-			-- Only read the method + capture args here; classify on another thread.
-			if learned == nil and not firingLearned and type(self) == 'userdata' then
-				local method = getnamecallmethod()
-				if method == 'FireServer' or method == 'InvokeServer' then
-					local args = { ... }
-					local remote = self
-					task.spawn(classifyCapture, remote, args)
-				end
-			end
-			return oldNamecall(self, ...)
-		end)
-	end
-
-	-- replay the learned call with our amount swapped in. Returns true if it fired.
-	local function fireLearned(amount)
-		if not (learned and learned.remote and learned.remote.Parent) then return false end
-		local args = {}
-		for i, a in ipairs(learned.args) do args[i] = a end
-		args[learned.amountIndex] = amount
-		-- any skipped (instance) args we couldn't persist -> drop cleanly if false
-		firingLearned = true
-		local ok = pcall(function()
-			if learned.remote:IsA('RemoteFunction') then
-				learned.remote:InvokeServer(unpack(args))
-			else
-				learned.remote:FireServer(unpack(args))
-			end
-		end)
-		firingLearned = false
-		return ok
-	end
-
-	-- best-effort blind deposit for when nothing has been learned yet: try the
-	-- plausible action names + any alliance-named remote. NOT verifiable.
-	local allianceRemote
-	local function getAllianceRemote()
-		if allianceRemote and allianceRemote.Parent then return allianceRemote end
-		for _, r in replicatedStorage:GetDescendants() do
-			if (r:IsA('RemoteEvent') or r:IsA('RemoteFunction')) then
-				local nm = r.Name:lower()
-				if nm:find('alliance') and (nm:find('deposit') or nm:find('bank') or nm:find('donate') or nm:find('manpower')) then
-					allianceRemote = r return r
-				end
-			end
-		end
-		for _, r in replicatedStorage:GetDescendants() do
-			if (r:IsA('RemoteEvent') or r:IsA('RemoteFunction')) and r.Name:lower():find('alliance') then
-				allianceRemote = r return r
-			end
-		end
-		return nil
-	end
-	local function blindDeposit(amount)
-		local fired = false
-		for _, action in { 'DepositManpower', 'AllianceDeposit', 'DepositToAlliance', 'DonateManpower', 'AllianceBankDeposit', 'BankDeposit' } do
-			if fireAction(action, 'Manpower', amount) then fired = true end
-			fireAction(action, amount)
-		end
-		local ar = getAllianceRemote()
-		if ar then
-			pcall(function()
-				if ar:IsA('RemoteEvent') then
-					ar:FireServer('Deposit', 'Manpower', amount)
-					ar:FireServer('DepositManpower', amount)
-				else
-					ar:InvokeServer('Deposit', 'Manpower', amount)
-				end
-			end)
-			fired = true
-		end
-		return fired
-	end
-
-	-- deposit `amount`, then VERIFY by re-reading manpower. Returns the actual amount
-	-- that left your reserve (0 if nothing moved), and whether the learned call was used.
+	-- fire the confirmed deposit call and VERIFY by re-reading manpower afterwards.
+	-- Returns the amount that actually left your balance (0 if nothing moved).
 	local function deposit(mine, amount)
 		amount = math.floor(amount)
-		if amount <= 0 then return 0, false end
+		if amount <= 0 then return 0 end
 		local before = select(2, getBalance(mine)) or 0
-		local usedLearned = fireLearned(amount)
-		if not usedLearned then blindDeposit(amount) end
+		fireAction('AddToGuildBank', 'Manpower', amount)
 		task.wait(0.35)   -- let the server replicate the new manpower value back
 		local after = select(2, getBalance(mine)) or before
-		local moved = math.max(0, before - after)
-		return moved, usedLearned
+		return math.max(0, before - after)
 	end
+
+	-- track manpower over time so we can detect "it stopped growing" = at cap, even
+	-- without a cap constant. If manpower hasn't risen across two checks and is above
+	-- the reserve, treat it as full.
+	local lastManpower, plateaus = nil, 0
 
 	local function sweep()
 		local mine = lplr:GetAttribute('MyCountry')
@@ -1022,13 +846,20 @@ run(function()
 		local cap = manpowerCap(mine)
 		local keep = (KeepReserve and KeepReserve.Value or 0) * 1e3
 
-		-- "at max" = manpower has reached the threshold fraction of the cap. If no cap
-		-- is known, fall back to: deposit anything above the keep-reserve.
+		-- decide whether we're "at max"
 		local trigger
 		if cap then
+			-- exact: manpower reached the threshold fraction of a known cap
 			trigger = manpower >= cap * ((Threshold and Threshold.Value or 98) / 100)
 		else
-			trigger = manpower > keep
+			-- no cap constant: treat as full once manpower stops climbing (plateau)
+			if lastManpower and manpower <= lastManpower + 1 then
+				plateaus = plateaus + 1
+			else
+				plateaus = 0
+			end
+			lastManpower = manpower
+			trigger = manpower > keep and plateaus >= 1
 		end
 		if not trigger then return end
 
@@ -1037,37 +868,35 @@ run(function()
 
 		local moved = deposit(mine, overflow)
 		if moved > 0 then
+			plateaus = 0
+			lastManpower = select(2, getBalance(mine)) or (manpower - moved)
 			if Notify.Enabled then
 				notif('Alliance Bank', string.format('Deposited %s manpower (was at %s%s)',
 					fmtNum(moved), fmtNum(manpower), cap and ('/' .. fmtNum(cap)) or ''), 4, 'success')
 			end
-		elseif not learned and Notify.Enabled then
-			-- honest failure: we fired blind and manpower did NOT drop
+		elseif Notify.Enabled then
+			-- honest failure: the call fired but manpower didn't drop
 			notif('Alliance Bank',
-				"Couldn't deposit -- the game's deposit call isn't known. Turn on \"Learn Deposit\", then deposit once manually so it can capture the real call.",
-				7, 'warning')
+				"Deposit didn't go through -- are you actually in an alliance? (Nothing left your manpower.)",
+				6, 'warning')
 		end
 	end
 
 	AutoAllianceBank = vain.Categories.Utility:CreateModule({
 		Name = 'Auto Alliance Bank',
-		Tooltip = "Once your country's manpower hits its cap it stops growing and is wasted -- this deposits the overflow into your alliance bank automatically. It finds your manpower cap from CountryRegistry (or use the manual cap if the game exposes none), and always keeps your reserve. Requires you to actually be in an alliance.",
+		Tooltip = "Once your country's manpower stops growing it's wasted -- this deposits the overflow into your alliance bank automatically (via the game's AddToGuildBank call). Detects 'full' by manpower plateauing, or exactly against a Manual Cap if you set one, and always keeps your reserve. You must actually be in an alliance.",
 		Function = function(callback)
 			if callback then
-				loadLearned()
-				if LearnDeposit.Enabled then installLearnHook() end
+				lastManpower, plateaus = nil, 0
 				local mine = lplr:GetAttribute('MyCountry')
 				local _, mp = getBalance(mine)
 				local cap = manpowerCap(mine)
 				notif('Auto Alliance Bank', string.format(
-					'%s | manpower %s | cap %s | deposit call: %s',
-					getActionRemote() and 'Action OK' or 'NO REMOTE',
+					'%s | manpower %s | cap %s',
+					getActionRemote() and 'Remote OK' or 'NO REMOTE',
 					mp and fmtNum(mp) or '?',
-					cap and fmtNum(cap) or 'UNKNOWN (set Manual Cap)',
-					learned and ('LEARNED (' .. learned.remote.Name .. ')')
-						or (LearnDeposit.Enabled and 'not learned yet -- deposit once manually'
-							or 'unknown -- enable Learn Deposit')),
-					8, (getActionRemote() and mp and (cap or (ManualCap and ManualCap.Value > 0)) and learned) and nil or 'warning')
+					cap and fmtNum(cap) or 'auto (plateau detect)'),
+					6, (getActionRemote() and mp) and nil or 'warning')
 				AutoAllianceBank:Clean(task.spawn(function()
 					while AutoAllianceBank.Enabled do
 						sweep()
@@ -1081,297 +910,283 @@ run(function()
 	KeepReserve = AutoAllianceBank:CreateSlider({ Name = 'Keep Reserve', Min = 0, Max = 1000, Default = 50, Suffix = 'K',
 		Tooltip = 'Always keep at least this much manpower for yourself -- only the amount above it is deposited.' })
 	Threshold = AutoAllianceBank:CreateSlider({ Name = 'Deposit At', Min = 50, Max = 100, Default = 98, Suffix = '%',
-		Tooltip = 'Deposit once manpower reaches this percent of your cap (100% = only when completely full).' })
+		Tooltip = 'Only used with a Manual Cap: deposit once manpower reaches this percent of that cap (100% = only when completely full).' })
 	ManualCap = AutoAllianceBank:CreateSlider({ Name = 'Manual Cap', Min = 0, Max = 5000, Default = 0, Suffix = 'K',
-		Tooltip = 'Only used if the game exposes no manpower cap value. Set your known max manpower (in thousands) so the module knows when you are full. Leave at 0 to auto-detect.' })
+		Tooltip = "Optional. The game has no client-side manpower cap, so by default 'full' is detected when manpower stops rising. Set your known max here (in thousands) for an exact percentage trigger instead. Leave at 0 for auto plateau-detection." })
 	Interval = AutoAllianceBank:CreateSlider({ Name = 'Interval', Min = 1, Max = 60, Default = 5, Suffix = 'sec',
 		Tooltip = 'How often to check whether manpower has hit the cap.' })
-	LearnDeposit = AutoAllianceBank:CreateToggle({ Name = 'Learn Deposit', Default = true,
-		Function = function(on) if on then installLearnHook() end end,
-		Tooltip = "The exact alliance-deposit call isn't known for this game. With this on, deposit manpower into your alliance bank MANUALLY once -- it captures the real remote + arguments and replays them automatically forever after (saved across rejoins)." })
 	Notify = AutoAllianceBank:CreateToggle({ Name = 'Notify', Default = true,
-		Tooltip = 'Notify each time it deposits manpower into the alliance bank (verified -- only fires if your manpower actually dropped).' })
+		Tooltip = 'Notify each deposit (verified -- only fires if your manpower actually dropped).' })
 end)
 
 run(function()
-	-- ── Highlight Owned ───────────────────────────────────────────────────────
-	-- The Formables / transformation menu (PlayerGui.MainUI ... Formables) lists
-	-- every transformation as an entry with a `LOCKED` frame holding a `Lock` image.
-	-- An entry you OWN has that LOCKED frame hidden (or absent). We stamp a green
-	-- check + outline on every owned entry so you can see at a glance which ones you
-	-- already have, and strip the mark off locked ones. The menu rebuilds itself, so
-	-- we re-apply on a light poll while the module is on.
-	local HighlightOwned
-	local CHECK_ICON = 'rbxassetid://6031094667' -- material "check_circle"
-	local MARK_NAME  = 'VainOwnedMark'
+	-- ── Highlight Formables ─────────────────────────────────────────────────────
+	-- CONFIRMED from the decompiled place file (BuildFormables, Line 3829):
+	--   Formables are rendered under PlayerGui.MainUI ... Formables.Container, each a
+	--   frame with a `Button` holding `NAME`, `IMG`, `EQ`, `LOCKED`, `REQ2`. The game
+	--   does NOT keep a persistent "you owned this formable" flag on the entries --
+	--   it only tracks the formable your country is CURRENTLY transformed into
+	--   (CountryRegistry[MyCountry] attribute "TRANSFORMEDINTO", shown as a special
+	--   "1RESET" revert entry) and, separately, aggregate milestone progress. So the
+	--   meaningful, real states we can mark per entry are:
+	--     * CURRENT  -> the "1RESET" entry = the formable you are transformed into now
+	--     * READY    -> Button.EQ.NAME.Text == "Transform" and Button.LOCKED not shown
+	--                   (you own every required region -- you can transform right now)
+	--     * LOCKED   -> Button.LOCKED shown / no working EQ (requirements not met)
+	--   We stamp a blue star on the current one and a green check + outline on every
+	--   ready one, and (optionally) tint locked ones so the menu reads at a glance.
+	local HighlightFormables
+	local MarkReady, MarkCurrent, DimLocked
+	local CHECK_ICON = 'rbxassetid://6031094667'  -- material "check_circle"
+	local STAR_ICON  = 'rbxassetid://6031068421'  -- material "star"
 	local marked = {}
 
-	-- an "entry" is a frame that has BOTH a NAME label and a LOCKED frame beneath it
-	-- (that's the shape every formable/reward row shares in this game's UI).
-	local function isEntry(f)
-		if not (f and f:IsA('GuiObject')) then return false end
-		local hasName = f:FindFirstChild('NAME')
-		local locked = f:FindFirstChild('LOCKED')
-		return hasName ~= nil and locked ~= nil
-	end
-
-	-- owned = you already have / have transformed into this formable. The game does
-	-- NOT always signal that the same way: the LOCKED frame may be hidden, OR the
-	-- entry may keep its lock but carry an ownership flag / a "completed"-style tint /
-	-- a done marker (that's why some already-transformed ones weren't being caught).
-	-- We accept ANY of these signals.
-	local function isOwned(entry)
-		-- 1) explicit attribute the game may stamp when you own/completed it
-		for _, k in { 'Owned', 'Completed', 'Complete', 'Done', 'Unlocked', 'Claimed', 'Formed', 'Active' } do
-			if entry:GetAttribute(k) == true then return true end
-		end
-		local locked = entry:FindFirstChild('LOCKED')
-		-- 2) no LOCKED frame at all, or it's hidden -> owned
-		if not locked then return true end
-		if locked:IsA('GuiObject') and locked.Visible == false then return true end
-		-- 3) LOCKED present but its Lock icon is faded out / an attribute marks it done
-		local lock = locked:FindFirstChild('Lock')
-		if lock then
-			if lock:IsA('ImageLabel') and lock.ImageTransparency >= 1 then return true end
-			if lock:IsA('GuiObject') and lock.Visible == false then return true end
-		end
-		if locked:IsA('GuiObject') then
-			-- fully transparent LOCKED overlay = shown-but-cleared
-			if locked.BackgroundTransparency >= 1 and (not lock or (lock:IsA('ImageLabel') and lock.ImageTransparency >= 1)) then
-				return true
-			end
-			-- some builds swap the lock for a checkmark / tick child on owned rows
-			for _, d in locked:GetDescendants() do
-				local nm = d.Name:lower()
-				if nm:find('check') or nm:find('tick') or nm:find('owned') or nm:find('done') or nm:find('complete') then
-					if not (d:IsA('GuiObject')) or d.Visible then return true end
-				end
-			end
-		end
-		-- 4) a Done/Owned/Check marker anywhere directly in the entry
-		for _, d in entry:GetChildren() do
-			local nm = d.Name:lower()
-			if (nm:find('owned') or nm:find('check') or nm:find('done') or nm:find('complete') or nm:find('tick'))
-				and (not d:IsA('GuiObject') or d.Visible) then
-				return true
-			end
-		end
-		return false
-	end
-
-	local function clearMark(entry)
-		local m = entry:FindFirstChild(MARK_NAME)
-		if m then m:Destroy() end
-		local stroke = entry:FindFirstChild('VainOwnedStroke')
-		if stroke then stroke:Destroy() end
-	end
-
-	local function addMark(entry)
-		if entry:FindFirstChild(MARK_NAME) then return end
-		-- green corner check badge
-		local badge = Instance.new('ImageLabel')
-		badge.Name = MARK_NAME
-		badge.AnchorPoint = Vector2.new(1, 0)
-		badge.Position = UDim2.new(1, -4, 0, 4)
-		badge.Size = UDim2.fromOffset(22, 22)
-		badge.BackgroundTransparency = 1
-		badge.Image = CHECK_ICON
-		badge.ImageColor3 = Color3.fromRGB(80, 220, 110)
-		badge.ZIndex = 50
-		badge.Parent = entry
-		-- green outline so it reads even at a glance
-		local stroke = Instance.new('UIStroke')
-		stroke.Name = 'VainOwnedStroke'
-		stroke.Color = Color3.fromRGB(80, 220, 110)
-		stroke.Thickness = 2
-		stroke.Transparency = 0.15
-		stroke.Parent = entry
-	end
-
-	local function refresh()
-		if not (HighlightOwned and HighlightOwned.Enabled) then return end
-		local pg = lplr:FindFirstChild('PlayerGui')
-		local mainui = pg and pg:FindFirstChild('MainUI')
-		if not mainui then return end
-		for _, d in ipairs(mainui:GetDescendants()) do
-			if isEntry(d) then
-				marked[d] = true
-				if isOwned(d) then addMark(d) else clearMark(d) end
-			end
-		end
-	end
-
-	HighlightOwned = vain.Categories.Utility:CreateModule({
-		Name = 'Highlight Owned',
-		Tooltip = 'Puts a green check + outline on every transformation (formable) you already OWN in the transformation menu, so you can tell owned from locked at a glance.',
-		Function = function(callback)
-			if callback then
-				refresh()
-				HighlightOwned:Clean(task.spawn(function()
-					while HighlightOwned.Enabled do
-						refresh()
-						task.wait(0.5)
-					end
-				end))
-			else
-				-- strip every mark we added
-				for entry in marked do
-					if entry and entry.Parent then clearMark(entry) end
-				end
-				table.clear(marked)
-			end
-		end
-	})
-end)
-
--- ══════════════════════════════════════════════════════════════════════════════
---  AUTO TRANSFORM  (claim every formable the instant it becomes available)
--- ══════════════════════════════════════════════════════════════════════════════
--- The Formables menu (PlayerGui.MainUI ... Formables) lists each transformation as
--- an entry with a `NAME` label and a `LOCKED` frame. Three states:
---   * OWNED     -> LOCKED frame hidden/absent            (already have it, skip)
---   * AVAILABLE -> requirements met but not yet claimed   (CLAIM IT)
---   * LOCKED    -> requirements unmet                     (skip, wait)
--- The game wires each entry's own button to its transform handler, so instead of
--- guessing a remote name we ACTIVATE the entry's button directly (fire its
--- click/Activated signal). That routes through the game's real transform logic and
--- the server validates the requirements anyway, so we can safely attempt any entry
--- that looks available and let the server accept the legitimate ones.
-run(function()
-	local AutoTransform
-	local Interval, OnlyReady, Notify
-	local attempted = {}   -- entry -> last attempt tick (don't spam the same one)
-
-	-- same entry shape as Highlight Owned
-	local function isEntry(f)
-		if not (f and f:IsA('GuiObject')) then return false end
-		return f:FindFirstChild('NAME') ~= nil and f:FindFirstChild('LOCKED') ~= nil
-	end
-
-	-- OWNED = the LOCKED frame is hidden/absent (game removes it once you have it)
-	local function isOwned(entry)
-		local locked = entry:FindFirstChild('LOCKED')
-		if not locked then return true end
-		if locked:IsA('GuiObject') and locked.Visible == false then return true end
-		local lock = locked:FindFirstChild('Lock')
-		if lock and lock:IsA('ImageLabel') and lock.ImageTransparency >= 1 then return true end
-		return false
-	end
-
-	-- AVAILABLE = requirements are MET but you don't own it yet. Formable UIs signal
-	-- "claimable" by recolouring the entry / lock (green tint) or exposing a claim
-	-- button. We treat an entry as available when it is NOT owned and shows any
-	-- ready signal: a greenish lock/entry colour, a visible claim/transform button,
-	-- or an explicit 'CanForm'/'Available'/'Ready' attribute set truthy.
-	local function looksGreen(c)
-		return c and c.G > 0.5 and c.G > c.R * 1.15 and c.G > c.B * 1.15
-	end
-	local function isAvailable(entry)
-		-- explicit attribute wins if the game exposes one
-		for _, k in { 'CanForm', 'Available', 'Ready', 'Claimable', 'Unlocked' } do
-			local v = entry:GetAttribute(k)
-			if v == true then return true end
-			if v == false then return false end
-		end
-		-- a visible button literally labelled to claim/transform
-		for _, d in entry:GetDescendants() do
-			if (d:IsA('TextButton') or d:IsA('ImageButton')) and d.Visible then
-				local t = (d:IsA('TextButton') and d.Text or ''):lower()
-				if t:find('form') or t:find('transform') or t:find('claim') or t:find('unite') then
-					return true
-				end
-			end
-		end
-		-- green tint on the LOCKED frame or its lock icon = requirements met
-		local locked = entry:FindFirstChild('LOCKED')
-		if locked and locked:IsA('GuiObject') then
-			if looksGreen(locked.BackgroundColor3) then return true end
-			local lock = locked:FindFirstChild('Lock')
-			if lock and lock:IsA('ImageLabel') and looksGreen(lock.ImageColor3) then return true end
-		end
-		return false
-	end
-
-	-- find the clickable actuator inside an entry and fire it through the game's own
-	-- handler. Prefer a real Button (fire its Activated / MouseButton1Click); fall
-	-- back to a SelectionButton or the entry itself if it is a button.
-	local function activate(entry)
-		local btns = {}
-		if entry:IsA('TextButton') or entry:IsA('ImageButton') then table.insert(btns, entry) end
-		for _, d in entry:GetDescendants() do
-			if (d:IsA('TextButton') or d:IsA('ImageButton')) and d.Visible then
-				table.insert(btns, d)
-			end
-		end
-		local fired = false
-		for _, b in btns do
-			-- firesignal / fireproximityprompt-style click on the button's events
-			local ok = pcall(function()
-				if type(firesignal) == 'function' then
-					firesignal(b.MouseButton1Click)
-					firesignal(b.Activated)
-				elseif type(getconnections) == 'function' then
-					for _, con in getconnections(b.MouseButton1Click) do
-						if con.Fire then con:Fire() elseif con.Function then con.Function() end
-					end
-					for _, con in getconnections(b.Activated) do
-						if con.Fire then con:Fire() elseif con.Function then con.Function() end
-					end
-				end
-			end)
-			if ok then fired = true end
-		end
-		return fired
-	end
-
-	local function formablesRoots()
+	local function container()
 		local pg = lplr:FindFirstChild('PlayerGui')
 		local mainui = pg and pg:FindFirstChild('MainUI')
 		if not mainui then return nil end
-		return mainui
+		local formables = mainui:FindFirstChild('Formables', true)
+		return formables and (formables:FindFirstChild('Container') or formables) or nil
 	end
 
-	local function sweep()
-		local root = formablesRoots()
-		if not root then return 0, 0 end
-		local now = tick()
-		local claimed, seen = 0, 0
-		for _, d in root:GetDescendants() do
-			if isEntry(d) and not isOwned(d) then
-				seen += 1
-				local ready = isAvailable(d)
-				-- OnlyReady off = also try locked ones (server rejects unmet, harmless)
-				if ready or not OnlyReady.Enabled then
-					if not attempted[d] or (now - attempted[d]) > 5 then
-						attempted[d] = now
-						if activate(d) then
-							claimed += 1
-							if Notify.Enabled then
-								local nm = d:FindFirstChild('NAME')
-								local label = (nm and nm:IsA('TextLabel') and nm.Text) or d.Name
-								notif('Auto Transform', 'Claiming ' .. tostring(label), 3, 'success')
+	local function entryButton(entry)
+		local btn = entry:FindFirstChild('Button')
+		if btn and btn:FindFirstChild('NAME') then return btn end
+		return nil
+	end
+
+	-- READY = a working Transform action was built (requirements met, not locked)
+	local function isReady(btn)
+		local locked = btn:FindFirstChild('LOCKED')
+		if locked and locked:IsA('GuiObject') and locked.Visible then return false end
+		local eq = btn:FindFirstChild('EQ')
+		if not (eq and eq:IsA('GuiObject') and eq.Visible) then return false end
+		local nm = eq:FindFirstChild('NAME')
+		return nm and nm:IsA('TextLabel') and nm.Text:lower():find('transform') ~= nil
+	end
+
+	local function clearMark(target)
+		local m = target:FindFirstChild('VainFormMark')
+		if m then m:Destroy() end
+		local s = target:FindFirstChild('VainFormStroke')
+		if s then s:Destroy() end
+	end
+
+	local function stamp(target, icon, col)
+		clearMark(target)
+		local badge = Instance.new('ImageLabel')
+		badge.Name = 'VainFormMark'
+		badge.AnchorPoint = Vector2.new(1, 0)
+		badge.Position = UDim2.new(1, -4, 0, 4)
+		badge.Size = UDim2.fromOffset(24, 24)
+		badge.BackgroundTransparency = 1
+		badge.Image = icon
+		badge.ImageColor3 = col
+		badge.ZIndex = 50
+		badge.Parent = target
+		local stroke = Instance.new('UIStroke')
+		stroke.Name = 'VainFormStroke'
+		stroke.Color = col
+		stroke.Thickness = 2
+		stroke.Transparency = 0.15
+		stroke.Parent = target
+	end
+
+	local GREEN = Color3.fromRGB(80, 220, 110)
+	local BLUE  = Color3.fromRGB(65, 150, 255)
+
+	local function refresh()
+		if not (HighlightFormables and HighlightFormables.Enabled) then return end
+		local cont = container()
+		if not cont then return end
+		for _, entry in cont:GetChildren() do
+			if entry:IsA('GuiObject') then
+				local btn = entryButton(entry)
+				if btn then
+					marked[entry] = true
+					if entry.Name == '1RESET' then
+						-- the current transform (revert entry)
+						if MarkCurrent.Enabled then stamp(entry, STAR_ICON, BLUE) else clearMark(entry) end
+					elseif isReady(btn) then
+						if MarkReady.Enabled then stamp(entry, CHECK_ICON, GREEN) else clearMark(entry) end
+						if btn:FindFirstChild('VainDim') then btn.VainDim:Destroy() end
+					else
+						clearMark(entry)
+						-- optionally dim locked ones
+						local existing = btn:FindFirstChild('VainDim')
+						if DimLocked.Enabled then
+							if not existing then
+								local dim = Instance.new('Frame')
+								dim.Name = 'VainDim'
+								dim.Size = UDim2.fromScale(1, 1)
+								dim.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+								dim.BackgroundTransparency = 0.55
+								dim.BorderSizePixel = 0
+								dim.ZIndex = 40
+								dim.Parent = btn
 							end
-							task.wait(0.25)
+						elseif existing then
+							existing:Destroy()
 						end
 					end
 				end
 			end
 		end
-		return claimed, seen
+	end
+
+	HighlightFormables = vain.Categories.Utility:CreateModule({
+		Name = 'Highlight Formables',
+		Tooltip = "Marks up the transformation menu: a green check on every formable you can transform into RIGHT NOW (you own all required regions), and a blue star on the one you're currently transformed into. Note: this game does not keep a permanent 'owned' flag on formables you transformed into in the past -- only your current transform is tracked -- so past ones can't be marked as owned.",
+		Function = function(callback)
+			if callback then
+				refresh()
+				HighlightFormables:Clean(task.spawn(function()
+					while HighlightFormables.Enabled do
+						refresh()
+						task.wait(0.5)
+					end
+				end))
+			else
+				for entry in marked do
+					if entry and entry.Parent then
+						clearMark(entry)
+						local btn = entry:FindFirstChild('Button')
+						if btn and btn:FindFirstChild('VainDim') then btn.VainDim:Destroy() end
+					end
+				end
+				table.clear(marked)
+			end
+		end
+	})
+
+	MarkReady = HighlightFormables:CreateToggle({ Name = 'Mark Ready', Default = true,
+		Tooltip = 'Green check + outline on every formable you can transform into right now.' })
+	MarkCurrent = HighlightFormables:CreateToggle({ Name = 'Mark Current', Default = true,
+		Tooltip = "Blue star on the formable your country is currently transformed into (the revert entry)." })
+	DimLocked = HighlightFormables:CreateToggle({ Name = 'Dim Locked', Default = false,
+		Tooltip = 'Darken formables whose requirements you have not met yet, so the ready ones stand out.' })
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
+--  AUTO TRANSFORM  (claim every formable the instant it becomes available)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- CONFIRMED from the decompiled place file (Formables menu, Lines 3876 / 4059):
+--   Each formable is an entry parented to PlayerGui.MainUI ... Formables.Container.
+--   The entry has a `Button` frame with a `NAME` label and an `EQ` button. The game
+--   builds that entry as AVAILABLE only when you already own every required region
+--   (`#v468 == 0`) and it is not specially locked -- in that case it sets
+--   Button.EQ.NAME.Text = "Transform" and Button.LOCKED is not shown. LOCKED
+--   formables instead show Button.LOCKED / Button.REQ2 and have NO working EQ.
+--   Claiming fires:  Network:FireServer("TransformInto", <formableId>)
+--   where <formableId> is the entry's own Name (path 1: u452.Name) / the formable
+--   key (path 2: i). We read availability from that exact UI signal, then fire the
+--   confirmed remote directly (and click the EQ button as a fallback).
+run(function()
+	local AutoTransform
+	local Interval, Notify
+	local attempted = {}   -- formable id -> last attempt tick (don't spam)
+
+	local function formablesContainer()
+		local pg = lplr:FindFirstChild('PlayerGui')
+		local mainui = pg and pg:FindFirstChild('MainUI')
+		if not mainui then return nil end
+		-- Formables.Container, wherever it sits under MainUI
+		local formables = mainui:FindFirstChild('Formables', true)
+		local container = formables and (formables:FindFirstChild('Container') or formables)
+		return container, (mainui ~= nil)
+	end
+
+	-- an entry is any child that carries a Button with a NAME label (the formable row)
+	local function entryButton(entry)
+		local btn = entry:FindFirstChild('Button')
+		if btn and btn:FindFirstChild('NAME') then return btn end
+		return nil
+	end
+
+	-- AVAILABLE = the game built a working "Transform" action for it: Button.EQ exists
+	-- with NAME.Text == "Transform", and Button.LOCKED is not shown. This is the exact
+	-- rule the client uses (you own every required region), read straight off the UI.
+	local function isAvailable(btn)
+		local locked = btn:FindFirstChild('LOCKED')
+		if locked and locked:IsA('GuiObject') and locked.Visible then return false end
+		local eq = btn:FindFirstChild('EQ')
+		if not (eq and eq:IsA('GuiObject') and eq.Visible) then return false end
+		local nm = eq:FindFirstChild('NAME')
+		if nm and nm:IsA('TextLabel') then
+			return nm.Text:lower():find('transform') ~= nil
+		end
+		return false
+	end
+
+	-- the formable id to send. The transform remote takes the entry's Name; some
+	-- locked entries are renamed "_<id>", so strip a leading underscore.
+	local function formableId(entry)
+		local n = entry.Name
+		if n:sub(1, 1) == '_' then n = n:sub(2) end
+		return n
+	end
+
+	-- claim it: fire the confirmed remote, and also click the EQ button so we hit the
+	-- game's own handler (which sends the exact argument) as a belt-and-braces path.
+	local function claim(entry, btn)
+		local id = formableId(entry)
+		fireAction('TransformInto', id)
+		local eq = btn:FindFirstChild('EQ')
+		if eq then
+			pcall(function()
+				if type(firesignal) == 'function' then
+					firesignal(eq.MouseButton1Click)
+				elseif type(getconnections) == 'function' then
+					for _, con in getconnections(eq.MouseButton1Click) do
+						if con.Fire then con:Fire() elseif con.Function then con.Function() end
+					end
+				end
+			end)
+		end
+		return id
+	end
+
+	local function sweep()
+		local container = formablesContainer()
+		if not container then return 0, 0 end
+		local now = tick()
+		local claimed, avail = 0, 0
+		for _, entry in container:GetChildren() do
+			if entry:IsA('GuiObject') then
+				local btn = entryButton(entry)
+				if btn and isAvailable(btn) then
+					avail += 1
+					local id = formableId(entry)
+					if not attempted[id] or (now - attempted[id]) > 8 then
+						attempted[id] = now
+						claim(entry, btn)
+						claimed += 1
+						if Notify.Enabled then
+							local nm = btn:FindFirstChild('NAME')
+							local label = (nm and nm:IsA('TextLabel') and nm.Text) or id
+							notif('Auto Transform', 'Transforming into ' .. tostring(label), 3, 'success')
+						end
+						task.wait(0.3)
+					end
+				end
+			end
+		end
+		return claimed, avail
 	end
 
 	AutoTransform = vain.Categories.Utility:CreateModule({
 		Name = 'Auto Transform',
-		Tooltip = 'Automatically claims every transformation (formable) the instant it becomes available -- it watches the transformation menu and activates any formable whose requirements you have met but that you have not yet unlocked. Leave "Only When Ready" on so it only claims ones actually available; turn it off to also attempt locked ones (the server just ignores unmet requirements).',
+		Tooltip = "Automatically transforms your country into any formable the instant it becomes available. It reads the transformation menu for formables the game has marked ready (you own every required region) and fires the game's real TransformInto call. Keep the transform menu opened at least once so the entries exist.",
 		Function = function(callback)
 			if callback then
-				local root = formablesRoots()
-				local _, seen = sweep()
+				local container, hasUI = formablesContainer()
+				local _, avail = sweep()
 				notif('Auto Transform', string.format(
-					'%s | unowned formables visible: %d%s',
-					root and 'Menu OK' or 'OPEN THE TRANSFORM MENU',
-					seen, root and '' or ' (open it once so the entries load)'),
-					7, root and nil or 'warning')
+					'%s | available formables: %d%s',
+					getActionRemote() and (container and 'Ready' or 'open the Transform menu once')
+						or 'NO REMOTE',
+					avail, container and '' or ' (menu not loaded yet)'),
+					7, (getActionRemote() and container) and nil or 'warning')
 				AutoTransform:Clean(task.spawn(function()
 					while AutoTransform.Enabled do
 						sweep()
@@ -1384,8 +1199,6 @@ run(function()
 
 	Interval = AutoTransform:CreateSlider({ Name = 'Check Interval', Min = 1, Max = 30, Default = 3, Suffix = 'sec',
 		Tooltip = 'How often to re-scan the transformation menu for a newly-available formable.' })
-	OnlyReady = AutoTransform:CreateToggle({ Name = 'Only When Ready', Default = true,
-		Tooltip = 'Only claim formables the UI shows as available (requirements met). Turn OFF to also attempt locked ones -- the server ignores any whose requirements you have not met.' })
 	Notify = AutoTransform:CreateToggle({ Name = 'Notify', Default = true,
-		Tooltip = 'Notify when it claims a transformation.' })
+		Tooltip = 'Notify when it transforms your country into a formable.' })
 end)
