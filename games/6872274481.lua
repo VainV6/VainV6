@@ -2712,6 +2712,194 @@ local AimAssist
 		})
 	end
 
+	-- ══════════════════════════════════════════════════════════════════════════
+	--  PARTY LIST  (show which players queued together as a party in this match)
+	-- ══════════════════════════════════════════════════════════════════════════
+	-- BedWars replicates the match's PARTY groupings (who queued together) to the
+	-- client on the MatchController: MatchController:getParties() returns a list of
+	-- { members = { userId, ... } } and :getPlayerParty(plr) finds one player's party.
+	-- This is distinct from teams -- in solos/duos a party is the friends grouped
+	-- onto the same slot. We read that and draw a small overlay: one card per party
+	-- of 2+ players, each row = avatar + name. Solo players (party of 1) are hidden.
+	do
+		local PartyList
+		local OnlyMulti, gui
+
+		local function matchController()
+			local ok, mc = pcall(function() return bedwars.Knit.Controllers.MatchController end)
+			return ok and mc or nil
+		end
+
+		-- return a list of parties, each a list of member userIds (numbers). Prefer the
+		-- controller's getParties(); fall back to calling getPlayerParty per player and
+		-- de-duping, so it still works if the direct list isn't populated.
+		local function collectParties()
+			local mc = matchController()
+			if not mc then return {} end
+			local seen, out = {}, {}
+
+			local function addParty(members)
+				if type(members) ~= 'table' then return end
+				local ids, key = {}, {}
+				for _, m in members do
+					local uid = tonumber(m) or (type(m) == 'table' and (m.userId or m.UserId))
+					uid = tonumber(uid)
+					if uid then ids[#ids + 1] = uid key[#key + 1] = uid end
+				end
+				if #ids == 0 then return end
+				table.sort(key)
+				local sig = table.concat(key, ',')
+				if not seen[sig] then seen[sig] = true out[#out + 1] = ids end
+			end
+
+			local direct = nil
+			pcall(function()
+				if mc.getParties then direct = mc:getParties() end
+			end)
+			if type(direct) == 'table' and next(direct) then
+				for _, party in direct do
+					addParty(type(party) == 'table' and (party.members or party) or nil)
+				end
+			else
+				-- fallback: ask per player
+				for _, plr in playersService:GetPlayers() do
+					local ok, party = pcall(function() return mc:getPlayerParty(plr) end)
+					if ok and type(party) == 'table' then
+						addParty(party.members or party)
+					end
+				end
+			end
+			return out
+		end
+
+		local function build()
+			if gui then gui:Destroy() gui = nil end
+			local parties = collectParties()
+
+			-- filter to multi-member parties if requested
+			local shown = {}
+			for _, ids in parties do
+				if not (OnlyMulti and OnlyMulti.Enabled) or #ids >= 2 then
+					shown[#shown + 1] = ids
+				end
+			end
+			if #shown == 0 then return end
+
+			gui = Instance.new('ScreenGui')
+			gui.Name = 'VainPartyList'
+			gui.ResetOnSpawn = false
+			gui.IgnoreGuiInset = true
+			gui.DisplayOrder = 50
+			gui.Parent = gethui and gethui() or lplr:WaitForChild('PlayerGui')
+
+			local root = Instance.new('Frame')
+			root.Size = UDim2.fromOffset(230, 0)
+			root.AutomaticSize = Enum.AutomaticSize.Y
+			root.Position = UDim2.new(0, 12, 0.28, 0)
+			root.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+			root.BackgroundTransparency = 0.15
+			root.BorderSizePixel = 0
+			root.Parent = gui
+			local rc = Instance.new('UICorner') rc.CornerRadius = UDim.new(0, 10) rc.Parent = root
+			local pad = Instance.new('UIPadding')
+			pad.PaddingTop = UDim.new(0, 8) pad.PaddingBottom = UDim.new(0, 8)
+			pad.PaddingLeft = UDim.new(0, 8) pad.PaddingRight = UDim.new(0, 8)
+			pad.Parent = root
+			local list = Instance.new('UIListLayout')
+			list.SortOrder = Enum.SortOrder.LayoutOrder
+			list.Padding = UDim.new(0, 8)
+			list.Parent = root
+
+			local header = Instance.new('TextLabel')
+			header.Size = UDim2.new(1, 0, 0, 22)
+			header.BackgroundTransparency = 1
+			header.Text = 'Parties (' .. #shown .. ')'
+			header.TextColor3 = Color3.fromRGB(255, 178, 124)
+			header.TextSize = 16
+			header.Font = Enum.Font.GothamBold
+			header.TextXAlignment = Enum.TextXAlignment.Left
+			header.LayoutOrder = 0
+			header.Parent = root
+
+			for pi, ids in shown do
+				local card = Instance.new('Frame')
+				card.Size = UDim2.new(1, 0, 0, 0)
+				card.AutomaticSize = Enum.AutomaticSize.Y
+				card.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+				card.BackgroundTransparency = 0.2
+				card.BorderSizePixel = 0
+				card.LayoutOrder = pi
+				card.Parent = root
+				local cc = Instance.new('UICorner') cc.CornerRadius = UDim.new(0, 8) cc.Parent = card
+				local cpad = Instance.new('UIPadding')
+				cpad.PaddingTop = UDim.new(0, 6) cpad.PaddingBottom = UDim.new(0, 6)
+				cpad.PaddingLeft = UDim.new(0, 6) cpad.PaddingRight = UDim.new(0, 6)
+				cpad.Parent = card
+				local clist = Instance.new('UIListLayout')
+				clist.SortOrder = Enum.SortOrder.LayoutOrder
+				clist.Padding = UDim.new(0, 4)
+				clist.Parent = card
+
+				local order = 0
+				for _, uid in ids do
+					local row = Instance.new('Frame')
+					row.Size = UDim2.new(1, 0, 0, 30)
+					row.BackgroundTransparency = 1
+					row.LayoutOrder = order
+					row.Parent = card
+					order = order + 1
+
+					local av = Instance.new('ImageLabel')
+					av.Size = UDim2.fromOffset(26, 26)
+					av.Position = UDim2.fromOffset(0, 2)
+					av.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+					av.BorderSizePixel = 0
+					av.Image = 'rbxthumb://type=AvatarHeadShot&id=' .. tostring(uid) .. '&w=150&h=150'
+					av.Parent = row
+					local avc = Instance.new('UICorner') avc.CornerRadius = UDim.new(0, 6) avc.Parent = av
+
+					local plr = playersService:GetPlayerByUserId(uid)
+					local nm = Instance.new('TextLabel')
+					nm.Size = UDim2.new(1, -34, 1, 0)
+					nm.Position = UDim2.fromOffset(34, 0)
+					nm.BackgroundTransparency = 1
+					nm.Text = plr and (plr.DisplayName ~= '' and plr.DisplayName or plr.Name) or ('#' .. tostring(uid))
+					nm.TextColor3 = plr and (plr == lplr and Color3.fromRGB(120, 235, 140) or Color3.new(1, 1, 1)) or Color3.fromRGB(150, 150, 150)
+					nm.TextSize = 15
+					nm.Font = Enum.Font.GothamMedium
+					nm.TextXAlignment = Enum.TextXAlignment.Left
+					nm.TextTruncate = Enum.TextTruncate.AtEnd
+					nm.Parent = row
+				end
+			end
+		end
+
+		PartyList = vain.Categories.Render:CreateModule({
+			Name = 'Party List',
+			Tooltip = "Shows which players queued together as a PARTY in this match (friends grouped onto the same slot -- distinct from teams). Reads the match's replicated party data and draws a small overlay on the left, one card per party. Solo players are hidden by default.",
+			Function = function(callback)
+				if callback then
+					task.spawn(function()
+						repeat
+							pcall(build)
+							task.wait(2)
+						until not PartyList.Enabled
+						if gui then gui:Destroy() gui = nil end
+					end)
+				else
+					if gui then gui:Destroy() gui = nil end
+				end
+			end
+		})
+		OnlyMulti = PartyList:CreateToggle({
+			Name = 'Hide Solos', Default = true,
+			Tooltip = 'Only show parties of 2 or more players (hide players who queued alone).',
+			Function = function()
+				if PartyList.Enabled then pcall(build) end
+			end,
+		})
+	end
+
 	AimAssist = vain.Categories.Combat:CreateModule({
 		Name = 'AimAssist',
 		Tooltip = 'Smoothly deflects your camera toward nearby enemies',
