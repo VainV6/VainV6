@@ -529,29 +529,48 @@ run(function()
 		return true
 	end
 
-	-- live stats for weakness comparison
-	local function tilesOf(country)
-		return cfValue(countryFolder(country), 'Tiles') or 0
+	-- GROUND-TRUTH tile ownership: count how many tiles in workspace.Regions each
+	-- country actually owns right now. A conquered/annexed country owns ZERO tiles
+	-- and no longer exists as a target -- gating on this stops Auto War declaring on
+	-- countries that have already been taken over (the CountryRegistry folder can
+	-- linger with stale data, so we don't trust it for existence). Built once/sweep.
+	local function liveTileCounts()
+		local counts = {}
+		local regions = workspace:FindFirstChild('Regions')
+		if regions then
+			for _, tile in regions:GetChildren() do
+				local owner = tile:GetAttribute('Country')
+				if owner then counts[owner] = (counts[owner] or 0) + 1 end
+			end
+		end
+		return counts
+	end
+
+	-- a country EXISTS (is a valid war target) only if it currently owns a tile
+	local function exists(country, counts)
+		return (counts[country] or 0) > 0
 	end
 
 	-- candidate targets, in priority order (weakest first when OnlyWeaker/Target set)
 	local function candidates(mine)
 		local reg = replicatedStorage:FindFirstChild('CountryRegistry')
 		if not reg then return {} end
-		local myTiles = tilesOf(mine)
+		local counts = liveTileCounts()
+		local myTiles = counts[mine] or 0
 		local minTiles = MinTiles and MinTiles.Value or 0
 		local out = {}
-		-- explicit single Target overrides everything if set
+		-- explicit single Target overrides everything if set -- but still only if it
+		-- actually exists on the map
 		local target = Target and Target.Value or ''
 		target = target:gsub('^%s+', ''):gsub('%s+$', '')
 		if #target > 0 then
-			if countryFolder(target) then out[#out + 1] = target end
+			if exists(target, counts) then out[#out + 1] = target end
 			return out
 		end
 		for _, cf in reg:GetChildren() do
 			local c = cf.Name
-			if warAllowed(mine, c) and passesFilter(c) then
-				local t = tilesOf(c)
+			if exists(c, counts) and warAllowed(mine, c) and passesFilter(c) then
+				local t = counts[c]
 				if t >= minTiles then
 					if not (OnlyWeaker and OnlyWeaker.Enabled) or t <= myTiles then
 						out[#out + 1] = c
@@ -560,7 +579,7 @@ run(function()
 			end
 		end
 		-- weakest first so we pick off easy wins
-		table.sort(out, function(a, b) return tilesOf(a) < tilesOf(b) end)
+		table.sort(out, function(a, b) return (counts[a] or 0) < (counts[b] or 0) end)
 		return out
 	end
 
@@ -568,14 +587,17 @@ run(function()
 		local mine = lplr:GetAttribute('MyCountry')
 		if not (mine and getActionRemote()) then return end
 
-		-- 1) advance any justification that is READY -> declare it
+		local counts = liveTileCounts()
+
+		-- 1) advance any justification that is READY -> declare it (skip ghosts that
+		--    got conquered while we were justifying)
 		local cf = countryFolder(mine)
 		local jw = cf and cf:FindFirstChild('JustifyingWars')
 		if jw then
 			for _, entry in jw:GetChildren() do
 				local country = entry.Name
-				if warAllowed(mine, country) and justifyState(mine, country) == 'ready'
-					and not alreadyAtWar(mine, country) then
+				if exists(country, counts) and warAllowed(mine, country)
+					and justifyState(mine, country) == 'ready' and not alreadyAtWar(mine, country) then
 					fireAction('DeclareWar', country)
 					if Notify.Enabled then notif('Auto War', 'Declared war on ' .. country, 4, 'alert') end
 					task.wait(0.4)
