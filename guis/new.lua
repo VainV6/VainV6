@@ -2824,134 +2824,187 @@ function mainapi:CreateGUI()
 	patchpad.PaddingBottom = UDim.new(0, 8)
 	patchpad.Parent = patchscroll
 
-	-- Build the changelog as one card per version, matching the module/settings
-	-- card style (color.Light(Main, 0.02) plate, rounded, semibold labels). Each
-	-- change is a row with a small coloured dot; [feature]/[fix] tags set the
-	-- colour and are stripped from the shown text.
+	-- Build the changelog as one card per version, styled after the reference
+	-- mockup: avatar badge + "Update available" / "Vain · released <date>", a big
+	-- version with "from <prev>", a hairline divider, then FEATURES / BUGS section
+	-- captions with clean bullet rows.
 	local accentCol = Color3.fromHSV(mainapi.GUIColor.Hue, mainapi.GUIColor.Sat, mainapi.GUIColor.Value)
-	local featCol = Color3.fromRGB(120, 205, 255)
-	local fixCol  = Color3.fromRGB(150, 225, 165)
 	for entryindex, entry in ipairs(mainapi.PatchNotes) do
+		local prev = mainapi.PatchNotes[entryindex + 1]
 		local card = Instance.new('Frame')
 		card.Name = 'Version'
 		card.AutomaticSize = Enum.AutomaticSize.Y
 		card.Size = UDim2.new(1, 0, 0, 0)
-		card.BackgroundColor3 = color.Light(uipallet.Main, 0.02)
+		card.BackgroundColor3 = color.Dark(uipallet.Main, 0.04)
 		card.BorderSizePixel = 0
 		card.LayoutOrder = entryindex
 		card.ZIndex = 2
 		card.Parent = patchscroll
-		addCorner(card, UDim.new(0, 6))
+		addCorner(card, UDim.new(0, 10))
 		local cstroke = Instance.new('UIStroke')
-		cstroke.Color = color.Light(uipallet.Main, 0.1)
-		cstroke.Transparency = 0.3
+		cstroke.Color = color.Light(uipallet.Main, 0.08)
+		cstroke.Transparency = 0.2
 		cstroke.Parent = card
 		local clist = Instance.new('UIListLayout')
 		clist.SortOrder = Enum.SortOrder.LayoutOrder
-		clist.Padding = UDim.new(0, 7)
+		clist.Padding = UDim.new(0, 9)
 		clist.Parent = card
 		local cpad = Instance.new('UIPadding')
-		cpad.PaddingLeft = UDim.new(0, 12) cpad.PaddingRight = UDim.new(0, 12)
-		cpad.PaddingTop = UDim.new(0, 11) cpad.PaddingBottom = UDim.new(0, 12)
+		cpad.PaddingLeft = UDim.new(0, 16) cpad.PaddingRight = UDim.new(0, 16)
+		cpad.PaddingTop = UDim.new(0, 15) cpad.PaddingBottom = UDim.new(0, 16)
 		cpad.Parent = card
 
-		-- header row: version chip + date
+		local order = 0
+		local function nextOrder() order += 1 return order end
+
+		-- ── header: "VAIN" wordmark + title + subtitle ───────────────────────
 		local head = Instance.new('Frame')
 		head.Name = 'Head'
-		head.Size = UDim2.new(1, 0, 0, 20)
+		head.Size = UDim2.new(1, 0, 0, 40)
 		head.BackgroundTransparency = 1
-		head.LayoutOrder = 0
+		head.LayoutOrder = nextOrder()
 		head.ZIndex = 2
 		head.Parent = card
-		local chip = Instance.new('TextLabel')
-		chip.AutomaticSize = Enum.AutomaticSize.X
-		chip.Size = UDim2.fromOffset(0, 20)
-		chip.BackgroundColor3 = accentCol
-		chip.BackgroundTransparency = 0.82
-		chip.Text = 'v' .. tostring(entry.Version)
-		chip.TextColor3 = accentCol
-		chip.TextSize = 12
-		chip.FontFace = uipallet.FontSemiBold
-		chip.ZIndex = 2
-		chip.Parent = head
-		addCorner(chip, UDim.new(0, 5))
-		local chippad = Instance.new('UIPadding')
-		chippad.PaddingLeft = UDim.new(0, 8) chippad.PaddingRight = UDim.new(0, 8)
-		chippad.Parent = chip
-		if entry.Date then
-			local dt = Instance.new('TextLabel')
-			dt.AnchorPoint = Vector2.new(1, 0.5)
-			dt.Position = UDim2.new(1, 0, 0.5, 0)
-			dt.Size = UDim2.fromOffset(120, 20)
-			dt.BackgroundTransparency = 1
-			dt.Text = entry.Date
-			dt.TextXAlignment = Enum.TextXAlignment.Right
-			dt.TextColor3 = color.Dark(uipallet.Text, 0.42)
-			dt.TextSize = 11
-			dt.FontFace = uipallet.Font
-			dt.ZIndex = 2
-			dt.Parent = head
+		local wordmark = Instance.new('TextLabel')
+		wordmark.AnchorPoint = Vector2.new(0, 0.5)
+		wordmark.Position = UDim2.new(0, 0, 0.5, 0)
+		wordmark.AutomaticSize = Enum.AutomaticSize.X
+		wordmark.Size = UDim2.fromOffset(0, 24)
+		wordmark.BackgroundTransparency = 1
+		wordmark.Text = 'VAIN'
+		wordmark.TextColor3 = uipallet.Text
+		wordmark.TextSize = 20
+		wordmark.FontFace = uipallet.FontSemiBold
+		wordmark.ZIndex = 2
+		wordmark.Parent = head
+		local htitle = Instance.new('TextLabel')
+		htitle.AnchorPoint = Vector2.new(1, 0)
+		htitle.Position = UDim2.new(1, 0, 0, 4)
+		htitle.Size = UDim2.new(1, -60, 0, 16)
+		htitle.BackgroundTransparency = 1
+		htitle.Text = 'Update available'
+		htitle.TextXAlignment = Enum.TextXAlignment.Right
+		htitle.TextColor3 = uipallet.Text
+		htitle.TextSize = 14
+		htitle.FontFace = uipallet.FontSemiBold
+		htitle.ZIndex = 2
+		htitle.Parent = head
+		local hsub = Instance.new('TextLabel')
+		hsub.AnchorPoint = Vector2.new(1, 0)
+		hsub.Position = UDim2.new(1, 0, 0, 21)
+		hsub.Size = UDim2.new(1, -60, 0, 14)
+		hsub.BackgroundTransparency = 1
+		hsub.Text = entry.Date and ('released ' .. entry.Date) or ''
+		hsub.TextXAlignment = Enum.TextXAlignment.Right
+		hsub.TextColor3 = color.Dark(uipallet.Text, 0.42)
+		hsub.TextSize = 11
+		hsub.FontFace = uipallet.Font
+		hsub.ZIndex = 2
+		hsub.Parent = head
+
+		-- ── big version + "from <prev>" (baseline-aligned inline row) ─────────
+		local vrow = Instance.new('Frame')
+		vrow.Size = UDim2.new(1, 0, 0, 26)
+		vrow.BackgroundTransparency = 1
+		vrow.LayoutOrder = nextOrder()
+		vrow.ZIndex = 2
+		vrow.Parent = card
+		local vlist = Instance.new('UIListLayout')
+		vlist.FillDirection = Enum.FillDirection.Horizontal
+		vlist.VerticalAlignment = Enum.VerticalAlignment.Bottom
+		vlist.Padding = UDim.new(0, 8)
+		vlist.Parent = vrow
+		local vbig = Instance.new('TextLabel')
+		vbig.AutomaticSize = Enum.AutomaticSize.X
+		vbig.Size = UDim2.fromOffset(0, 26)
+		vbig.BackgroundTransparency = 1
+		vbig.Text = tostring(entry.Version)
+		vbig.TextColor3 = uipallet.Text
+		vbig.TextSize = 22
+		vbig.FontFace = uipallet.FontSemiBold
+		vbig.LayoutOrder = 1
+		vbig.ZIndex = 2
+		vbig.Parent = vrow
+		if prev then
+			local vfrom = Instance.new('TextLabel')
+			vfrom.AutomaticSize = Enum.AutomaticSize.X
+			vfrom.Size = UDim2.fromOffset(0, 18)
+			vfrom.BackgroundTransparency = 1
+			vfrom.Text = 'from ' .. tostring(prev.Version)
+			vfrom.TextColor3 = color.Dark(uipallet.Text, 0.5)
+			vfrom.TextSize = 11
+			vfrom.FontFace = uipallet.Font
+			vfrom.LayoutOrder = 2
+			vfrom.ZIndex = 2
+			vfrom.Parent = vrow
 		end
 
-		-- highlight blurb (if present)
-		if entry.Highlight then
-			local hl = Instance.new('TextLabel')
-			hl.Name = 'Highlight'
-			hl.AutomaticSize = Enum.AutomaticSize.Y
-			hl.Size = UDim2.new(1, 0, 0, 0)
-			hl.BackgroundTransparency = 1
-			hl.Text = entry.Highlight
-			hl.TextXAlignment = Enum.TextXAlignment.Left
-			hl.TextYAlignment = Enum.TextYAlignment.Top
-			hl.TextWrapped = true
-			hl.TextColor3 = color.Dark(uipallet.Text, 0.12)
-			hl.TextSize = 11
-			hl.LineHeight = 1.08
-			hl.FontFace = uipallet.FontSemiBold
-			hl.LayoutOrder = 1
-			hl.ZIndex = 2
-			hl.Parent = card
-		end
+		-- divider
+		local div = Instance.new('Frame')
+		div.Size = UDim2.new(1, 0, 0, 1)
+		div.BackgroundColor3 = color.Light(uipallet.Main, 0.1)
+		div.BorderSizePixel = 0
+		div.LayoutOrder = nextOrder()
+		div.ZIndex = 2
+		div.Parent = card
 
-		for changeindex, line in ipairs(entry.Changes) do
+		-- split changes into feature / fix buckets, preserving order
+		local feats, fixes = {}, {}
+		for _, line in ipairs(entry.Changes) do
 			local tag, rest = line:match('^%[(%w+)%]%s*(.*)$')
-			local dotcol = accentCol
-			if tag == 'feature' then dotcol = featCol
-			elseif tag == 'fix' then dotcol = fixCol end
-			local text = rest or line
-
-			local row = Instance.new('Frame')
-			row.Name = 'Change'
-			row.AutomaticSize = Enum.AutomaticSize.Y
-			row.Size = UDim2.new(1, 0, 0, 0)
-			row.BackgroundTransparency = 1
-			row.LayoutOrder = 1 + changeindex
-			row.ZIndex = 2
-			row.Parent = card
-			local dot = Instance.new('Frame')
-			dot.Size = UDim2.fromOffset(5, 5)
-			dot.Position = UDim2.fromOffset(1, 5)
-			dot.BackgroundColor3 = dotcol
-			dot.BorderSizePixel = 0
-			dot.ZIndex = 2
-			dot.Parent = row
-			addCorner(dot, UDim.new(1, 0))
-			local lbl = Instance.new('TextLabel')
-			lbl.AutomaticSize = Enum.AutomaticSize.Y
-			lbl.Position = UDim2.fromOffset(16, 0)
-			lbl.Size = UDim2.new(1, -16, 0, 0)
-			lbl.BackgroundTransparency = 1
-			lbl.Text = text
-			lbl.TextXAlignment = Enum.TextXAlignment.Left
-			lbl.TextYAlignment = Enum.TextYAlignment.Top
-			lbl.TextWrapped = true
-			lbl.TextColor3 = color.Dark(uipallet.Text, 0.2)
-			lbl.TextSize = 11
-			lbl.LineHeight = 1.06
-			lbl.FontFace = uipallet.Font
-			lbl.ZIndex = 2
-			lbl.Parent = row
+			if tag == 'fix' then fixes[#fixes + 1] = rest or line
+			else feats[#feats + 1] = rest or line end
 		end
+
+		local function addSection(caption, items)
+			if #items == 0 then return end
+			local cap = Instance.new('TextLabel')
+			cap.Size = UDim2.new(1, 0, 0, 12)
+			cap.BackgroundTransparency = 1
+			cap.Text = caption
+			cap.TextXAlignment = Enum.TextXAlignment.Left
+			cap.TextColor3 = color.Dark(uipallet.Text, 0.5)
+			cap.TextSize = 10
+			cap.FontFace = uipallet.FontSemiBold
+			cap.LayoutOrder = nextOrder()
+			cap.ZIndex = 2
+			cap.Parent = card
+			for _, text in ipairs(items) do
+				local row = Instance.new('Frame')
+				row.Name = 'Change'
+				row.AutomaticSize = Enum.AutomaticSize.Y
+				row.Size = UDim2.new(1, 0, 0, 0)
+				row.BackgroundTransparency = 1
+				row.LayoutOrder = nextOrder()
+				row.ZIndex = 2
+				row.Parent = card
+				local dot = Instance.new('Frame')
+				dot.Size = UDim2.fromOffset(4, 4)
+				dot.Position = UDim2.fromOffset(4, 6)
+				dot.BackgroundColor3 = color.Dark(uipallet.Text, 0.35)
+				dot.BorderSizePixel = 0
+				dot.ZIndex = 2
+				dot.Parent = row
+				addCorner(dot, UDim.new(1, 0))
+				local lbl = Instance.new('TextLabel')
+				lbl.AutomaticSize = Enum.AutomaticSize.Y
+				lbl.Position = UDim2.fromOffset(16, 0)
+				lbl.Size = UDim2.new(1, -16, 0, 0)
+				lbl.BackgroundTransparency = 1
+				lbl.Text = text
+				lbl.TextXAlignment = Enum.TextXAlignment.Left
+				lbl.TextYAlignment = Enum.TextYAlignment.Top
+				lbl.TextWrapped = true
+				lbl.TextColor3 = color.Dark(uipallet.Text, 0.16)
+				lbl.TextSize = 11
+				lbl.LineHeight = 1.1
+				lbl.FontFace = uipallet.Font
+				lbl.ZIndex = 2
+				lbl.Parent = row
+			end
+		end
+		addSection('FEATURES', feats)
+		addSection('BUGS', fixes)
 	end
 	patchlist:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
 		patchscroll.CanvasSize = UDim2.fromOffset(0, patchlist.AbsoluteContentSize.Y + 12)
