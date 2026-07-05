@@ -65,7 +65,7 @@ do
 		-- for definition, and an animated horizontal shimmer sweep.
 		local wordmark = Instance.new('Frame')
 		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
-		wordmark.Position = UDim2.new(0.5, 0, 0.5, -70)
+		wordmark.Position = UDim2.new(0.5, 0, 0.5, -40)
 		wordmark.Size = UDim2.fromOffset(420, 108)
 		wordmark.BackgroundTransparency = 1
 		wordmark.ZIndex = 3
@@ -117,96 +117,87 @@ do
 		-- keep a single gradient handle for the shimmer sweep loop (drives all letters)
 		gradient = letters[1]:FindFirstChildOfClass('UIGradient')
 
-		-- ── circular progress ring ────────────────────────────────────────────
-		-- Built from many thin rectangular segments placed around the circle with
-		-- cos/sin, each rotated tangent. UIStroke ignores ClipsDescendants (so the
-		-- half-mask/rotation tricks bleed) -- plain rotated Frames DON'T, and at a
-		-- high count with square (non-rounded) ends the segments butt together into a
-		-- smooth continuous line. Track segments are faint grey; segments up to the
-		-- current fraction are orange. Starts at 12 o'clock, sweeps clockwise.
-		local ringSize  = 132
-		local segCount  = 160
-		local segThick  = 6
-		local accent    = Color3.fromRGB(245, 150, 40)   -- orange fill
-		local trackCol  = Color3.fromRGB(210, 210, 214)  -- light grey track
+		-- ── linear progress bar ───────────────────────────────────────────────
+		-- Simple rounded track + orange fill, with a bright shimmer band sweeping
+		-- across the filled portion and the percentage centred above it.
+		local barW    = 320
+		local barH    = 8
+		local accent  = Color3.fromRGB(245, 150, 40)   -- orange fill
+		local trackCol = Color3.fromRGB(210, 210, 214) -- light grey track
 
-		local ringHolder = Instance.new('Frame')
-		ringHolder.AnchorPoint = Vector2.new(0.5, 0.5)
-		ringHolder.Position = UDim2.new(0.5, 0, 0.5, 96) -- extra gap below the wordmark
-		ringHolder.Size = UDim2.fromOffset(ringSize, ringSize)
-		ringHolder.BackgroundTransparency = 1
-		ringHolder.ZIndex = 3
-		ringHolder.Parent = root
+		local barTrack = Instance.new('Frame')
+		barTrack.AnchorPoint = Vector2.new(0.5, 0.5)
+		barTrack.Position = UDim2.new(0.5, 0, 0.5, 40)
+		barTrack.Size = UDim2.fromOffset(barW, barH)
+		barTrack.BackgroundColor3 = trackCol
+		barTrack.BackgroundTransparency = 0.75
+		barTrack.BorderSizePixel = 0
+		barTrack.ClipsDescendants = true
+		barTrack.ZIndex = 3
+		barTrack.Parent = root
+		Instance.new('UICorner', barTrack).CornerRadius = UDim.new(1, 0)
 
-		local radius = ringSize / 2 - segThick / 2 - 1
-		-- segment arc length + overlap so neighbours butt together (no gaps)
-		local segLen = (2 * math.pi * radius) / segCount + 3
-		local segs = {}
-		for i = 1, segCount do
-			local ang = -math.pi / 2 + (i - 1) / segCount * (math.pi * 2)
-			local seg = Instance.new('Frame')
-			seg.AnchorPoint = Vector2.new(0.5, 0.5)
-			seg.Position = UDim2.new(0.5, math.cos(ang) * radius, 0.5, math.sin(ang) * radius)
-			seg.Size = UDim2.fromOffset(segLen, segThick)
-			seg.Rotation = math.deg(ang) + 90 -- tangent
-			seg.BackgroundColor3 = trackCol
-			seg.BackgroundTransparency = 0.7
-			seg.BorderSizePixel = 0
-			seg.ZIndex = 4
-			seg.Parent = ringHolder
-			segs[i] = seg
-		end
+		local barFill = Instance.new('Frame')
+		barFill.AnchorPoint = Vector2.new(0, 0.5)
+		barFill.Position = UDim2.fromScale(0, 0.5)
+		barFill.Size = UDim2.fromScale(0, 1)
+		barFill.BackgroundColor3 = accent
+		barFill.BorderSizePixel = 0
+		barFill.ZIndex = 4
+		barFill.Parent = barTrack
+		Instance.new('UICorner', barFill).CornerRadius = UDim.new(1, 0)
+		-- shimmer band: a bright translucent streak that sweeps across the fill
+		local shimmer = Instance.new('Frame')
+		shimmer.AnchorPoint = Vector2.new(0.5, 0.5)
+		shimmer.Size = UDim2.new(0, 60, 1, 0)
+		shimmer.Position = UDim2.fromScale(-0.2, 0.5)
+		shimmer.BackgroundColor3 = Color3.fromRGB(255, 220, 160)
+		shimmer.BackgroundTransparency = 0.35
+		shimmer.BorderSizePixel = 0
+		shimmer.ZIndex = 5
+		shimmer.Parent = barFill
+		local shimGrad = Instance.new('UIGradient')
+		shimGrad.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.5, 0),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		shimGrad.Parent = shimmer
 
-		-- percentage in the centre of the ring
+		-- percentage centred above the bar
 		local ringPct = Instance.new('TextLabel')
 		ringPct.AnchorPoint = Vector2.new(0.5, 0.5)
-		ringPct.Position = UDim2.fromScale(0.5, 0.5)
-		ringPct.Size = UDim2.fromScale(1, 1)
+		ringPct.Position = UDim2.new(0.5, 0, 0.5, 18)
+		ringPct.Size = UDim2.fromOffset(120, 22)
 		ringPct.BackgroundTransparency = 1
 		ringPct.Font = Enum.Font.GothamBold
 		ringPct.Text = '0%'
-		ringPct.TextSize = 26
-		ringPct.TextColor3 = Color3.fromRGB(245, 245, 248)
+		ringPct.TextSize = 16
+		ringPct.TextColor3 = Color3.fromRGB(235, 235, 240)
 		ringPct.TextTransparency = 1
-		ringPct.ZIndex = 6
-		ringPct.Parent = ringHolder
+		ringPct.ZIndex = 4
+		ringPct.Parent = root
 
-		-- shimmer phase (added on top of the fill colour so the orange arc glimmers)
-		local shimmerPhase = 0
 		local curFrac = 0
-		local function paint()
-			local lit = math.floor(curFrac * segCount + 0.5)
-			for i = 1, segCount do
-				local seg = segs[i]
-				if i <= lit then
-					-- travelling bright band along the arc = shimmer
-					local wave = math.sin(shimmerPhase - i * 0.18)
-					local m = (wave + 1) / 2 -- 0..1
-					seg.BackgroundColor3 = accent:Lerp(Color3.fromRGB(255, 205, 120), m * 0.8)
-					seg.BackgroundTransparency = 0
-				else
-					seg.BackgroundColor3 = trackCol
-					seg.BackgroundTransparency = 0.7
-				end
-			end
-		end
-
 		setRingProgress = function(frac)
 			curFrac = math.clamp(frac, 0, 1)
+			tween(barFill, 0.25, { Size = UDim2.fromScale(curFrac, 1) })
 			ringPct.Text = tostring(math.floor(curFrac * 100 + 0.5)) .. '%'
-			paint()
 		end
 
-		-- drive the shimmer every frame
+		-- shimmer sweep across the filled portion
 		task.spawn(function()
-			while ringHolder.Parent and not finished do
-				shimmerPhase = shimmerPhase + 0.12
-				paint()
-				RunService.Heartbeat:Wait()
+			while barTrack.Parent and not finished do
+				shimmer.Position = UDim2.fromScale(-0.2, 0.5)
+				local t = TweenService:Create(shimmer,
+					TweenInfo.new(1.1, Enum.EasingStyle.Linear), { Position = UDim2.fromScale(1.2, 0.5) })
+				t:Play()
+				t.Completed:Wait()
+				task.wait(0.5)
 			end
 		end)
 
-		-- status text UNDER the ring (kept for API compatibility, hidden for now)
+		-- status text UNDER the bar (kept for API compatibility, hidden for now)
 		statusLabel = Instance.new('TextLabel')
 		statusLabel.AnchorPoint = Vector2.new(0.5, 0.5)
 		statusLabel.Position = UDim2.new(0.5, 0, 0.5, 108)
