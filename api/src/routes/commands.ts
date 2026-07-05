@@ -1,4 +1,4 @@
-import { Env, COMMANDS } from '../types';
+import { Env, COMMANDS, TIER } from '../types';
 import { getByRoblox, getByCommandToken, peekCommand, deleteCommand, queueCommand, getPresenceInJob } from '../db/queries';
 
 // GET /commands/poll?token=XXX
@@ -39,7 +39,8 @@ export async function handleQueue(request: Request, env: Env): Promise<Response>
   try { body = await request.json() as typeof body; }
   catch { return jsonErr('Invalid JSON', 400); }
 
-  const { token, target, command, args } = body;
+  const { token, command, args } = body;
+  let { target } = body;
   if (!token || !target || !command) return jsonErr('Missing fields', 400);
   if (!(COMMANDS as readonly string[]).includes(command)) return jsonErr('Unknown command', 400);
 
@@ -54,9 +55,12 @@ export async function handleQueue(request: Request, env: Env): Promise<Response>
   if (target.toLowerCase() === 'all') {
     const jobId = (body.jobId ?? '').trim();
     const peers = await getPresenceInJob(env.DB, jobId, senderRow.roblox_username);
+    // Owner's "all" hits everyone below Owner (incl. Premium); others hit only
+    // peers strictly ranked below themselves.
+    const ownerAll = senderRow.tier >= TIER.Owner;
     let count = 0;
     for (const p of peers) {
-      if (p.tier < senderRow.tier) {
+      if (ownerAll ? p.tier < TIER.Owner : p.tier < senderRow.tier) {
         await queueCommand(
           env.DB, crypto.randomUUID(), senderRow.discord_id,
           senderRow.roblox_username, p.username, command, args ?? null,
@@ -68,10 +72,13 @@ export async function handleQueue(request: Request, env: Env): Promise<Response>
   }
 
   // Single target: tier defaults to 0 (Free) when not in the DB — any rank can
-  // be commanded as long as it is strictly below the sender's rank. Exception:
-  // you may always command YOURSELF (e.g. ;toggle me <module>).
+  // be commanded as long as it is strictly below the sender's rank. Exceptions:
+  //  - you may always command YOURSELF (e.g. ;toggle me <module>)
+  //  - OWNER (tier 2) may command anyone, including Premium (so an owner is never
+  //    blocked by the strict-below rule for equal/near ranks).
   const isSelf = target.toLowerCase() === senderRow.roblox_username.toLowerCase() || target.toLowerCase() === 'me';
-  if (!isSelf) {
+  const isOwner = senderRow.tier >= TIER.Owner;
+  if (!isSelf && !isOwner) {
     const targetRow = await getByRoblox(env.DB, target);
     const targetTier = targetRow?.tier ?? 0;
     if (targetTier >= senderRow.tier) return jsonErr('You can only command players ranked below you', 403);

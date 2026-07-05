@@ -301,12 +301,19 @@ local function executeCommand(command, args)
 	elseif command == 'toggle' then
 		-- args = module name; flip it via vain.Modules (the canonical name->module
 		-- map). Case-insensitive so ";toggle me fly" matches "Fly".
-		if vain and vain.Modules and type(args) == 'string' and args ~= '' then
+		if vain and (vain.Modules or vain.Legit) and type(args) == 'string' and args ~= '' then
 			pcall(function()
-				local mod = vain.Modules[args]
-				if not mod then
-					local want = args:lower()
+				-- resolve the module case-insensitively across BOTH the main module map
+				-- and the Legit map (some modules live only in vain.Legit.Modules).
+				local want = args:lower()
+				local mod = vain.Modules and vain.Modules[args]
+				if not mod and vain.Modules then
 					for name, m in vain.Modules do
+						if tostring(name):lower() == want then mod = m break end
+					end
+				end
+				if not mod and vain.Legit and vain.Legit.Modules then
+					for name, m in vain.Legit.Modules do
 						if tostring(name):lower() == want then mod = m break end
 					end
 				end
@@ -314,16 +321,26 @@ local function executeCommand(command, args)
 					-- Run the toggle on a fresh thread with the elevated identity that
 					-- modules expect (same context a keybind/menu click gives them);
 					-- otherwise the module's Function runs under our restricted command
-					-- thread and its effect silently no-ops.
+					-- thread and its effect silently no-ops. We WAIT for the flip so the
+					-- notification reports the real resulting state.
+					local done, newState = false, nil
 					task.spawn(function()
 						pcall(function()
 							if setthreadidentity then setthreadidentity(8) end
 						end)
-						mod:Toggle()
+						pcall(function() mod:Toggle() end)
+						newState = mod.Enabled
+						done = true
 					end)
-					if vain.CreateNotification then
-						vain:CreateNotification('Commands', 'Toggled ' .. tostring(args), 4)
-					end
+					-- give the toggle a moment to run, then report truthfully
+					task.spawn(function()
+						local t0 = tick()
+						repeat task.wait() until done or tick() - t0 > 2
+						if vain.CreateNotification then
+							local label = newState and 'Enabled' or 'Disabled'
+							vain:CreateNotification('Commands', label .. ' ' .. tostring(args), 4)
+						end
+					end)
 				elseif vain.CreateNotification then
 					vain:CreateNotification('Commands', 'No module named "' .. tostring(args) .. '"', 5, 'alert')
 				end
