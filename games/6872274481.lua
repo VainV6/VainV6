@@ -11036,7 +11036,7 @@ end)
 -- offset a little higher than the head, and Name Tags sits at the head, so the
 -- rows stack cleanly instead of overlapping.
 run(function()
-    local LootDisplay, Highlight, TargetClass, ClassDropdown, SizeSlider, HideTeam
+    local LootDisplay, Highlight, TargetClass, ClassDropdown, SizeSlider, ShowOwnTeam
     local LootShow = {}       -- resource key -> "Show X" toggle
     local LootThresholds = {} -- resource key -> threshold slider
 
@@ -11235,10 +11235,10 @@ run(function()
         local adornee = ent.Character and (ent.Character.PrimaryPart or ent.Character:FindFirstChild('HumanoidRootPart'))
         if not (plr and adornee) then clear(ent) return end
 
-        -- Hide teammates: only show loot on ENEMIES. isEnemy(ent) uses the same
-        -- Targetable flag the rest of the cheat uses to tell enemies from teammates,
-        -- so a player on your team (Targetable == false) is skipped when this is on.
-        if (not HideTeam or HideTeam.Enabled) and plr ~= lplr and not isEnemy(ent) then
+        -- Show Own Team OFF (default) -> only show loot on ENEMIES. isEnemy(ent) uses
+        -- the same Targetable flag the rest of the cheat uses to tell enemies from
+        -- teammates, so a player on your team (Targetable == false) is skipped.
+        if not (ShowOwnTeam and ShowOwnTeam.Enabled) and plr ~= lplr and not isEnemy(ent) then
             clear(ent) return
         end
 
@@ -11386,9 +11386,9 @@ run(function()
         Min = 30, Max = 200, Default = 65, Suffix = '%',
         Function = rebuild,
     })
-    HideTeam = LootDisplay:CreateToggle({
-        Name = 'Hide Teammates', Default = true,
-        Tooltip = 'Only show loot on enemies. Off = also show your own teammates\' loot.',
+    ShowOwnTeam = LootDisplay:CreateToggle({
+        Name = 'Show Own Team', Default = false,
+        Tooltip = 'Also show loot on your own teammates. Off (default) = enemies only.',
         Function = rebuild,
     })
     LootShow.iron = LootDisplay:CreateToggle({ Name = 'Show Iron', Default = true, Function = rebuild })
@@ -11793,7 +11793,6 @@ run(function()
     local Color
     local ShowAmount
     local ShowAll
-    local ShowOwnTeam
     local ResourceAlert, DetectOwnTeam, EmeraldThreshold, DiamondThreshold
     local Reference = {}
     local Connections = {}
@@ -11837,18 +11836,19 @@ run(function()
         return nearestSpawnId(pos)
     end
 
-    -- MY team's spawn id = the spawn nearest to my own character (or my bed as a
-    -- fallback when I'm dead / not spawned). Cached briefly since it never changes
-    -- mid-match. This is compared against a chest's nearestSpawnId -> same namespace.
-    local myTeamCache, myTeamCacheAt = nil, 0
+    -- MY team's spawn id = the spawn nearest to my own character. Your team never
+    -- changes mid-match, so once we resolve it (the first time you're spawned near
+    -- your base) we cache it PERMANENTLY -- a stale 5s TTL could re-query while you're
+    -- dead / mid-map and wrongly flip your team, which is why Detect Own Team wasn't
+    -- catching your chest. Compared against a chest's nearestSpawnId -> same namespace.
+    local myTeamCache = nil
     local function myTeamId()
-        if myTeamCache ~= nil and (tick() - myTeamCacheAt) < 5 then return myTeamCache end
-        local pos
+        if myTeamCache ~= nil then return myTeamCache end
         local char = lplr.Character
         local hrp = char and char:FindFirstChild('HumanoidRootPart')
-        if hrp then pos = hrp.Position end
+        local pos = hrp and hrp.Position or nil
         local id = pos and nearestSpawnId(pos) or nil
-        if id then myTeamCache, myTeamCacheAt = id, tick() end
+        if id then myTeamCache = id end   -- lock it in for the match once known
         return id
     end
 
@@ -11921,14 +11921,6 @@ run(function()
     	local chest = v.Adornee:FindFirstChild('ChestFolderValue')
     	chest = chest and chest.Value or nil
     	if not chest then
-    		v.Enabled = false
-    		return
-    	end
-
-    	-- Only show loot on ENEMY chests. Your own team's chest is hidden unless
-    	-- "Show Own Team" is on. (Same team-id-vs-attribute string fix as the alert:
-    	-- chestTeam is a number, the Team attribute is a string.)
-    	if not (ShowOwnTeam and ShowOwnTeam.Enabled) and isOwnTeam(chestTeam(v.Adornee)) then
     		v.Enabled = false
     		return
     	end
@@ -12154,16 +12146,6 @@ run(function()
     ShowAll = StorageESP:CreateToggle({
     	Name = 'Show All Items',
     	Tooltip = 'Show EVERY item stored in the chest, ignoring the item whitelist above',
-    	Default = false,
-    	Function = function()
-    		for _, v in Reference do
-    			task.spawn(refreshAdornee, v)
-    		end
-    	end,
-    })
-    ShowOwnTeam = StorageESP:CreateToggle({
-    	Name = 'Show Own Team',
-    	Tooltip = "Also show loot on your OWN team's chest. Off (default) = enemy chests only.",
     	Default = false,
     	Function = function()
     		for _, v in Reference do
