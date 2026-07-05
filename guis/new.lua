@@ -6674,15 +6674,18 @@ local function showPatchNotes(force)
 	okay.MouseButton1Click:Connect(dismiss)
 end
 
--- Preview hook: run `getgenv().vainShowPatchNotes()` in your executor console to
--- see the popup any time (forced, doesn't touch patchseen.txt).
-if getgenv then getgenv().vainShowPatchNotes = function() showPatchNotes(true) end end
+-- Exposed so the loader (main.lua) can decide WHEN to show it -- after the Vain
+-- loading screen fades on an update, or right away otherwise. `force` shows it
+-- regardless of patchseen.txt (used for testing).
+if getgenv then getgenv().vainShowPatchNotes = function(force) showPatchNotes(force) end end
 
--- TEST PREVIEW: force the panel every load so you can test the new features
--- before publishing. It does NOT record patchseen.txt (forced), so it keeps
--- showing until we switch this back.
--- To restore normal one-time behaviour, change this to: task.spawn(showPatchNotes)
-task.spawn(function() task.wait(0.4) showPatchNotes(true) end)
+-- TEST PREVIEW: force-show every load so the new features can be tested before
+-- publishing. main.lua also calls this after the loading screen; guard against a
+-- double-show. To restore normal one-time behaviour, change `showPatchNotes(true)`
+-- to `showPatchNotes()`.
+if not getgenv or not getgenv().vainLoading or not getgenv().vainLoading.isActive() then
+	task.spawn(function() task.wait(0.4) showPatchNotes(true) end)
+end
 
 mainapi:Clean(gui:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
 	if mainapi.Scale.Enabled then

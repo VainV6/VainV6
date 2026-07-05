@@ -38,6 +38,8 @@ local function downloadFile(path, func)
 		end
 	end
 	if not isfile(path) then
+		-- surface progress on the Vain loading screen (built lazily in init.lua)
+		if getgenv and getgenv().vainLoading then getgenv().vainLoading.status('Downloading '..path) end
 		local commit = (readfile('vain/profiles/commit.txt') or ''):match('^%s*(.-)%s*$')
 		if commit == '' then commit = 'main' end
 		local suc, res = pcall(function()
@@ -50,6 +52,7 @@ local function downloadFile(path, func)
 			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vain updates.\n'..res
 		end
 		writefile(path, res)
+		if getgenv and getgenv().vainLoading then getgenv().vainLoading.bump() end
 	end
 	return (func or readfile)(path)
 end
@@ -571,6 +574,16 @@ end
 
 local function finishLoading()
 	vain.Init = nil
+
+	-- If the Vain loading screen was shown (a fresh install / update), everything
+	-- is now loaded: fill + fade it out, then show the What's New panel. (When no
+	-- loading screen ran, new.lua shows What's New on its own.)
+	local loading = getgenv and getgenv().vainLoading
+	if loading and loading.isActive() then
+		loading.finish(function()
+			if getgenv().vainShowPatchNotes then getgenv().vainShowPatchNotes(true) end
+		end)
+	end
 
 	-- Load saved settings and start the local save loop FIRST. These are fast,
 	-- local-only operations, so the GUI becomes usable immediately.
