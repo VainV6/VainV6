@@ -954,7 +954,19 @@ run(function()
 	local Flamework = require(replicatedStorage['rbxts_include']['node_modules']['@flamework'].core.out).Flamework
 	local InventoryUtil = require(replicatedStorage.TS.inventory['inventory-util']).InventoryUtil
 	local Client = require(replicatedStorage.TS.remotes).default.Client
-	local OldGet, OldBreak = Client.Get, nil
+	-- REINJECT SAFETY: these functions live on the game's LIVE Knit objects, which
+	-- persist across a Vain re-inject. If we captured them normally we'd capture the
+	-- PREVIOUS session's Vain wrapper (still installed) instead of the game's real
+	-- function -- nesting wrappers on every re-inject, and one broken link makes
+	-- every block look unbreakable (that's the "can't break blocks after reinject"
+	-- bug). So we stash the PRISTINE originals in getgenv the first time only, and
+	-- always wrap from those. `vainOriginals` survives across injects.
+	local vainOriginals = getgenv().vainBwOriginals or {}
+	getgenv().vainBwOriginals = vainOriginals
+	local OldGet = vainOriginals.ClientGet or Client.Get
+	vainOriginals.ClientGet = OldGet
+	local OldBreak = nil
+	local OldHit = nil
 
 	bedwars = setmetatable({
 		AbilityController = Flamework.resolveDependency('@easy-games/game-core:client/controllers/ability/ability-controller@AbilityController'),
@@ -1189,8 +1201,12 @@ run(function()
 	end
     getgenv().remotes = remotes
 
-	OldBreak = bedwars.BlockController.isBlockBreakable
-	OldHit = bedwars.BlockBreaker.hitBlock
+	-- capture the PRISTINE originals (never an already-installed Vain wrapper) so a
+	-- re-inject wraps the game's real functions, not last session's wrapper.
+	OldBreak = vainOriginals.isBlockBreakable or bedwars.BlockController.isBlockBreakable
+	vainOriginals.isBlockBreakable = OldBreak
+	OldHit = vainOriginals.hitBlock or bedwars.BlockBreaker.hitBlock
+	vainOriginals.hitBlock = OldHit
 
 	bedwars.BlockBreaker.hitBlock = function(...)
         pcall(function() store.lastHit = tick() end)
