@@ -790,6 +790,159 @@ run(function()
 		Tooltip = 'Notify each sweep with what it reinforced / garrisoned / hardened / held.' })
 end)
 
+-- ══════════════════════════════════════════════════════════════════════════════
+--  AUTO ALLIANCE BANK  (dump overflow manpower into the alliance bank when full)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- Manpower is read live from CountryRegistry.<country>.Manpower (same source the
+-- rest of the file uses). Manpower is capped -- we find that cap from a sibling
+-- value (MaxManpower / ManpowerCap / ManpowerMax / ...) or a country attribute; if
+-- the game exposes no cap value, you can set a manual "treat as max" amount so the
+-- module still works. When manpower reaches the cap it would otherwise be wasted,
+-- so we deposit the overflow (manpower minus a keep-reserve) into the alliance bank.
+--
+-- The alliance deposit action is fired through the game's action remote. We don't
+-- have a decompiled place file for this game, so instead of hardcoding one name we
+-- try the plausible alliance-deposit action names AND fire any alliance-specific
+-- RemoteEvent we can discover in ReplicatedStorage. The server validates the
+-- deposit, so attempting a name it doesn't know is harmless.
+run(function()
+	local AutoAllianceBank
+	local KeepReserve, ManualCap, Threshold, Interval, Notify
+
+	-- read the manpower cap for a country: a sibling Value, then an attribute, then
+	-- the manual override slider (in thousands). Returns nil if genuinely unknown.
+	local function manpowerCap(country)
+		local cf = countryFolder(country)
+		if cf then
+			for _, name in { 'MaxManpower', 'ManpowerCap', 'ManpowerMax', 'MaxManpwer', 'ManpowerLimit', 'MaxMP' } do
+				local v = cf:FindFirstChild(name)
+				if v and v.Value and v.Value > 0 then return v.Value end
+			end
+			for _, name in { 'MaxManpower', 'ManpowerCap', 'ManpowerMax', 'ManpowerLimit' } do
+				local a = cf:GetAttribute(name)
+				if type(a) == 'number' and a > 0 then return a end
+			end
+		end
+		local manual = (ManualCap and ManualCap.Value or 0) * 1e3
+		if manual > 0 then return manual end
+		return nil
+	end
+
+	-- discover an alliance-related RemoteEvent once (cached), so we can fire it
+	-- directly in addition to the generic action remote.
+	local allianceRemote
+	local function getAllianceRemote()
+		if allianceRemote and allianceRemote.Parent then return allianceRemote end
+		for _, r in replicatedStorage:GetDescendants() do
+			if (r:IsA('RemoteEvent') or r:IsA('RemoteFunction')) then
+				local n = r.Name:lower()
+				if n:find('alliance') and (n:find('deposit') or n:find('bank') or n:find('donate') or n:find('manpower')) then
+					allianceRemote = r return r
+				end
+			end
+		end
+		-- weaker match: anything alliance-y
+		for _, r in replicatedStorage:GetDescendants() do
+			if (r:IsA('RemoteEvent') or r:IsA('RemoteFunction')) and r.Name:lower():find('alliance') then
+				allianceRemote = r return r
+			end
+		end
+		return nil
+	end
+
+	-- fire a deposit of `amount` manpower into the alliance bank across every
+	-- plausible channel; server ignores the ones that don't apply.
+	local function deposit(amount)
+		amount = math.floor(amount)
+		if amount <= 0 then return false end
+		local fired = false
+		-- 1) generic action remote with the likely action names
+		for _, action in { 'DepositManpower', 'AllianceDeposit', 'DepositToAlliance', 'DonateManpower', 'AllianceBankDeposit', 'BankDeposit' } do
+			if fireAction(action, 'Manpower', amount) then fired = true end
+			fireAction(action, amount)
+		end
+		-- 2) a discovered alliance remote, a couple of arg shapes
+		local ar = getAllianceRemote()
+		if ar then
+			pcall(function()
+				if ar:IsA('RemoteEvent') then
+					ar:FireServer('Deposit', 'Manpower', amount)
+					ar:FireServer('DepositManpower', amount)
+				else
+					ar:InvokeServer('Deposit', 'Manpower', amount)
+				end
+			end)
+			fired = true
+		end
+		return fired
+	end
+
+	local function sweep()
+		local mine = lplr:GetAttribute('MyCountry')
+		if not mine then return end
+		local _, manpower = getBalance(mine)
+		if not manpower then return end
+		local cap = manpowerCap(mine)
+		local keep = (KeepReserve and KeepReserve.Value or 0) * 1e3
+
+		-- "at max" = manpower has reached the threshold fraction of the cap. If no cap
+		-- is known, fall back to: deposit anything above the keep-reserve.
+		local trigger
+		if cap then
+			trigger = manpower >= cap * ((Threshold and Threshold.Value or 98) / 100)
+		else
+			trigger = manpower > keep
+		end
+		if not trigger then return end
+
+		local overflow = manpower - keep
+		if cap then overflow = math.min(overflow, manpower - keep) end
+		if overflow <= 0 then return end
+
+		if deposit(overflow) and Notify.Enabled then
+			notif('Alliance Bank', string.format('Deposited %s manpower (was at %s%s)',
+				fmtNum(overflow), fmtNum(manpower), cap and ('/' .. fmtNum(cap)) or ''), 4, 'success')
+		end
+	end
+
+	AutoAllianceBank = vain.Categories.Utility:CreateModule({
+		Name = 'Auto Alliance Bank',
+		Tooltip = "Once your country's manpower hits its cap it stops growing and is wasted -- this deposits the overflow into your alliance bank automatically. It finds your manpower cap from CountryRegistry (or use the manual cap if the game exposes none), and always keeps your reserve. Requires you to actually be in an alliance.",
+		Function = function(callback)
+			if callback then
+				local mine = lplr:GetAttribute('MyCountry')
+				local _, mp = getBalance(mine)
+				local cap = manpowerCap(mine)
+				local ar  = getAllianceRemote()
+				notif('Auto Alliance Bank', string.format(
+					'%s | manpower %s | cap %s | alliance remote %s',
+					getActionRemote() and 'Action OK' or 'NO REMOTE',
+					mp and fmtNum(mp) or '?',
+					cap and fmtNum(cap) or 'UNKNOWN (set Manual Cap)',
+					ar and ar.Name or 'not found (using action remote)'),
+					8, (getActionRemote() and mp and (cap or (ManualCap and ManualCap.Value > 0))) and nil or 'warning')
+				AutoAllianceBank:Clean(task.spawn(function()
+					while AutoAllianceBank.Enabled do
+						sweep()
+						task.wait(Interval and Interval.Value or 5)
+					end
+				end))
+			end
+		end
+	})
+
+	KeepReserve = AutoAllianceBank:CreateSlider({ Name = 'Keep Reserve', Min = 0, Max = 1000, Default = 50, Suffix = 'K',
+		Tooltip = 'Always keep at least this much manpower for yourself -- only the amount above it is deposited.' })
+	Threshold = AutoAllianceBank:CreateSlider({ Name = 'Deposit At', Min = 50, Max = 100, Default = 98, Suffix = '%',
+		Tooltip = 'Deposit once manpower reaches this percent of your cap (100% = only when completely full).' })
+	ManualCap = AutoAllianceBank:CreateSlider({ Name = 'Manual Cap', Min = 0, Max = 5000, Default = 0, Suffix = 'K',
+		Tooltip = 'Only used if the game exposes no manpower cap value. Set your known max manpower (in thousands) so the module knows when you are full. Leave at 0 to auto-detect.' })
+	Interval = AutoAllianceBank:CreateSlider({ Name = 'Interval', Min = 1, Max = 60, Default = 5, Suffix = 'sec',
+		Tooltip = 'How often to check whether manpower has hit the cap.' })
+	Notify = AutoAllianceBank:CreateToggle({ Name = 'Notify', Default = true,
+		Tooltip = 'Notify each time it deposits manpower into the alliance bank.' })
+end)
+
 run(function()
 	-- ── Highlight Owned ───────────────────────────────────────────────────────
 	-- The Formables / transformation menu (PlayerGui.MainUI ... Formables) lists
