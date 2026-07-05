@@ -70,14 +70,14 @@ do
 		-- one label so the sheen sweeps the whole word seamlessly.
 		local wordmark = Instance.new('TextLabel')
 		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
-		wordmark.Position = UDim2.new(0.5, 0, 0.5, -66)   -- lifted up for more gap to the bar
-		wordmark.Size = UDim2.fromOffset(520, 120)        -- taller
+		wordmark.Position = UDim2.new(0.5, 0, 0.5, -78)   -- lifted up for more gap to the bar
+		wordmark.Size = UDim2.fromOffset(680, 150)        -- bigger
 		wordmark.BackgroundTransparency = 1
 		wordmark.Text = 'V A I N'                          -- spaces = wide modern tracking
 		wordmark.TextXAlignment = Enum.TextXAlignment.Center
 		wordmark.TextYAlignment = Enum.TextYAlignment.Center
 		wordmark.Font = Enum.Font.GothamBold
-		wordmark.TextSize = 96                             -- bigger
+		wordmark.TextSize = 130                            -- bigger
 		wordmark.RichText = false
 		-- white base so the gradient defines the colour purely (UIGradient multiplies
 		-- against TextColor3), exactly like the logo.
@@ -151,10 +151,11 @@ do
 		Instance.new('UICorner', barFill).CornerRadius = UDim.new(1, 0)
 		-- (no shimmer on the bar -- the shimmer lives on the VAIN title only)
 
-		-- percentage centred above the bar
+		-- percentage centred RIGHT ABOVE the bar (bar sits at +66, ~8px tall -> its
+		-- top edge is ~+62; place the label just above that)
 		local ringPct = Instance.new('TextLabel')
-		ringPct.AnchorPoint = Vector2.new(0.5, 0.5)
-		ringPct.Position = UDim2.new(0.5, 0, 0.5, 18)
+		ringPct.AnchorPoint = Vector2.new(0.5, 1)   -- anchor its BOTTOM so it sits above
+		ringPct.Position = UDim2.new(0.5, 0, 0.5, 56)
 		ringPct.Size = UDim2.fromOffset(120, 22)
 		ringPct.BackgroundTransparency = 1
 		ringPct.Font = Enum.Font.GothamBold
