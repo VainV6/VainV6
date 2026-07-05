@@ -17,6 +17,7 @@ local mainapi = {
 	-- auto-diff). Keys are exact module names; value is 'NEW' or 'UPD'.
 	ModuleBadges = {
 		['Loot Display'] = 'NEW',
+		['Chat Reveal'] = 'NEW',
 		['Cheat Detector'] = 'NEW',
 		['Better Spectating'] = 'NEW',
 		['Preparation Preview'] = 'NEW',
