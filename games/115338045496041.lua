@@ -412,6 +412,384 @@ run(function()
 	Interval = Intel:CreateSlider({ Name = 'Refresh', Min = 5, Max = 120, Default = 25, Suffix = 'sec', Tooltip = 'How often to refresh the intel feed.' })
 end)
 
+-- ══════════════════════════════════════════════════════════════════════════════
+--  AUTO DEFENSE  (adaptive, threat-scored defence of your whole country)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- Confirmed from the place file / previous build:
+--   * tiles live in workspace.Regions (cached as _G.regionsChildren). Owned when
+--     GetAttribute('Country') == MyCountry. CANNOT spawn on a tile whose
+--     'OccupiedFrom' attribute is set (server rejects it -> "occupied territory").
+--   * geometry is the tile's GeneratedRegion model (pivot = tile centre).
+--   * soldiers live in workspace.SoldiersFolder, each has a 'Country' attribute, a
+--     'LastFightTick' that updates in combat, and (usually) an 'Amount'/'Count'/'Size'
+--     attribute for how many men the stack holds.
+--   * spawn troops : Network:FireServer('CreateArmyOnTile', tile, unitTypeString, count)
+--   * harden tile  : Network:FireServer('DevelopTile', tile, 'Def')      (raise DefenceTier)
+--   * hold soldier : Network:FireServer('ToggleAutoCapture', soldier, false)  (stop advancing)
+--
+-- Unlike a flat garrison, this build SCORES every frontier tile by the enemy
+-- pressure against it (nearby hostile manpower + the adjacent enemy tile's
+-- DefenceTier + whether it is actively in combat) and spends its budget on the
+-- most-threatened tiles first, hardens the hottest borders, protects your capital
+-- first, and can pull your soldiers back from a fight they're losing.
+run(function()
+	local AutoDefense
+	local UnitType, DefendBattles, HardenBorders, HoldWhenLosing, ProtectCapital
+	local BaseGarrison, BattleMultiplier, HardenThreshold, CapitalGarrison
+	local MoneyReserve, ManpowerReserve, MaxSpendPct, Interval, Notify
+
+	local function regionTiles()
+		if type(_G.regionsChildren) == 'table' and #_G.regionsChildren > 0 then
+			return _G.regionsChildren
+		end
+		local r = workspace:FindFirstChild('Regions')
+		return r and r:GetChildren() or {}
+	end
+	local function soldiersFolder() return workspace:FindFirstChild('SoldiersFolder') end
+
+	-- how many men a soldier stack represents (best-effort across attribute names)
+	local function soldierAmount(s)
+		return s:GetAttribute('Amount') or s:GetAttribute('Count')
+			or s:GetAttribute('Size') or s:GetAttribute('Troops') or 1
+	end
+	local function soldierPos(s)
+		local ok, p = pcall(function() return s:GetPivot().Position end)
+		if ok and p then return p end
+		local bp = s:IsA('Model') and s:FindFirstChildWhichIsA('BasePart', true)
+		return bp and bp.Position or nil
+	end
+
+	local function tilePos(t)
+		local geo = t:FindFirstChild('GeneratedRegion') or t
+		local ok, p = pcall(function() return geo:GetPivot().Position end)
+		if ok and p then return p end
+		local bp = (geo:IsA('BasePart') and geo) or geo:FindFirstChildWhichIsA('BasePart', true)
+		return bp and bp.Position or nil
+	end
+	-- I own it and it is not occupied (occupied tiles reject spawns)
+	local function spawnable(t, mine)
+		return t:GetAttribute('Country') == mine and t:GetAttribute('OccupiedFrom') == nil
+	end
+
+	-- typical tile spacing = median nearest-neighbour distance, cached; the
+	-- adjacency threshold for "these two tiles touch".
+	local adjDist
+	local function adjacencyDist(snapshot)
+		if adjDist then return adjDist end
+		local nn = {}
+		for i = 1, #snapshot do
+			local best
+			for j = 1, #snapshot do
+				if i ~= j then
+					local d = (snapshot[i].pos - snapshot[j].pos).Magnitude
+					if not best or d < best then best = d end
+				end
+			end
+			if best then table.insert(nn, best) end
+		end
+		if #nn == 0 then return 60 end
+		table.sort(nn)
+		adjDist = nn[math.ceil(#nn / 2)]
+		return adjDist
+	end
+
+	-- snapshot every tile once per sweep
+	local function snapshotTiles(mine)
+		local all = {}
+		for _, t in regionTiles() do
+			local p = tilePos(t)
+			if p then
+				table.insert(all, {
+					tile = t, pos = p,
+					country = t:GetAttribute('Country'),
+					mine = t:GetAttribute('Country') == mine,
+					canSpawn = spawnable(t, mine),
+					pop = t:GetAttribute('DefaultPopulation') or 0,
+					defTier = t:GetAttribute('DefenceTier') or 1,
+				})
+			end
+		end
+		return all
+	end
+
+	-- index enemy soldiers once per sweep: {pos, amount, fighting}
+	local function enemyForces(mine)
+		local sf = soldiersFolder()
+		local out = {}
+		if not sf then return out end
+		local now = tick()
+		for _, s in sf:GetChildren() do
+			local sc = s:GetAttribute('Country')
+			if sc and sc ~= mine then
+				local p = soldierPos(s)
+				if p then
+					local lf = s:GetAttribute('LastFightTick')
+					table.insert(out, {
+						pos = p,
+						amount = tonumber(soldierAmount(s)) or 1,
+						fighting = type(lf) == 'number' and (now - lf) < 6,
+					})
+				end
+			end
+		end
+		return out
+	end
+
+	-- my own soldiers, with their stack, so we can pull them back if losing
+	local function myForces(mine)
+		local sf = soldiersFolder()
+		local out = {}
+		if not sf then return out end
+		for _, s in sf:GetChildren() do
+			if s:GetAttribute('Country') == mine then
+				local p = soldierPos(s)
+				if p then table.insert(out, { inst = s, pos = p, amount = tonumber(soldierAmount(s)) or 1 }) end
+			end
+		end
+		return out
+	end
+
+	-- Score each spawnable frontier tile by the ENEMY PRESSURE bearing on it:
+	--   pressure = sum(enemy manpower within ~1.5 tiles, distance-weighted)
+	--            + (adjacent enemy tile's DefenceTier * 500)
+	--            + (in active combat ? big flat bonus)
+	-- Returns a sorted-by-pressure list of { tile, pressure, contested, myNear }.
+	local function scoreFrontier(all, enemies, mine)
+		local thresh = adjacencyDist(all)
+		local myTroopsNear = {}   -- tile -> my manpower sitting on/near it
+		for _, f in myForces(mine) do
+			for _, o in all do
+				if o.canSpawn and (o.pos - f.pos).Magnitude <= thresh * 0.75 then
+					myTroopsNear[o.tile] = (myTroopsNear[o.tile] or 0) + f.amount
+				end
+			end
+		end
+
+		local scored = {}
+		for _, o in all do
+			if o.canSpawn then
+				local pressure, contested = 0, false
+				-- enemy soldiers bearing on this tile
+				for _, e in enemies do
+					local d = (o.pos - e.pos).Magnitude
+					if d <= thresh * 1.5 then
+						local w = 1 - (d / (thresh * 1.5)) * 0.6   -- closer = heavier
+						pressure += e.amount * w
+						if e.fighting and d <= thresh then contested = true end
+					end
+				end
+				-- adjacency to a strong enemy tile is standing pressure even with no
+				-- soldiers currently on the map
+				for _, x in all do
+					if not x.mine and x.country ~= nil and (o.pos - x.pos).Magnitude <= thresh * 1.5 then
+						pressure += x.defTier * 300
+					end
+				end
+				if pressure > 0 or contested then
+					if contested then pressure += 5000 end
+					table.insert(scored, {
+						tile = o.tile, pressure = pressure, contested = contested,
+						defTier = o.defTier, pop = o.pop,
+						myNear = myTroopsNear[o.tile] or 0,
+					})
+				end
+			end
+		end
+		table.sort(scored, function(a, b) return a.pressure > b.pressure end)
+		return scored
+	end
+
+	-- highest-population spawnable tiles = your heartland/capital, defended first
+	local function capitalTiles(all, n)
+		local mineSpawn = {}
+		for _, o in all do if o.canSpawn then table.insert(mineSpawn, o) end end
+		table.sort(mineSpawn, function(a, b) return a.pop > b.pop end)
+		local out = {}
+		for i = 1, math.min(n, #mineSpawn) do table.insert(out, mineSpawn[i]) end
+		return out
+	end
+
+	local lastSpawn = {}   -- anti-spam per tile
+	local lastHarden = {}
+
+	local function sweep()
+		local mine = lplr:GetAttribute('MyCountry')
+		if not (mine and getActionRemote()) then return end
+
+		local moneyReserve = (MoneyReserve.Value or 0) * 1e6
+		local mpReserve    = (ManpowerReserve.Value or 0) * 1e3
+		local unit    = (UnitType and UnitType.Value) or 'Soldier'
+		local baseGar = math.floor(BaseGarrison.Value)
+		local battleX = BattleMultiplier.Value or 2
+		local capGar  = math.floor(CapitalGarrison.Value)
+
+		-- adaptive budget: at most MaxSpendPct of spendable money this sweep
+		local money0, mp0 = getBalance(mine)
+		money0 = money0 or 0
+		mp0 = mp0 or math.huge
+		local spendable = math.max(0, money0 - moneyReserve)
+		local budget = spendable * ((MaxSpendPct.Value or 50) / 100)
+		local spent = 0
+
+		local reinforced, garrisoned, hardened, held = 0, 0, 0, 0
+
+		local function canSpend(estCost)
+			if spent + estCost > budget then return false end
+			local m, p = getBalance(mine)
+			if m and (m - estCost) <= moneyReserve then return false end
+			if p and p <= mpReserve then return false end
+			return true
+		end
+
+		-- rough per-unit money cost (defensive spawns are cheap vs upgrades; we bias
+		-- the estimate high so the reserve is genuinely protected)
+		local function spawnCost(count) return count * 250 end
+
+		local function spawn(tile, count, force)
+			if count <= 0 then return false end
+			local now = tick()
+			if not force and lastSpawn[tile] and (now - lastSpawn[tile]) < (Interval.Value or 8) then
+				return false
+			end
+			local est = spawnCost(count)
+			if not canSpend(est) then return false end
+			lastSpawn[tile] = now
+			spent += est
+			fireAction('CreateArmyOnTile', tile, unit, count)
+			task.wait(0.14)
+			return true
+		end
+
+		local all     = snapshotTiles(mine)
+		local enemies  = enemyForces(mine)
+		local scored   = scoreFrontier(all, enemies, mine)
+
+		-- 1) CAPITAL FIRST -- always keep the heartland stocked
+		if ProtectCapital.Enabled then
+			for _, o in capitalTiles(all, 3) do
+				if not AutoDefense.Enabled then break end
+				if spawn(o.tile, capGar, false) then garrisoned += 1 end
+			end
+		end
+
+		-- 2) THREAT-SCORED FRONTIER -- spend on the hottest borders first, sizing the
+		--    garrison to the pressure and to what I already have sitting there.
+		for _, s in scored do
+			if not AutoDefense.Enabled then break end
+			-- target strength scales with pressure; contested tiles get the multiplier
+			local want = baseGar + math.floor(math.min(s.pressure, 20000) / 1000) * baseGar
+			if s.contested and DefendBattles.Enabled then want = math.floor(want * battleX) end
+			local deficit = want - s.myNear
+			if deficit > 0 then
+				if spawn(s.tile, deficit, s.contested) then
+					if s.contested then reinforced += 1 else garrisoned += 1 end
+				end
+			end
+
+			-- 3) HARDEN the very hottest borders (raise DefenceTier) when they're
+			--    under sustained pressure and not already maxed.
+			if HardenBorders.Enabled and s.defTier < 10 and s.pressure >= (HardenThreshold.Value or 3000) then
+				local now = tick()
+				if not lastHarden[s.tile] or (now - lastHarden[s.tile]) > 15 then
+					local c = tileCosts(s.tile)
+					if c and canSpend(c.defMoney) and (mp0 - c.defManpower) > mpReserve then
+						lastHarden[s.tile] = now
+						spent += c.defMoney
+						fireAction('DevelopTile', s.tile, 'Def')
+						hardened += 1
+						task.wait(0.14)
+					end
+				end
+			end
+		end
+
+		-- 4) HOLD WHEN LOSING -- if a frontier fight is badly outnumbered, stop my
+		--    soldiers there from advancing so they consolidate instead of trickling in.
+		if HoldWhenLosing.Enabled then
+			local thresh = adjacencyDist(all)
+			for _, f in myForces(mine) do
+				if not AutoDefense.Enabled then break end
+				local enemyNear, mineNear = 0, f.amount
+				for _, e in enemies do
+					if (f.pos - e.pos).Magnitude <= thresh then enemyNear += e.amount end
+				end
+				for _, g in myForces(mine) do
+					if g.inst ~= f.inst and (f.pos - g.pos).Magnitude <= thresh then mineNear += g.amount end
+				end
+				-- outnumbered 2:1 or worse -> hold position
+				if enemyNear >= mineNear * 2 and enemyNear > 0 then
+					fireAction('ToggleAutoCapture', f.inst, false)
+					held += 1
+					task.wait(0.05)
+				end
+			end
+		end
+
+		if Notify.Enabled and (reinforced + garrisoned + hardened + held) > 0 then
+			notif('Auto Defense', string.format(
+				'reinforced %d | garrisoned %d | hardened %d | held %d  ($%s spent)',
+				reinforced, garrisoned, hardened, held, fmtNum(spent)), 4)
+		end
+	end
+
+	AutoDefense = vain.Categories.Utility:CreateModule({
+		Name = 'Auto Defense',
+		Function = function(callback)
+			if callback then
+				local mine    = lplr:GetAttribute('MyCountry')
+				local all     = snapshotTiles(mine)
+				local enemies = enemyForces(mine)
+				local scored  = scoreFrontier(all, enemies, mine)
+				local spawnCnt = 0
+				for _, o in all do if o.canSpawn then spawnCnt += 1 end end
+				notif('Auto Defense', string.format(
+					'%s | tiles %d | spawnable %d | frontier %d | enemy stacks %d | soldiers %s',
+					getActionRemote() and 'Remote OK' or 'NO REMOTE',
+					#all, spawnCnt, #scored, #enemies,
+					soldiersFolder() and 'OK' or 'MISSING'), 8,
+					(getActionRemote() and mine and spawnCnt > 0) and nil or 'warning')
+				AutoDefense:Clean(task.spawn(function()
+					repeat
+						sweep()
+						task.wait(Interval and Interval.Value or 8)
+					until not AutoDefense.Enabled
+				end))
+			end
+		end,
+		Tooltip = 'Adaptive whole-country defence. Scores every frontier tile by the enemy pressure against it (nearby hostile troops + adjacent enemy defence + active combat) and spends first on the most-threatened borders, hardens the hottest tiles, always keeps your capital garrisoned, and can pull soldiers back from a fight they are losing. Respects money/manpower reserves and a per-sweep spend cap.'
+	})
+
+	UnitType = AutoDefense:CreateDropdown({ Name = 'Unit',
+		List = { 'Soldier', 'Tank', 'Artillery', 'AntiAircraft' }, Default = 'Soldier',
+		Tooltip = 'Which unit type to spawn when garrisoning/reinforcing.' })
+	BaseGarrison = AutoDefense:CreateSlider({ Name = 'Base Garrison', Min = 1, Max = 500, Default = 15,
+		Tooltip = 'Baseline troops per frontier tile. The real target scales UP with how much enemy pressure that tile is under.' })
+	BattleMultiplier = AutoDefense:CreateSlider({ Name = 'Battle Multiplier', Min = 1, Max = 6, Default = 2,
+		Tooltip = 'A tile in active combat gets its target garrison multiplied by this.' })
+	CapitalGarrison = AutoDefense:CreateSlider({ Name = 'Capital Garrison', Min = 0, Max = 1000, Default = 40,
+		Tooltip = 'Troops to keep on each of your 3 highest-population (capital) tiles, defended before anything else.' })
+	DefendBattles = AutoDefense:CreateToggle({ Name = 'Reinforce Battles', Default = true,
+		Tooltip = 'Rush extra troops (with the battle multiplier) to any owned tile with active enemy combat on it.' })
+	HardenBorders = AutoDefense:CreateToggle({ Name = 'Harden Borders', Default = true,
+		Tooltip = "Auto-raise DefenceTier on the hottest frontier tiles once they cross the harden threshold (costs money + manpower)." })
+	HardenThreshold = AutoDefense:CreateSlider({ Name = 'Harden Threshold', Min = 500, Max = 20000, Default = 3000,
+		Tooltip = 'Enemy-pressure score a tile must reach before its defence is upgraded. Lower = hardens more tiles, more spending.' })
+	ProtectCapital = AutoDefense:CreateToggle({ Name = 'Protect Capital', Default = true,
+		Tooltip = 'Always garrison your 3 highest-population tiles first, even if the frontier is quiet.' })
+	HoldWhenLosing = AutoDefense:CreateToggle({ Name = 'Hold When Losing', Default = true,
+		Tooltip = 'If your soldiers in a fight are outnumbered 2:1 or worse, stop them auto-advancing so they consolidate instead of feeding the fight piecemeal.' })
+	MoneyReserve = AutoDefense:CreateSlider({ Name = 'Money Reserve', Min = 0, Max = 500, Default = 5, Suffix = 'M',
+		Tooltip = 'Never let money drop below this.' })
+	ManpowerReserve = AutoDefense:CreateSlider({ Name = 'Manpower Reserve', Min = 0, Max = 1000, Default = 20, Suffix = 'K',
+		Tooltip = 'Never let manpower drop below this.' })
+	MaxSpendPct = AutoDefense:CreateSlider({ Name = 'Max Spend / Sweep', Min = 5, Max = 100, Default = 50, Suffix = '%',
+		Tooltip = 'Cap how much of your spendable money (money minus reserve) a single sweep may use, so a huge front cannot bankrupt you at once.' })
+	Interval = AutoDefense:CreateSlider({ Name = 'Interval', Min = 1, Max = 60, Default = 6, Suffix = 'sec',
+		Tooltip = 'How often to re-scan the front and re-defend.' })
+	Notify = AutoDefense:CreateToggle({ Name = 'Notify', Default = false,
+		Tooltip = 'Notify each sweep with what it reinforced / garrisoned / hardened / held.' })
+end)
+
 run(function()
 	-- ── Highlight Owned ───────────────────────────────────────────────────────
 	-- The Formables / transformation menu (PlayerGui.MainUI ... Formables) lists
@@ -434,15 +812,47 @@ run(function()
 		return hasName ~= nil and locked ~= nil
 	end
 
-	-- owned = the LOCKED frame is gone or not visible (game hides it once unlocked)
+	-- owned = you already have / have transformed into this formable. The game does
+	-- NOT always signal that the same way: the LOCKED frame may be hidden, OR the
+	-- entry may keep its lock but carry an ownership flag / a "completed"-style tint /
+	-- a done marker (that's why some already-transformed ones weren't being caught).
+	-- We accept ANY of these signals.
 	local function isOwned(entry)
+		-- 1) explicit attribute the game may stamp when you own/completed it
+		for _, k in { 'Owned', 'Completed', 'Complete', 'Done', 'Unlocked', 'Claimed', 'Formed', 'Active' } do
+			if entry:GetAttribute(k) == true then return true end
+		end
 		local locked = entry:FindFirstChild('LOCKED')
+		-- 2) no LOCKED frame at all, or it's hidden -> owned
 		if not locked then return true end
 		if locked:IsA('GuiObject') and locked.Visible == false then return true end
-		-- some builds keep it visible but fully transparent -> treat the Lock image's
-		-- transparency as the signal too
+		-- 3) LOCKED present but its Lock icon is faded out / an attribute marks it done
 		local lock = locked:FindFirstChild('Lock')
-		if lock and lock:IsA('ImageLabel') and lock.ImageTransparency >= 1 then return true end
+		if lock then
+			if lock:IsA('ImageLabel') and lock.ImageTransparency >= 1 then return true end
+			if lock:IsA('GuiObject') and lock.Visible == false then return true end
+		end
+		if locked:IsA('GuiObject') then
+			-- fully transparent LOCKED overlay = shown-but-cleared
+			if locked.BackgroundTransparency >= 1 and (not lock or (lock:IsA('ImageLabel') and lock.ImageTransparency >= 1)) then
+				return true
+			end
+			-- some builds swap the lock for a checkmark / tick child on owned rows
+			for _, d in locked:GetDescendants() do
+				local nm = d.Name:lower()
+				if nm:find('check') or nm:find('tick') or nm:find('owned') or nm:find('done') or nm:find('complete') then
+					if not (d:IsA('GuiObject')) or d.Visible then return true end
+				end
+			end
+		end
+		-- 4) a Done/Owned/Check marker anywhere directly in the entry
+		for _, d in entry:GetChildren() do
+			local nm = d.Name:lower()
+			if (nm:find('owned') or nm:find('check') or nm:find('done') or nm:find('complete') or nm:find('tick'))
+				and (not d:IsA('GuiObject') or d.Visible) then
+				return true
+			end
+		end
 		return false
 	end
 
@@ -509,4 +919,170 @@ run(function()
 			end
 		end
 	})
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
+--  AUTO TRANSFORM  (claim every formable the instant it becomes available)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- The Formables menu (PlayerGui.MainUI ... Formables) lists each transformation as
+-- an entry with a `NAME` label and a `LOCKED` frame. Three states:
+--   * OWNED     -> LOCKED frame hidden/absent            (already have it, skip)
+--   * AVAILABLE -> requirements met but not yet claimed   (CLAIM IT)
+--   * LOCKED    -> requirements unmet                     (skip, wait)
+-- The game wires each entry's own button to its transform handler, so instead of
+-- guessing a remote name we ACTIVATE the entry's button directly (fire its
+-- click/Activated signal). That routes through the game's real transform logic and
+-- the server validates the requirements anyway, so we can safely attempt any entry
+-- that looks available and let the server accept the legitimate ones.
+run(function()
+	local AutoTransform
+	local Interval, OnlyReady, Notify
+	local attempted = {}   -- entry -> last attempt tick (don't spam the same one)
+
+	-- same entry shape as Highlight Owned
+	local function isEntry(f)
+		if not (f and f:IsA('GuiObject')) then return false end
+		return f:FindFirstChild('NAME') ~= nil and f:FindFirstChild('LOCKED') ~= nil
+	end
+
+	-- OWNED = the LOCKED frame is hidden/absent (game removes it once you have it)
+	local function isOwned(entry)
+		local locked = entry:FindFirstChild('LOCKED')
+		if not locked then return true end
+		if locked:IsA('GuiObject') and locked.Visible == false then return true end
+		local lock = locked:FindFirstChild('Lock')
+		if lock and lock:IsA('ImageLabel') and lock.ImageTransparency >= 1 then return true end
+		return false
+	end
+
+	-- AVAILABLE = requirements are MET but you don't own it yet. Formable UIs signal
+	-- "claimable" by recolouring the entry / lock (green tint) or exposing a claim
+	-- button. We treat an entry as available when it is NOT owned and shows any
+	-- ready signal: a greenish lock/entry colour, a visible claim/transform button,
+	-- or an explicit 'CanForm'/'Available'/'Ready' attribute set truthy.
+	local function looksGreen(c)
+		return c and c.G > 0.5 and c.G > c.R * 1.15 and c.G > c.B * 1.15
+	end
+	local function isAvailable(entry)
+		-- explicit attribute wins if the game exposes one
+		for _, k in { 'CanForm', 'Available', 'Ready', 'Claimable', 'Unlocked' } do
+			local v = entry:GetAttribute(k)
+			if v == true then return true end
+			if v == false then return false end
+		end
+		-- a visible button literally labelled to claim/transform
+		for _, d in entry:GetDescendants() do
+			if (d:IsA('TextButton') or d:IsA('ImageButton')) and d.Visible then
+				local t = (d:IsA('TextButton') and d.Text or ''):lower()
+				if t:find('form') or t:find('transform') or t:find('claim') or t:find('unite') then
+					return true
+				end
+			end
+		end
+		-- green tint on the LOCKED frame or its lock icon = requirements met
+		local locked = entry:FindFirstChild('LOCKED')
+		if locked and locked:IsA('GuiObject') then
+			if looksGreen(locked.BackgroundColor3) then return true end
+			local lock = locked:FindFirstChild('Lock')
+			if lock and lock:IsA('ImageLabel') and looksGreen(lock.ImageColor3) then return true end
+		end
+		return false
+	end
+
+	-- find the clickable actuator inside an entry and fire it through the game's own
+	-- handler. Prefer a real Button (fire its Activated / MouseButton1Click); fall
+	-- back to a SelectionButton or the entry itself if it is a button.
+	local function activate(entry)
+		local btns = {}
+		if entry:IsA('TextButton') or entry:IsA('ImageButton') then table.insert(btns, entry) end
+		for _, d in entry:GetDescendants() do
+			if (d:IsA('TextButton') or d:IsA('ImageButton')) and d.Visible then
+				table.insert(btns, d)
+			end
+		end
+		local fired = false
+		for _, b in btns do
+			-- firesignal / fireproximityprompt-style click on the button's events
+			local ok = pcall(function()
+				if type(firesignal) == 'function' then
+					firesignal(b.MouseButton1Click)
+					firesignal(b.Activated)
+				elseif type(getconnections) == 'function' then
+					for _, con in getconnections(b.MouseButton1Click) do
+						if con.Fire then con:Fire() elseif con.Function then con.Function() end
+					end
+					for _, con in getconnections(b.Activated) do
+						if con.Fire then con:Fire() elseif con.Function then con.Function() end
+					end
+				end
+			end)
+			if ok then fired = true end
+		end
+		return fired
+	end
+
+	local function formablesRoots()
+		local pg = lplr:FindFirstChild('PlayerGui')
+		local mainui = pg and pg:FindFirstChild('MainUI')
+		if not mainui then return nil end
+		return mainui
+	end
+
+	local function sweep()
+		local root = formablesRoots()
+		if not root then return 0, 0 end
+		local now = tick()
+		local claimed, seen = 0, 0
+		for _, d in root:GetDescendants() do
+			if isEntry(d) and not isOwned(d) then
+				seen += 1
+				local ready = isAvailable(d)
+				-- OnlyReady off = also try locked ones (server rejects unmet, harmless)
+				if ready or not OnlyReady.Enabled then
+					if not attempted[d] or (now - attempted[d]) > 5 then
+						attempted[d] = now
+						if activate(d) then
+							claimed += 1
+							if Notify.Enabled then
+								local nm = d:FindFirstChild('NAME')
+								local label = (nm and nm:IsA('TextLabel') and nm.Text) or d.Name
+								notif('Auto Transform', 'Claiming ' .. tostring(label), 3, 'success')
+							end
+							task.wait(0.25)
+						end
+					end
+				end
+			end
+		end
+		return claimed, seen
+	end
+
+	AutoTransform = vain.Categories.Utility:CreateModule({
+		Name = 'Auto Transform',
+		Tooltip = 'Automatically claims every transformation (formable) the instant it becomes available -- it watches the transformation menu and activates any formable whose requirements you have met but that you have not yet unlocked. Leave "Only When Ready" on so it only claims ones actually available; turn it off to also attempt locked ones (the server just ignores unmet requirements).',
+		Function = function(callback)
+			if callback then
+				local root = formablesRoots()
+				local _, seen = sweep()
+				notif('Auto Transform', string.format(
+					'%s | unowned formables visible: %d%s',
+					root and 'Menu OK' or 'OPEN THE TRANSFORM MENU',
+					seen, root and '' or ' (open it once so the entries load)'),
+					7, root and nil or 'warning')
+				AutoTransform:Clean(task.spawn(function()
+					while AutoTransform.Enabled do
+						sweep()
+						task.wait(Interval and Interval.Value or 3)
+					end
+				end))
+			end
+		end
+	})
+
+	Interval = AutoTransform:CreateSlider({ Name = 'Check Interval', Min = 1, Max = 30, Default = 3, Suffix = 'sec',
+		Tooltip = 'How often to re-scan the transformation menu for a newly-available formable.' })
+	OnlyReady = AutoTransform:CreateToggle({ Name = 'Only When Ready', Default = true,
+		Tooltip = 'Only claim formables the UI shows as available (requirements met). Turn OFF to also attempt locked ones -- the server ignores any whose requirements you have not met.' })
+	Notify = AutoTransform:CreateToggle({ Name = 'Notify', Default = true,
+		Tooltip = 'Notify when it claims a transformation.' })
 end)
