@@ -18,12 +18,12 @@ local mainapi = {
 	ModuleBadges = {
 		['Loot Display'] = 'NEW',
 		['Cheat Detector'] = 'NEW',
-		['Better Spectating'] = 'UPD',
+		['Better Spectating'] = 'NEW',
+		['Preparation Preview'] = 'NEW',
+		['Show Advanced Stats'] = 'NEW',
 		['Storage ESP'] = 'UPD',
 		['Name Tags'] = 'UPD',
-		['Preparation Preview'] = 'UPD',
 		['Bed Protector'] = 'UPD',
-		['Show Advanced Stats'] = 'UPD',
 	},
 	-- Patch notes shown in the changelog popup (newest first). Each entry is
 	-- { Version = '...', Date = '...', Changes = { 'line', ... } }.
