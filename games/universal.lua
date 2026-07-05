@@ -110,12 +110,25 @@ local function calculateMoveVector(vec)
 	return vec.Unit == vec.Unit and vec.Unit or Vector3.zero
 end
 
+-- Match a player against a list by BOTH username and display name (the UI may
+-- add either), case-insensitively.
+local function inList(list, plr)
+	if not list then return false end
+	local a = plr.Name and plr.Name:lower()
+	local b = plr.DisplayName and plr.DisplayName:lower()
+	for _, v in list do
+		local lv = tostring(v):lower()
+		if lv == a or lv == b then return true end
+	end
+	return false
+end
+
 local function isFriend(plr)
-	return table.find(vain.Categories.Friends.ListEnabled, plr.Name) and true
+	return inList(vain.Categories.Friends.ListEnabled, plr)
 end
 
 local function isTarget(plr)
-	return table.find(vain.Categories.Targets.ListEnabled, plr.Name) and true
+	return inList(vain.Categories.Targets.ListEnabled, plr)
 end
 
 local function canClick()
@@ -558,17 +571,42 @@ run(function()
 			if targetNotifsOn() then vain:CreateNotification('Targets', plr.Name .. ' left the server', 8, 'alert') end
 		end
 	end
-	for _, plr in playersService:GetPlayers() do
-		if plr ~= lplr then
-			if isFriend(plr) then
-				if friendNotifsOn() then vain:CreateNotification('Friends', plr.Name .. ' is in the server', 8, 'success') end
-			elseif isTarget(plr) then
-				if targetNotifsOn() then vain:CreateNotification('Targets', plr.Name .. ' is in the server', 8, 'alert') end
+	-- Initial "is in the server" scan. This run() block executes while universal.lua
+	-- loads -- BEFORE vain:Load() populates the Friends/Targets lists from the saved
+	-- profile -- so scanning immediately finds empty lists and notifies nothing. Defer
+	-- until the GUI is Loaded and the lists exist, and only announce each player once.
+	local announced = {}
+	local function scanServer()
+		for _, plr in playersService:GetPlayers() do
+			if plr ~= lplr and not announced[plr] then
+				if isFriend(plr) then
+					announced[plr] = true
+					if friendNotifsOn() then vain:CreateNotification('Friends', plr.Name .. ' is in the server', 8, 'success') end
+				elseif isTarget(plr) then
+					announced[plr] = true
+					if targetNotifsOn() then vain:CreateNotification('Targets', plr.Name .. ' is in the server', 8, 'alert') end
+				end
 			end
 		end
 	end
+	task.spawn(function()
+		-- wait for the GUI to finish loading (lists populated), then scan
+		for _ = 1, 200 do
+			if vain.Loaded then break end
+			task.wait(0.1)
+		end
+		task.wait(0.5)
+		scanServer()
+	end)
+	-- re-scan whenever the friends/targets lists change (e.g. you add someone who's
+	-- already in the server, or the profile finishes loading late)
+	vain:Clean(vain.Categories.Friends.Update.Event:Connect(scanServer))
+	vain:Clean(vain.Categories.Targets.Update.Event:Connect(scanServer))
 	vain:Clean(playersService.PlayerAdded:Connect(onPlayerAdded))
-	vain:Clean(playersService.PlayerRemoving:Connect(onPlayerRemoving))
+	vain:Clean(playersService.PlayerRemoving:Connect(function(plr)
+		announced[plr] = nil
+		onPlayerRemoving(plr)
+	end))
 
 	vain:Clean(function()
 		entitylib.kill()
