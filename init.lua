@@ -63,38 +63,55 @@ do
 		-- Modern, sleek wordmark: medium-weight GothamBold (not the puffy GothamBlack),
 		-- wide letter-spacing, a flat clean orange, and no heavy outline -- so it reads
 		-- as a crisp modern wordmark rather than a chunky puffy logo.
-		local wordmark = Instance.new('Frame')
+		-- VAIN wordmark, done EXACTLY like the in-app Vain logo (guis/new.lua): a single
+		-- white-base label with the orange metallic 5-keypoint gradient rotated 115 deg
+		-- and a slow shimmer sweep (Offset -1 -> 1) that strafes the bright band across
+		-- the glyphs. Wide letter-spacing via RichText <stroke>-free spaced text kept as
+		-- one label so the sheen sweeps the whole word seamlessly.
+		local wordmark = Instance.new('TextLabel')
 		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
 		wordmark.Position = UDim2.new(0.5, 0, 0.5, -66)   -- lifted up for more gap to the bar
-		wordmark.Size = UDim2.fromOffset(480, 120)        -- taller
+		wordmark.Size = UDim2.fromOffset(520, 120)        -- taller
 		wordmark.BackgroundTransparency = 1
+		wordmark.Text = 'V A I N'                          -- spaces = wide modern tracking
+		wordmark.TextXAlignment = Enum.TextXAlignment.Center
+		wordmark.TextYAlignment = Enum.TextYAlignment.Center
+		wordmark.Font = Enum.Font.GothamBold
+		wordmark.TextSize = 96                             -- bigger
+		wordmark.RichText = false
+		-- white base so the gradient defines the colour purely (UIGradient multiplies
+		-- against TextColor3), exactly like the logo.
+		wordmark.TextColor3 = Color3.new(1, 1, 1)
+		wordmark.TextTransparency = 1
 		wordmark.ZIndex = 3
 		wordmark.Parent = root
-		local wmLayout = Instance.new('UIListLayout')
-		wmLayout.FillDirection = Enum.FillDirection.Horizontal
-		wmLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-		wmLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-		wmLayout.Padding = UDim.new(0, 16) -- wide, modern letter-spacing / tracking
-		wmLayout.Parent = wordmark
 
-		local titleCol = Color3.fromRGB(200, 96, 16) -- darker, deeper orange
-		local letters = {}
-		for i = 1, 4 do
-			local ch = ('VAIN'):sub(i, i)
-			local l = Instance.new('TextLabel')
-			l.LayoutOrder = i
-			l.AutomaticSize = Enum.AutomaticSize.X
-			l.Size = UDim2.fromOffset(0, 120)
-			l.BackgroundTransparency = 1
-			l.Font = Enum.Font.GothamBold      -- medium weight, not puffy
-			l.Text = ch
-			l.TextSize = 96                    -- bigger
-			l.TextColor3 = titleCol
-			l.TextTransparency = 1
-			l.ZIndex = 3
-			l.Parent = wordmark
-			letters[i] = l
-		end
+		-- same 5-keypoint metallic orange gradient + 115 deg rotation as the logo, but
+		-- a DARKER deep-orange base with a bright near-white sheen peak so the shimmer
+		-- reads clearly on the big title.
+		local wmGrad = Instance.new('UIGradient')
+		wmGrad.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0.00, Color3.fromRGB(120, 48, 6)),
+			ColorSequenceKeypoint.new(0.28, Color3.fromRGB(200, 96, 16)),
+			ColorSequenceKeypoint.new(0.48, Color3.fromRGB(255, 240, 210)), -- bright sheen peak
+			ColorSequenceKeypoint.new(0.68, Color3.fromRGB(200, 96, 16)),
+			ColorSequenceKeypoint.new(1.00, Color3.fromRGB(96, 38, 4)),
+		})
+		wmGrad.Rotation = 115
+		wmGrad.Parent = wordmark
+
+		-- slow shimmer sweep across the glyphs (identical technique to the logo)
+		task.spawn(function()
+			while wordmark.Parent and not finished do
+				wmGrad.Offset = Vector2.new(-1, 0)
+				local t = TweenService:Create(wmGrad, TweenInfo.new(2.4, Enum.EasingStyle.Linear), { Offset = Vector2.new(1, 0) })
+				t:Play()
+				t.Completed:Wait()
+			end
+		end)
+
+		-- fade-in still targets `letters` below; keep it a 1-element list for the wordmark
+		local letters = { wordmark }
 
 		-- ── linear progress bar ───────────────────────────────────────────────
 		-- Rounded track + a solid orange fill with a sweeping brighter-orange shimmer
