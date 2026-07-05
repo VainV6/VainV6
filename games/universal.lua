@@ -7439,7 +7439,7 @@ run(function()
 
     ChatReveal = vain.Categories.Utility:CreateModule({
         Name = 'Chat Reveal',
-        Tooltip = 'Reveals chat messages the game hides from you (muted/blocked players, filtered or dropped messages). Cannot show enemy team-only chat or private whispers between other players -- the server never sends those to your client.',
+        Tooltip = 'Reveals hidden chat (muted/blocked or filtered messages). Cannot show enemy team chat or others\' whispers -- the server never sends those to you.',
         Function = function(callback)
             if callback then
                 table.clear(restoreLegacy)
