@@ -1695,17 +1695,6 @@ local Attacking
 ]]
 
 run(function()
-	-- DEBUG: trace which module in this block loaded, so we can see exactly where
-	-- it crashes (this whole run() block holds 5 modules; an error kills the rest).
-	local function trace(name)
-		-- use warn (always visible in console) + a StarterGui toast, so it can't be
-		-- suppressed by notification settings.
-		pcall(function() warn('[VAIN LOAD] '..name) end)
-		pcall(function()
-			game:GetService('StarterGui'):SetCore('SendNotification', { Title = 'VAIN LOAD', Text = name, Duration = 3 })
-		end)
-	end
-	trace('block START (AimAssist run block)')
 local AimAssist
 	local Targets
 	local Sort
@@ -1893,7 +1882,6 @@ local AimAssist
 		vain:Clean(playersService.PlayerAdded:Connect(refreshTargets))
 		vain:Clean(playersService.PlayerRemoving:Connect(function() task.defer(refreshTargets) end))
 	end
-	trace('after Sigrid Charge')
 
 	-- ══════════════════════════════════════════════════════════════════════════
 	--  ADVANCED SPECTATE  (spectate anyone; optionally lock to one player)
@@ -2131,7 +2119,6 @@ local AimAssist
 		vain:Clean(playersService.PlayerAdded:Connect(refreshList))
 		vain:Clean(playersService.PlayerRemoving:Connect(function() task.defer(refreshList) end))
 	end
-	trace('Better Spectating')
 
 	-- ══════════════════════════════════════════════════════════════════════════
 	--  PREPARATION PREVIEW  (see teams/players/kits while spectating the draft)
@@ -2431,7 +2418,6 @@ local AimAssist
 			end
 		})
 	end
-	trace('Preparation Preview')
 
 	-- ══════════════════════════════════════════════════════════════════════════
 	--  TABLIST WINSTREAK  (show each player's winstreak next to their tab-list name)
@@ -2725,7 +2711,6 @@ local AimAssist
 			Tooltip = 'Show the \u{1F6CF} average beds broken per match stat.', Function = function() end,
 		})
 	end
-	trace('Show Advanced Stats')
 
 	AimAssist = vain.Categories.Combat:CreateModule({
 		Name = 'AimAssist',
@@ -2917,7 +2902,6 @@ local AimAssist
 			table.insert(methods, i)
 		end
 	end
-	trace('AimAssist')
 
 	Sort = AimAssist:CreateDropdown({
 		Name = 'Target Mode',
