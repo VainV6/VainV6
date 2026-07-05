@@ -97,8 +97,8 @@ do
 		end
 
 		-- ── linear progress bar ───────────────────────────────────────────────
-		-- Simple rounded track + a SOLID orange fill (no gradient / shimmer), with
-		-- the percentage centred above it.
+		-- Rounded track + a solid orange fill with a sweeping brighter-orange shimmer
+		-- highlight (no gradient-to-white), and the percentage centred above it.
 		local barW    = 320
 		local barH    = 8
 		local accent  = Color3.fromRGB(245, 150, 40)   -- orange fill
@@ -120,11 +120,32 @@ do
 		barFill.AnchorPoint = Vector2.new(0, 0.5)
 		barFill.Position = UDim2.fromScale(0, 0.5)
 		barFill.Size = UDim2.fromScale(0, 1)
-		barFill.BackgroundColor3 = accent   -- solid orange, no gradient / shimmer
+		barFill.BackgroundColor3 = accent   -- solid flat orange base
 		barFill.BorderSizePixel = 0
 		barFill.ZIndex = 4
+		barFill.ClipsDescendants = true
 		barFill.Parent = barTrack
 		Instance.new('UICorner', barFill).CornerRadius = UDim.new(1, 0)
+
+		-- shimmer: a soft brighter-ORANGE highlight that sweeps across the fill. It is
+		-- a lighter shade of the accent (NOT white), soft-edged via a gradient mask, so
+		-- it reads as a clean modern sheen rather than a gradient-to-white.
+		local shimmer = Instance.new('Frame')
+		shimmer.AnchorPoint = Vector2.new(0.5, 0.5)
+		shimmer.Size = UDim2.new(0, 70, 1, 0)
+		shimmer.Position = UDim2.fromScale(-0.3, 0.5)
+		shimmer.BackgroundColor3 = Color3.fromRGB(255, 190, 105) -- brighter orange, not white
+		shimmer.BackgroundTransparency = 0.45
+		shimmer.BorderSizePixel = 0
+		shimmer.ZIndex = 5
+		shimmer.Parent = barFill
+		local shimGrad = Instance.new('UIGradient')
+		shimGrad.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(0.5, 0),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		shimGrad.Parent = shimmer
 
 		-- percentage centred above the bar
 		local ringPct = Instance.new('TextLabel')
@@ -146,6 +167,18 @@ do
 			tween(barFill, 0.25, { Size = UDim2.fromScale(curFrac, 1) })
 			ringPct.Text = tostring(math.floor(curFrac * 100 + 0.5)) .. '%'
 		end
+
+		-- sweep the shimmer highlight across the fill on a gentle loop
+		task.spawn(function()
+			while barTrack.Parent and not finished do
+				shimmer.Position = UDim2.fromScale(-0.3, 0.5)
+				local t = TweenService:Create(shimmer,
+					TweenInfo.new(1.2, Enum.EasingStyle.Linear), { Position = UDim2.fromScale(1.3, 0.5) })
+				t:Play()
+				t.Completed:Wait()
+				task.wait(0.5)
+			end
+		end)
 
 		-- status text UNDER the bar (kept for API compatibility, hidden for now)
 		statusLabel = Instance.new('TextLabel')
