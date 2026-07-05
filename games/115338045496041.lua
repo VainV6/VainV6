@@ -432,7 +432,15 @@ end)
 --   * Country list for the filter comes from CountryRegistry:GetChildren().
 run(function()
 	local AutoWar
-	local FilterMode, CountryList, Target, MinTiles, OnlyWeaker, Interval, Notify
+	local FilterMode, CountryList, Target, MinTiles, OnlyWeaker, AvoidAllies, Interval, Notify
+
+	-- normalise a country name for comparison (guard against case / stray whitespace
+	-- differences between the MyCountry attribute, tile Country attrs and the
+	-- Members/Allies folder child names -- a mismatch here would silently defeat the
+	-- alliance protection and war a friend, so we compare normalised throughout).
+	local function norm(s)
+		return type(s) == 'string' and s:gsub('^%s+', ''):gsub('%s+$', ''):lower() or ''
+	end
 
 	local alliancesFolder
 	local function getAlliances()
@@ -441,30 +449,45 @@ run(function()
 		end
 		return alliancesFolder
 	end
-	-- which alliance folder a country belongs to (or nil) -- mirrors game's InAlliance
+	-- which alliance folder a country belongs to (or nil) -- mirrors game's InAlliance,
+	-- but matches members normalised so a formatting mismatch can't hide membership.
 	local function allianceOf(country)
 		local al = getAlliances()
 		if not al then return nil end
+		local key = norm(country)
 		for _, child in al:GetChildren() do
 			local members = child:FindFirstChild('Members')
-			if members and members:FindFirstChild(country) then return child end
+			if members then
+				for _, m in members:GetChildren() do
+					if norm(m.Name) == key then return child end
+				end
+			end
 		end
 		return nil
 	end
 
-	-- my declared allies (FormAlly relation), as a set
+	-- my declared allies (FormAlly relation), as a normalised set. Allies aren't a
+	-- hard war-block in this game (only alliance is), but we still avoid them by default.
 	local function myAllies()
 		local set = {}
 		local mine = lplr:GetAttribute('MyCountry')
 		local cf = mine and countryFolder(mine)
 		local allies = cf and cf:FindFirstChild('Allies')
 		if allies then
-			for _, c in allies:GetChildren() do set[c.Name] = true end
+			for _, c in allies:GetChildren() do set[norm(c.Name)] = true end
 		end
 		return set
 	end
 
 	-- am I already at war with `country`? (opposite sides of any WarsData entry)
+	local function sideHas(folder, name)
+		if not folder then return false end
+		local key = norm(name)
+		for _, c in folder:GetChildren() do
+			if norm(c.Name) == key then return true end
+		end
+		return false
+	end
 	local function alreadyAtWar(mine, country)
 		local wd = replicatedStorage:FindFirstChild('WarsData')
 		if not wd then return false end
@@ -472,10 +495,8 @@ run(function()
 			local a = war:FindFirstChild('SideA')
 			local b = war:FindFirstChild('SideB')
 			if a and b then
-				local mineA = a:FindFirstChild(mine) ~= nil
-				local mineB = b:FindFirstChild(mine) ~= nil
-				local themA = a:FindFirstChild(country) ~= nil
-				local themB = b:FindFirstChild(country) ~= nil
+				local mineA, mineB = sideHas(a, mine), sideHas(b, mine)
+				local themA, themB = sideHas(a, country), sideHas(b, country)
 				if (mineA and themB) or (mineB and themA) then return true end
 			end
 		end
@@ -498,10 +519,12 @@ run(function()
 
 	-- may I war this country at all? (not me, not ally, not same alliance)
 	local function warAllowed(mine, country)
-		if not country or country == mine then return false end
-		if myAllies()[country] then return false end
+		if not country or norm(country) == norm(mine) then return false end
+		-- same alliance -> HARD block (this is the game's actual war guard)
 		local myAl = allianceOf(mine)
 		if myAl and allianceOf(country) == myAl then return false end
+		-- allies -> soft block, on by default (the game itself allows it)
+		if (not AvoidAllies or AvoidAllies.Enabled) and myAllies()[norm(country)] then return false end
 		return true
 	end
 
@@ -510,8 +533,8 @@ run(function()
 		local set = {}
 		local raw = CountryList and CountryList.Value or ''
 		for name in string.gmatch(raw, '[^,]+') do
-			local n = name:gsub('^%s+', ''):gsub('%s+$', '')
-			if #n > 0 then set[n:lower()] = true end
+			local n = norm(name)
+			if #n > 0 then set[n] = true end
 		end
 		return set
 	end
@@ -523,7 +546,7 @@ run(function()
 	local function passesFilter(country)
 		local mode = FilterMode and FilterMode.Value or 'Off'
 		if mode == 'Off' then return true end
-		local inList = filterSet()[country:lower()] == true
+		local inList = filterSet()[norm(country)] == true
 		if mode == 'Whitelist' then return inList end
 		if mode == 'Blacklist' then return not inList end
 		return true
@@ -540,7 +563,10 @@ run(function()
 		if regions then
 			for _, tile in regions:GetChildren() do
 				local owner = tile:GetAttribute('Country')
-				if owner then counts[owner] = (counts[owner] or 0) + 1 end
+				if owner then
+					local k = norm(owner)
+					counts[k] = (counts[k] or 0) + 1
+				end
 			end
 		end
 		return counts
@@ -548,7 +574,7 @@ run(function()
 
 	-- a country EXISTS (is a valid war target) only if it currently owns a tile
 	local function exists(country, counts)
-		return (counts[country] or 0) > 0
+		return (counts[norm(country)] or 0) > 0
 	end
 
 	-- candidate targets, in priority order (weakest first when OnlyWeaker/Target set)
@@ -556,21 +582,24 @@ run(function()
 		local reg = replicatedStorage:FindFirstChild('CountryRegistry')
 		if not reg then return {} end
 		local counts = liveTileCounts()
-		local myTiles = counts[mine] or 0
+		local myTiles = counts[norm(mine)] or 0
 		local minTiles = MinTiles and MinTiles.Value or 0
 		local out = {}
 		-- explicit single Target overrides everything if set -- but still only if it
-		-- actually exists on the map
-		local target = Target and Target.Value or ''
-		target = target:gsub('^%s+', ''):gsub('%s+$', '')
+		-- actually exists on the map (and isn't a same-alliance friend)
+		local target = norm(Target and Target.Value or '')
 		if #target > 0 then
-			if exists(target, counts) then out[#out + 1] = target end
+			for _, cf in reg:GetChildren() do
+				if norm(cf.Name) == target and exists(cf.Name, counts) and warAllowed(mine, cf.Name) then
+					out[#out + 1] = cf.Name
+				end
+			end
 			return out
 		end
 		for _, cf in reg:GetChildren() do
 			local c = cf.Name
 			if exists(c, counts) and warAllowed(mine, c) and passesFilter(c) then
-				local t = counts[c]
+				local t = counts[norm(c)]
 				if t >= minTiles then
 					if not (OnlyWeaker and OnlyWeaker.Enabled) or t <= myTiles then
 						out[#out + 1] = c
@@ -579,7 +608,7 @@ run(function()
 			end
 		end
 		-- weakest first so we pick off easy wins
-		table.sort(out, function(a, b) return (counts[a] or 0) < (counts[b] or 0) end)
+		table.sort(out, function(a, b) return (counts[norm(a)] or 0) < (counts[norm(b)] or 0) end)
 		return out
 	end
 
@@ -631,12 +660,20 @@ run(function()
 		Function = function(callback)
 			if callback then
 				local mine = lplr:GetAttribute('MyCountry')
-				local n = #candidates(mine)
-				notif('Auto War', string.format('%s | country %s | valid targets: %d%s',
+				local list = candidates(mine)
+				local myAl = allianceOf(mine)
+				-- show what it actually resolved so a mis-target is obvious
+				local preview = {}
+				for i = 1, math.min(3, #list) do preview[i] = list[i] end
+				notif('Auto War', string.format(
+					'%s | you: %s | alliance: %s | targets: %d%s\nfirst: %s',
 					getActionRemote() and 'Remote OK' or 'NO REMOTE',
-					tostring(mine), n,
-					(FilterMode and FilterMode.Value ~= 'Off') and (' (' .. FilterMode.Value .. ')') or ''),
-					7, (getActionRemote() and mine) and nil or 'warning')
+					tostring(mine),
+					myAl and myAl.Name or 'none',
+					#list,
+					(FilterMode and FilterMode.Value ~= 'Off') and (' (' .. FilterMode.Value .. ')') or '',
+					#preview > 0 and table.concat(preview, ', ') or '-'),
+					9, (getActionRemote() and mine) and nil or 'warning')
 				AutoWar:Clean(task.spawn(function()
 					while AutoWar.Enabled do
 						sweep()
@@ -658,6 +695,8 @@ run(function()
 		Tooltip = 'Optional. Type ONE country name to war only that country (overrides the filter and target-picking). Leave empty to auto-pick targets.' })
 	OnlyWeaker = AutoWar:CreateToggle({ Name = 'Only Weaker', Default = true,
 		Tooltip = 'Only auto-pick countries with no more tiles than you, so you punch down instead of starting wars you will lose.' })
+	AvoidAllies = AutoWar:CreateToggle({ Name = 'Avoid Allies', Default = true,
+		Tooltip = "Also skip your declared allies (FormAlly). The game itself only blocks war on your ALLIANCE, not allies, so turn this off if you actually want to be able to war an ally. Alliance-mates are always protected regardless." })
 	MinTiles = AutoWar:CreateSlider({ Name = 'Min Tiles', Min = 0, Max = 200, Default = 0,
 		Tooltip = 'Ignore auto-picked countries smaller than this many tiles (skip tiny irrelevant states).' })
 	Interval = AutoWar:CreateSlider({ Name = 'Interval', Min = 2, Max = 60, Default = 8, Suffix = 'sec',
