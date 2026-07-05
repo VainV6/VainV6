@@ -1677,6 +1677,7 @@ run(function()
 	vain:Clean(function()
 		Client.Get = OldGet
 		bedwars.BlockController.isBlockBreakable = OldBreak
+		bedwars.BlockBreaker.hitBlock = OldHit
 		store.blockPlacer:disable()
 		for _, v in vainEvents do
 			v:Destroy()
