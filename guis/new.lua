@@ -6043,12 +6043,14 @@ function mainapi:Load(skipgui, profile)
 		if hide ~= nil then
 			hide = hide == 'true' and true or false
 		end
+		-- hidden by default (Hide Vain button defaults ON): hidden unless saved false
+		local startHidden = hide ~= false
 		local button = Instance.new('TextButton')
 		button.LayoutOrder = -1
 		button.Size = UDim2.fromOffset(32, 32)
 		button.Position = UDim2.new(1, -90, 0, 4)
 		button.BackgroundColor3 = Color3.new()
-		button.BackgroundTransparency = hide and 1 or 0.35
+		button.BackgroundTransparency = startHidden and 1 or 0.35
 		button.Text = ''
 		-- BedWars (GameId 2619619496) parents the button into its custom top-bar
 		-- (TopBarAppGui.TopBarApp) -- but that GUI isn't always present (it doesn't
@@ -6071,7 +6073,7 @@ function mainapi:Load(skipgui, profile)
 		image.Position = UDim2.fromScale(0.5, 0.5)
 		image.BackgroundTransparency = 1
 		image.Image = getcustomasset('vain/assets/new/vain.png')
-		image.ImageTransparency = hide and 1 or 0
+		image.ImageTransparency = startHidden and 1 or 0
 		image.Parent = button
 		-- Fallback "V" behind the image, so the button is never blank if the icon
 		-- asset fails to load (moderated id / executor without getcustomasset).
@@ -6084,7 +6086,7 @@ function mainapi:Load(skipgui, profile)
 		fallback.Font = Enum.Font.GothamBlack
 		fallback.TextSize = 18
 		fallback.TextColor3 = Color3.fromRGB(255, 106, 31)
-		fallback.TextTransparency = hide and 1 or 0
+		fallback.TextTransparency = startHidden and 1 or 0
 		fallback.ZIndex = 0
 		fallback.Parent = button
 		local buttoncorner = Instance.new('UICorner')
@@ -6111,7 +6113,7 @@ function mainapi:Load(skipgui, profile)
 		if guipane then
 			guipane:CreateToggle({
 				Name = 'Hide Vain button',
-				Default = hide == true, -- OFF by default (only on if saved true)
+				Default = hide ~= false, -- ON by default (only off if saved false)
 				Function = function(call)
 					button.BackgroundTransparency = call and 1 or 0.35
 					image.ImageTransparency = call and 1 or 0
