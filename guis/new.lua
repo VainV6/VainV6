@@ -2653,25 +2653,27 @@ function mainapi:CreateGUI()
 	logo.TextSize = 16
 	logo.FontFace = uipallet.FontSemiBold
 	logo.RichText = false
-	logo.TextColor3 = Color3.new(1, 1, 1)
+	-- Solid, always-bright ORANGE base so it's readable at all times; the gradient
+	-- only adds a bright metallic highlight sweep (never dips to a dark/invisible
+	-- colour, and no theme tint since TextColor3 is white).
+	logo.TextColor3 = Color3.fromRGB(255, 120, 40)
 	logo.Parent = window
 	local logoGrad = Instance.new('UIGradient')
 	logoGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(154, 61, 10)),
-		ColorSequenceKeypoint.new(0.28, Color3.fromRGB(255, 106, 31)),
-		ColorSequenceKeypoint.new(0.48, Color3.fromRGB(255, 196, 138)),
-		ColorSequenceKeypoint.new(0.68, Color3.fromRGB(255, 106, 31)),
-		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(122, 47, 8)),
+		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 120, 40)),
+		ColorSequenceKeypoint.new(0.42, Color3.fromRGB(255, 120, 40)),
+		ColorSequenceKeypoint.new(0.50, Color3.fromRGB(255, 210, 150)),
+		ColorSequenceKeypoint.new(0.58, Color3.fromRGB(255, 120, 40)),
+		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 120, 40)),
 	})
-	logoGrad.Rotation = 20
 	logoGrad.Parent = logo
 	task.spawn(function()
 		while logo.Parent do
 			logoGrad.Offset = Vector2.new(-1, 0)
-			local tw = tweenService:Create(logoGrad, TweenInfo.new(3, Enum.EasingStyle.Linear), { Offset = Vector2.new(1, 0) })
+			local tw = tweenService:Create(logoGrad, TweenInfo.new(2.5, Enum.EasingStyle.Linear), { Offset = Vector2.new(1, 0) })
 			tw:Play()
 			tw.Completed:Wait()
-			task.wait(2)
+			task.wait(2.5)
 		end
 	end)
 	local children = Instance.new('Frame')
@@ -6355,7 +6357,7 @@ local function showPatchNotes(force)
 	-- ── palette ────────────────────────────────────────────────────────────
 	local accent      = color.Light(uipallet.Main, 0.30)
 	local accentGlow  = color.Light(uipallet.Main, 0.58)
-	local cardColor   = color.Dark(uipallet.Main, 0.03)
+	local cardColor   = color.Light(uipallet.Main, 0.05)
 	local railColor   = color.Dark(uipallet.Main, 0.06)
 	local textColor   = uipallet.Text
 	local mutedText   = color.Dark(uipallet.Text, 0.42)
@@ -6393,7 +6395,8 @@ local function showPatchNotes(force)
 		task.delay(0.28, function() pcall(function() overlayGui:Destroy() end) end)
 	end
 
-	-- Dim backdrop (click to dismiss).
+	-- Dim backdrop. Clicking it does NOT dismiss -- only the Okay button closes the
+	-- popup (the button eats clicks; the backdrop just blocks the game behind it).
 	backdrop = Instance.new('TextButton')
 	backdrop.Name = 'Backdrop'
 	backdrop.Size = UDim2.fromScale(1, 1)
@@ -6403,8 +6406,7 @@ local function showPatchNotes(force)
 	backdrop.Modal = true
 	backdrop.Text = ''
 	backdrop.Parent = overlayGui
-	backdrop.MouseButton1Click:Connect(dismiss)
-	tweenService:Create(backdrop, TweenInfo.new(0.3), {BackgroundTransparency = 0.55}):Play()
+	tweenService:Create(backdrop, TweenInfo.new(0.3), {BackgroundTransparency = 0.4}):Play()
 
 	-- Holder centres + scales the whole popup and carries the blur behind it.
 	local holder = Instance.new('Frame')
@@ -6450,32 +6452,31 @@ local function showPatchNotes(force)
 	-- ── header: VAIN wordmark (metallic logo) + title/date (right) ───────────
 	local brand = Instance.new('TextLabel')
 	brand.BackgroundTransparency = 1
-	brand.Position = UDim2.fromOffset(PAD, 26)
+	brand.Position = UDim2.fromOffset(PAD, 22)
 	brand.AutomaticSize = Enum.AutomaticSize.X
-	brand.Size = UDim2.fromOffset(0, 24)
+	brand.Size = UDim2.fromOffset(0, 32)
 	brand.Text = 'VAIN'
 	brand.TextXAlignment = Enum.TextXAlignment.Left
-	brand.TextColor3 = Color3.new(1, 1, 1)
-	brand.TextSize = 20
+	brand.TextColor3 = Color3.fromRGB(255, 120, 40)
+	brand.TextSize = 30
 	brand.FontFace = uipallet.FontSemiBold
 	brand.Parent = card
 	local brandGrad = Instance.new('UIGradient')
 	brandGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(154, 61, 10)),
-		ColorSequenceKeypoint.new(0.28, Color3.fromRGB(255, 106, 31)),
-		ColorSequenceKeypoint.new(0.48, Color3.fromRGB(255, 196, 138)),
-		ColorSequenceKeypoint.new(0.68, Color3.fromRGB(255, 106, 31)),
-		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(122, 47, 8)),
+		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 120, 40)),
+		ColorSequenceKeypoint.new(0.42, Color3.fromRGB(255, 120, 40)),
+		ColorSequenceKeypoint.new(0.50, Color3.fromRGB(255, 210, 150)),
+		ColorSequenceKeypoint.new(0.58, Color3.fromRGB(255, 120, 40)),
+		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 120, 40)),
 	})
-	brandGrad.Rotation = 20
 	brandGrad.Parent = brand
 	task.spawn(function()
 		while brand.Parent do
 			brandGrad.Offset = Vector2.new(-1, 0)
-			local tw = tweenService:Create(brandGrad, TweenInfo.new(3, Enum.EasingStyle.Linear), { Offset = Vector2.new(1, 0) })
+			local tw = tweenService:Create(brandGrad, TweenInfo.new(2.5, Enum.EasingStyle.Linear), { Offset = Vector2.new(1, 0) })
 			tw:Play()
 			tw.Completed:Wait()
-			task.wait(2)
+			task.wait(2.5)
 		end
 	end)
 	local htitle = Instance.new('TextLabel')
@@ -6650,52 +6651,31 @@ local function showPatchNotes(force)
 		end
 	end)
 
-	-- ── full-width "Okay" button ─────────────────────────────────────────────
+	-- ── full-width "Okay" button (white -> green on hover) ───────────────────
+	local WHITE = Color3.fromRGB(238, 238, 238)
+	local GREEN = Color3.fromRGB(88, 205, 122)
 	local okay = Instance.new('TextButton')
 	okay.Name = 'Okay'
 	okay.AnchorPoint = Vector2.new(0.5, 1)
 	okay.Position = UDim2.new(0.5, 0, 1, -22)
 	okay.Size = UDim2.new(1, -PAD * 2, 0, 42)
-	okay.BackgroundColor3 = color.Light(uipallet.Main, 0.14)
+	okay.BackgroundColor3 = WHITE
 	okay.AutoButtonColor = false
 	okay.Text = 'Okay'
-	okay.TextColor3 = textColor
+	okay.TextColor3 = Color3.fromRGB(20, 20, 24)
 	okay.TextSize = 15
 	okay.FontFace = uipallet.FontSemiBold
 	okay.Parent = card
 	addCorner(okay, UDim.new(0, 10))
-	local okayStroke = Instance.new('UIStroke')
-	okayStroke.Color = color.Light(uipallet.Main, 0.18)
-	okayStroke.Transparency = 0.3
-	okayStroke.Parent = okay
+	-- smooth colour transition both ways (bg + text) on hover
+	local okTween = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 	okay.MouseEnter:Connect(function()
-		tweenService:Create(okay, TweenInfo.new(0.14), {BackgroundColor3 = color.Light(uipallet.Main, 0.2)}):Play()
+		tweenService:Create(okay, okTween, { BackgroundColor3 = GREEN, TextColor3 = Color3.fromRGB(255, 255, 255) }):Play()
 	end)
 	okay.MouseLeave:Connect(function()
-		tweenService:Create(okay, TweenInfo.new(0.14), {BackgroundColor3 = color.Light(uipallet.Main, 0.14)}):Play()
+		tweenService:Create(okay, okTween, { BackgroundColor3 = WHITE, TextColor3 = Color3.fromRGB(20, 20, 24) }):Play()
 	end)
 	okay.MouseButton1Click:Connect(dismiss)
-
-	-- close X (top corner, subtle)
-	local xclose = Instance.new('ImageButton')
-	xclose.Name = 'Close'
-	xclose.AnchorPoint = Vector2.new(1, 0)
-	xclose.Position = UDim2.new(1, -14, 0, 14)
-	xclose.Size = UDim2.fromOffset(18, 18)
-	xclose.BackgroundTransparency = 1
-	xclose.AutoButtonColor = false
-	xclose.Image = getcustomasset('vain/assets/new/close.png')
-	xclose.ImageColor3 = color.Light(uipallet.Text, 0.2)
-	xclose.ImageTransparency = 0.5
-	xclose.ZIndex = 5
-	xclose.Parent = card
-	xclose.MouseEnter:Connect(function()
-		tweenService:Create(xclose, TweenInfo.new(0.12), {ImageTransparency = 0.1}):Play()
-	end)
-	xclose.MouseLeave:Connect(function()
-		tweenService:Create(xclose, TweenInfo.new(0.12), {ImageTransparency = 0.5}):Play()
-	end)
-	xclose.MouseButton1Click:Connect(dismiss)
 end
 
 -- Preview hook: run `getgenv().vainShowPatchNotes()` in your executor console to
