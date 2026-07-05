@@ -7347,6 +7347,125 @@ run(function()
 end)
 
 run(function()
+    -- ── Chat Reveal ──────────────────────────────────────────────────────────
+    -- Reveals chat messages the game / Roblox hides from you: messages from muted
+    -- or blocked players, and messages the client receives but the chat UI drops
+    -- (e.g. flagged as non-Success). It CANNOT show server-scoped chat you never
+    -- receive (enemy team-only chat, whispers between other players) -- that data
+    -- is never sent to your client, so nothing can recover it.
+    local ChatReveal
+    local oldIncoming            -- restore handle for the TextChatService hook
+    local restoreLegacy = {}     -- restore handles for legacy chat hooks
+    local starterGui = cloneref(game:GetService('StarterGui'))
+
+    local function revealTextChat()
+        -- OnIncomingMessage runs for every message the client receives, before it's
+        -- displayed, and can return TextChatMessageProperties to alter rendering. We
+        -- force non-Success (blocked/muted) messages to still show, prefixed.
+        if not (getcallbackvalue and hookfunction and restorefunction) then
+            notif('Chat Reveal', 'Executor missing callback hooks -- cannot reveal (TextChatService).', 6, 'warning')
+            return
+        end
+        task.spawn(function()
+            local old
+            repeat
+                local current = getcallbackvalue(textChatService, 'OnIncomingMessage')
+                if current and old ~= current then
+                    local hook
+                    hook = hookfunction(current, function(...)
+                        local msg = ...
+                        local data = hook(...)
+                        if ChatReveal and ChatReveal.Enabled then
+                            local ok = pcall(function()
+                                local hidden = msg.Status ~= Enum.TextChatMessageStatus.Success
+                                if hidden then
+                                    if not (data and data:IsA('TextChatMessageProperties')) then
+                                        data = Instance.new('TextChatMessageProperties')
+                                        data.PrefixText = msg.PrefixText
+                                    end
+                                    -- un-hide: give it visible text + a marker prefix
+                                    local who = msg.TextSource
+                                        and playersService:GetPlayerByUserId(msg.TextSource.UserId)
+                                    local name = who and (who.DisplayName or who.Name) or 'Hidden'
+                                    data.PrefixText = '[Revealed] ' .. name .. ':'
+                                    data.Text = (msg.Text ~= '' and msg.Text) or data.Text
+                                end
+                            end)
+                            if not ok then end
+                        end
+                        return data
+                    end)
+                    oldIncoming = current
+                    old = current
+                end
+                task.wait(0.2)
+            until not (ChatReveal and ChatReveal.Enabled)
+        end)
+    end
+
+    local function revealLegacy()
+        -- Legacy chat: re-show messages by clearing the filter/mute skip in the
+        -- OnNewMessage / OnMessageDoneFiltering client handlers.
+        local events = replicatedStorage:FindFirstChild('DefaultChatSystemChatEvents')
+        if not events then return end
+        pcall(function()
+            for _, ev in {'OnNewMessage', 'OnMessageDoneFiltering'} do
+                local remote = events:FindFirstChild(ev)
+                if remote then
+                    for _, con in getconnections(remote.OnClientEvent) do
+                        if con.Function then
+                            -- surface the raw message data as a system message so it
+                            -- shows even if the default handler would drop it.
+                            local orig
+                            orig = hookfunction(con.Function, function(data, ...)
+                                if ChatReveal and ChatReveal.Enabled and type(data) == 'table' and data.Message then
+                                    pcall(function()
+                                        local from = data.FromSpeaker or 'Hidden'
+                                        starterGui:SetCore('ChatMakeSystemMessage', {
+                                            Text = '[Revealed] ' .. tostring(from) .. ': ' .. tostring(data.Message),
+                                            Color = Color3.fromRGB(255, 170, 80),
+                                        })
+                                    end)
+                                end
+                                return orig(data, ...)
+                            end)
+                            table.insert(restoreLegacy, { con.Function, orig })
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
+    ChatReveal = vain.Categories.Utility:CreateModule({
+        Name = 'Chat Reveal',
+        Tooltip = 'Reveals chat messages the game hides from you (muted/blocked players, filtered or dropped messages). Cannot show enemy team-only chat or private whispers between other players -- the server never sends those to your client.',
+        Function = function(callback)
+            if callback then
+                table.clear(restoreLegacy)
+                if textChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+                    revealTextChat()
+                elseif replicatedStorage:FindFirstChild('DefaultChatSystemChatEvents') then
+                    revealLegacy()
+                else
+                    notif('Chat Reveal', 'This game uses an unsupported chat system.', 5, 'warning')
+                    ChatReveal:Toggle()
+                    return
+                end
+                notif('Chat Reveal', 'Revealing hidden messages. Note: enemy team chat is server-scoped and cannot be shown.', 7, 'success')
+            else
+                -- restore any legacy hooks; the TextChatService hook self-stops via the
+                -- repeat-until when the module is disabled.
+                for _, pair in restoreLegacy do
+                    pcall(function() hookfunction(pair[1], pair[2]) end)
+                end
+                table.clear(restoreLegacy)
+            end
+        end
+    })
+end)
+
+run(function()
     local Disabler
 
     local function characterAdded(char)
