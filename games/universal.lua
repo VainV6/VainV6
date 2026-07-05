@@ -7358,40 +7358,79 @@ run(function()
     local restoreLegacy = {}     -- restore handles for legacy chat hooks
     local starterGui = cloneref(game:GetService('StarterGui'))
 
+    -- Re-emit a message we caught as a Vain system line, so the user always SEES
+    -- proof it fired (even if the message would also render normally).
+    local function echo(name, text, tag)
+        pcall(function()
+            local prefix = tag and ('[Reveal ' .. tag .. '] ') or '[Reveal] '
+            starterGui:SetCore('ChatMakeSystemMessage', {
+                Text = prefix .. tostring(name) .. ': ' .. tostring(text),
+                Color = Color3.fromRGB(255, 178, 124),
+                Font = Enum.Font.SourceSansBold,
+            })
+        end)
+    end
+
     local function revealTextChat()
-        -- OnIncomingMessage runs for every message the client receives, before it's
-        -- displayed, and can return TextChatMessageProperties to alter rendering. We
-        -- force non-Success (blocked/muted) messages to still show, prefixed.
-        if not (getcallbackvalue and hookfunction and restorefunction) then
-            notif('Chat Reveal', 'Executor missing callback hooks -- cannot reveal (TextChatService).', 6, 'warning')
+        -- TextChatService.OnIncomingMessage runs for every message the client
+        -- RECEIVES, before display, and may return TextChatMessageProperties to alter
+        -- rendering. If the game/Roblox left it unset we set our own; if it's already
+        -- set we hook it. Either way we (a) force any non-Success (muted/blocked)
+        -- message to still show, and (b) echo every message as a system line so the
+        -- module is visibly doing something.
+        if not (getcallbackvalue and hookfunction) then
+            -- No hook support: fall back to just setting the callback ourselves.
+            if textChatService.OnIncomingMessage == nil then
+                textChatService.OnIncomingMessage = function(message)
+                    if ChatReveal and ChatReveal.Enabled then
+                        pcall(function()
+                            local who = message.TextSource
+                                and playersService:GetPlayerByUserId(message.TextSource.UserId)
+                            local name = who and (who.DisplayName or who.Name) or 'System'
+                            local hidden = message.Status ~= Enum.TextChatMessageStatus.Success
+                            if hidden then echo(name, message.Text, 'hidden') end
+                        end)
+                    end
+                    return nil
+                end
+                notif('Chat Reveal', 'Active (basic mode -- executor lacks hook functions).', 6, 'success')
+            else
+                notif('Chat Reveal', 'Executor missing hook functions and a chat callback already exists.', 6, 'warning')
+            end
             return
         end
         task.spawn(function()
             local old
             repeat
                 local current = getcallbackvalue(textChatService, 'OnIncomingMessage')
+                -- If the game never set a callback, install a no-op so there IS a
+                -- function to hook (returning nil = default rendering).
+                if current == nil then
+                    textChatService.OnIncomingMessage = function() return nil end
+                    current = getcallbackvalue(textChatService, 'OnIncomingMessage')
+                end
                 if current and old ~= current then
                     local hook
                     hook = hookfunction(current, function(...)
                         local msg = ...
                         local data = hook(...)
                         if ChatReveal and ChatReveal.Enabled then
-                            local ok = pcall(function()
+                            pcall(function()
+                                local who = msg.TextSource
+                                    and playersService:GetPlayerByUserId(msg.TextSource.UserId)
+                                local name = who and (who.DisplayName or who.Name) or 'System'
                                 local hidden = msg.Status ~= Enum.TextChatMessageStatus.Success
                                 if hidden then
+                                    -- un-hide inline AND echo it as a system line
                                     if not (data and data:IsA('TextChatMessageProperties')) then
                                         data = Instance.new('TextChatMessageProperties')
                                         data.PrefixText = msg.PrefixText
                                     end
-                                    -- un-hide: give it visible text + a marker prefix
-                                    local who = msg.TextSource
-                                        and playersService:GetPlayerByUserId(msg.TextSource.UserId)
-                                    local name = who and (who.DisplayName or who.Name) or 'Hidden'
-                                    data.PrefixText = '[Revealed] ' .. name .. ':'
+                                    data.PrefixText = '[Reveal] ' .. name .. ':'
                                     data.Text = (msg.Text ~= '' and msg.Text) or data.Text
+                                    echo(name, msg.Text ~= '' and msg.Text or '(empty)', 'hidden')
                                 end
                             end)
-                            if not ok then end
                         end
                         return data
                     end)
