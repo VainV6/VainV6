@@ -62,26 +62,10 @@ do
 		container.BackgroundTransparency = 1
 		container.Parent = root
 
-		-- soft glow rings behind the V
-		local glowRings = {}
-		for i = 1, 4 do
-			local ring = Instance.new('Frame')
-			ring.AnchorPoint = Vector2.new(0.5, 0.5)
-			ring.Position = UDim2.fromScale(0.5, 0.42)
-			ring.Size = UDim2.fromOffset(0, 0)
-			ring.BackgroundColor3 = Color3.fromRGB(255, 106, 31)
-			ring.BackgroundTransparency = 1
-			ring.BorderSizePixel = 0
-			ring.ZIndex = 1
-			Instance.new('UICorner', ring).CornerRadius = UDim.new(1, 0)
-			ring.Parent = container
-			glowRings[i] = ring
-		end
-
 		local vLabel = Instance.new('TextLabel')
 		vLabel.AnchorPoint = Vector2.new(0.5, 0.5)
 		vLabel.Position = UDim2.fromScale(0.5, 0.42)
-		vLabel.Size = UDim2.fromOffset(40, 40)
+		vLabel.Size = UDim2.fromOffset(60, 60)
 		vLabel.BackgroundTransparency = 1
 		vLabel.Text = 'V'
 		vLabel.Font = Enum.Font.GothamBlack
@@ -148,12 +132,7 @@ do
 
 		-- intro animation
 		tween(root, 0.3, { GroupTransparency = 0 })
-		tween(vLabel, 0.9, { Size = UDim2.fromOffset(240, 240), TextTransparency = 0 }, Enum.EasingStyle.Back)
-		for i, ring in ipairs(glowRings) do
-			task.delay(0.05 * i, function()
-				tween(ring, 1.1, { Size = UDim2.fromOffset(150 + i * 55, 150 + i * 55), BackgroundTransparency = 0.88 + i * 0.02 }, Enum.EasingStyle.Sine)
-			end)
-		end
+		tween(vLabel, 0.9, { Size = UDim2.fromOffset(300, 300), TextTransparency = 0 }, Enum.EasingStyle.Back)
 		task.delay(0.4, function()
 			tween(wordmark, 0.6, { TextTransparency = 0 })
 			tween(barTrack, 0.6, { BackgroundTransparency = 0.75 })
