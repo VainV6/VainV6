@@ -81,12 +81,12 @@ do
 		-- in a 500px box so it fills a big chunk of the screen.
 		local vLabel = Instance.new('TextLabel')
 		vLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-		vLabel.Position = UDim2.new(0.5, 0, 0.5, -70)
-		vLabel.Size = UDim2.fromOffset(400, 400)
+		vLabel.Position = UDim2.new(0.5, 0, 0.5, -120)
+		vLabel.Size = UDim2.fromOffset(900, 900)
 		vLabel.BackgroundTransparency = 1
 		vLabel.Text = 'V'
 		vLabel.Font = Enum.Font.GothamBlack
-		vLabel.TextSize = 40 -- animated up to 220 in the intro
+		vLabel.TextSize = 100 -- animated up to 600 in the intro
 		vLabel.TextColor3 = Color3.new(1, 1, 1)
 		vLabel.TextTransparency = 1
 		vLabel.ZIndex = 3
@@ -105,7 +105,7 @@ do
 		-- wordmark, fixed distance under the V
 		local wordmark = Instance.new('TextLabel')
 		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
-		wordmark.Position = UDim2.new(0.5, 0, 0.5, 170)
+		wordmark.Position = UDim2.new(0.5, 0, 0.5, 250)
 		wordmark.Size = UDim2.fromOffset(320, 40)
 		wordmark.BackgroundTransparency = 1
 		wordmark.Font = Enum.Font.Gotham
@@ -118,7 +118,7 @@ do
 
 		local barTrack = Instance.new('Frame')
 		barTrack.AnchorPoint = Vector2.new(0.5, 0.5)
-		barTrack.Position = UDim2.new(0.5, 0, 0.5, 216)
+		barTrack.Position = UDim2.new(0.5, 0, 0.5, 296)
 		barTrack.Size = UDim2.fromOffset(340, 5)
 		barTrack.BackgroundColor3 = Color3.new(1, 1, 1)
 		barTrack.BackgroundTransparency = 0.85
@@ -137,7 +137,7 @@ do
 		-- status text UNDER the progress bar
 		statusLabel = Instance.new('TextLabel')
 		statusLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-		statusLabel.Position = UDim2.new(0.5, 0, 0.5, 244)
+		statusLabel.Position = UDim2.new(0.5, 0, 0.5, 324)
 		statusLabel.Size = UDim2.fromOffset(600, 20)
 		statusLabel.BackgroundTransparency = 1
 		statusLabel.Font = Enum.Font.Gotham
@@ -148,8 +148,8 @@ do
 		statusLabel.ZIndex = 3
 		statusLabel.Parent = root
 
-		-- intro animation: the V's TextSize grows to a big 220 with a bounce.
-		tween(vLabel, 0.9, { TextSize = 220, TextTransparency = 0 }, Enum.EasingStyle.Back)
+		-- intro animation: the V's TextSize grows to a huge 600 with a bounce.
+		tween(vLabel, 0.9, { TextSize = 600, TextTransparency = 0 }, Enum.EasingStyle.Back)
 		task.delay(0.4, function()
 			tween(wordmark, 0.6, { TextTransparency = 0 })
 			tween(barTrack, 0.6, { BackgroundTransparency = 0.75 })
