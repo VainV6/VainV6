@@ -14741,6 +14741,7 @@ run(function()
     local Switch
     local HoleFiller
     local ShowGaps
+    local GapsOnly
 
     local function getBedNear()
         local localPosition = entitylib.isAlive and entitylib.character.RootPart.Position or Vector3.zero
@@ -14792,14 +14793,17 @@ run(function()
                 repeat
                     local bed = getBedNear()
                     if bed then
+                        -- "Gaps Only": don't build the pyramid at all -- the Hole Filler
+                        -- (auto-enabled with this) handles just the exposed gaps.
+                        if not (GapsOnly and GapsOnly.Enabled) then
                         for i, block in getBlocks() do
                             local switch, old = Switch.Enabled, store.hand and store.hand.tool and getHotbar(store.hand.tool) or nil
                             local hotbar = nil
-    
+
                             if switch then
                                 hotbar = getHotbar(block[3])
                             end
-    
+
                             for _, pos in getPyramid(i, 3) do
                                 if not BedProtector.Enabled then
                                     break
@@ -14817,10 +14821,11 @@ run(function()
                                 task.spawn(bedwars.placeBlock, pos, block[1], false)
                                 task.wait(0.1)
                             end
-    
+
                             if switch and old and hotbarSwitch(old) then
                                 task.wait()
                             end
+                        end
                         end
                     else
                         if Mode.Value == 'On Key' then
@@ -14919,8 +14924,11 @@ run(function()
             return gaps
         end
 
+        local function gapFillingOn()
+            return BedProtector.Enabled and ((HoleFiller and HoleFiller.Enabled) or (GapsOnly and GapsOnly.Enabled))
+        end
         local function fillHoles()
-            if not (HoleFiller and HoleFiller.Enabled and BedProtector.Enabled) then return end
+            if not gapFillingOn() then return end
             if not entitylib.isAlive or not entitylib.character.RootPart then return end
             local bed = getBedNear()
             if not bed then return end
@@ -14942,23 +14950,40 @@ run(function()
             if switch and old and hotbarSwitch(old) then task.wait() end
         end
 
+        -- Start the fill hooks once; used by BOTH Hole Filler and Gaps Only. A flag
+        -- prevents double-registering when both are toggled.
+        local fillHooksActive = false
+        local function startFillHooks()
+            if fillHooksActive then return end
+            fillHooksActive = true
+            -- react instantly to any block break near the bed
+            BedProtector:Clean(vainEvents.BreakBlockEvent.Event:Connect(function()
+                task.spawn(fillHoles)
+            end))
+            -- backup scan so gaps still close even if an event is missed
+            task.spawn(function()
+                repeat
+                    pcall(fillHoles)
+                    task.wait(0.3)
+                until not gapFillingOn()
+                fillHooksActive = false
+            end)
+        end
+
         HoleFiller = BedProtector:CreateToggle({
             Name = 'Hole Filler',
             Tooltip = 'Instantly re-seals only the exposed gaps in the shell directly around your bed (reacts the moment a block is broken). Lighter than the full pyramid.',
             Default = false,
             Function = function(callback)
-                if not callback then return end
-                -- react instantly to any block break near the bed
-                BedProtector:Clean(vainEvents.BreakBlockEvent.Event:Connect(function()
-                    task.spawn(fillHoles)
-                end))
-                -- backup scan so gaps still close even if an event is missed
-                task.spawn(function()
-                    repeat
-                        pcall(fillHoles)
-                        task.wait(0.3)
-                    until not (HoleFiller.Enabled and BedProtector.Enabled)
-                end)
+                if callback then startFillHooks() end
+            end,
+        })
+        GapsOnly = BedProtector:CreateToggle({
+            Name = 'Gaps Only',
+            Tooltip = 'Only patch exposed gaps around the bed -- never builds the full protective pyramid. (Runs the gap filler on its own; no need to also enable Hole Filler.)',
+            Default = false,
+            Function = function(callback)
+                if callback then startFillHooks() end
             end,
         })
 
