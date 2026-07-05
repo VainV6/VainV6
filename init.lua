@@ -151,26 +151,12 @@ do
 		Instance.new('UICorner', barFill).CornerRadius = UDim.new(1, 0)
 		-- (no shimmer on the bar -- the shimmer lives on the VAIN title only)
 
-		-- percentage centred RIGHT ABOVE the bar (bar sits at +66, ~8px tall -> its
-		-- top edge is ~+62; place the label just above that)
-		local ringPct = Instance.new('TextLabel')
-		ringPct.AnchorPoint = Vector2.new(0.5, 1)   -- anchor its BOTTOM so it sits above
-		ringPct.Position = UDim2.new(0.5, 0, 0.5, 56)
-		ringPct.Size = UDim2.fromOffset(120, 22)
-		ringPct.BackgroundTransparency = 1
-		ringPct.Font = Enum.Font.GothamBold
-		ringPct.Text = '0%'
-		ringPct.TextSize = 16
-		ringPct.TextColor3 = Color3.fromRGB(235, 235, 240)
-		ringPct.TextTransparency = 1
-		ringPct.ZIndex = 4
-		ringPct.Parent = root
+		-- (percentage text removed)
 
 		local curFrac = 0
 		setRingProgress = function(frac)
 			curFrac = math.clamp(frac, 0, 1)
 			tween(barFill, 0.25, { Size = UDim2.fromScale(curFrac, 1) })
-			ringPct.Text = tostring(math.floor(curFrac * 100 + 0.5)) .. '%'
 		end
 
 		-- status text UNDER the bar (kept for API compatibility, hidden for now)
@@ -194,9 +180,6 @@ do
 				tween(l, 0.5, { TextTransparency = 0 })
 			end)
 		end
-		task.delay(0.35, function()
-			tween(ringPct, 0.6, { TextTransparency = 0 })
-		end)
 
 		-- rising ember particles across the FULL screen width, floating up from the
 		-- bottom and fading out.
