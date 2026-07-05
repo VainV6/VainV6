@@ -21,7 +21,7 @@ local vainLoading
 do
 	local TweenService = cloneref(game:GetService('TweenService'))
 	local RunService   = cloneref(game:GetService('RunService'))
-	local built, screenGui, root, barFill, statusLabel, gradient
+	local built, screenGui, root, statusLabel, gradient, setRingProgress
 	local progressTarget, progressShown = 0, 0
 	local finished = false
 
@@ -59,10 +59,27 @@ do
 		bg.BorderSizePixel = 0
 		bg.Parent = root
 
-		-- (V removed) -- centred VAIN wordmark + progress bar + status.
+		-- (V removed) -- centred VAIN wordmark + circular progress ring + status.
+		-- soft glow copy of the wordmark BEHIND it (blurred look via a faint, slightly
+		-- larger duplicate) so the text reads as if it's glowing.
+		local wordmarkGlow = Instance.new('TextLabel')
+		wordmarkGlow.AnchorPoint = Vector2.new(0.5, 0.5)
+		wordmarkGlow.Position = UDim2.new(0.5, 0, 0.5, -60)
+		wordmarkGlow.Size = UDim2.fromOffset(600, 110)
+		wordmarkGlow.BackgroundTransparency = 1
+		wordmarkGlow.Font = Enum.Font.GothamBold
+		wordmarkGlow.Text = 'VAIN'
+		wordmarkGlow.TextSize = 96
+		wordmarkGlow.TextTransparency = 1
+		wordmarkGlow.TextColor3 = Color3.fromRGB(255, 106, 31)
+		wordmarkGlow.TextStrokeColor3 = Color3.fromRGB(255, 130, 40)
+		wordmarkGlow.TextStrokeTransparency = 1
+		wordmarkGlow.ZIndex = 2
+		wordmarkGlow.Parent = root
+
 		local wordmark = Instance.new('TextLabel')
 		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
-		wordmark.Position = UDim2.new(0.5, 0, 0.5, -40)
+		wordmark.Position = UDim2.new(0.5, 0, 0.5, -60)
 		wordmark.Size = UDim2.fromOffset(600, 100)
 		wordmark.BackgroundTransparency = 1
 		wordmark.Font = Enum.Font.GothamBold
@@ -72,6 +89,12 @@ do
 		wordmark.TextColor3 = Color3.new(1, 1, 1)
 		wordmark.ZIndex = 3
 		wordmark.Parent = root
+		-- glowing orange stroke on the wordmark itself
+		local wordmarkStroke = Instance.new('UIStroke')
+		wordmarkStroke.Color = Color3.fromRGB(255, 120, 40)
+		wordmarkStroke.Thickness = 2
+		wordmarkStroke.Transparency = 1
+		wordmarkStroke.Parent = wordmark
 		-- orange metallic gradient on the wordmark (the V's old look)
 		gradient = Instance.new('UIGradient')
 		gradient.Color = ColorSequence.new({
@@ -83,28 +106,119 @@ do
 		})
 		gradient.Parent = wordmark
 
-		local barTrack = Instance.new('Frame')
-		barTrack.AnchorPoint = Vector2.new(0.5, 0.5)
-		barTrack.Position = UDim2.new(0.5, 0, 0.5, 30)
-		barTrack.Size = UDim2.fromOffset(340, 5)
-		barTrack.BackgroundColor3 = Color3.new(1, 1, 1)
-		barTrack.BackgroundTransparency = 0.85
-		barTrack.BorderSizePixel = 0
-		barTrack.ZIndex = 3
-		barTrack.Parent = root
-		Instance.new('UICorner', barTrack).CornerRadius = UDim.new(1, 0)
-		barFill = Instance.new('Frame')
-		barFill.Size = UDim2.new(0, 0, 1, 0)
-		barFill.BackgroundColor3 = Color3.fromRGB(255, 106, 31)
-		barFill.BorderSizePixel = 0
-		barFill.ZIndex = 4
-		barFill.Parent = barTrack
-		Instance.new('UICorner', barFill).CornerRadius = UDim.new(1, 0)
+		-- ── circular progress ring ────────────────────────────────────────────
+		-- Roblox has no native ring, so build one from two half-circle wedges that
+		-- each rotate to reveal an orange arc. `setRingProgress(frac)` (0..1) drives
+		-- the right half 0-180deg then the left half 180-360deg.
+		local ringSize = 96
+		local ringHolder = Instance.new('Frame')
+		ringHolder.AnchorPoint = Vector2.new(0.5, 0.5)
+		ringHolder.Position = UDim2.new(0.5, 0, 0.5, 42)
+		ringHolder.Size = UDim2.fromOffset(ringSize, ringSize)
+		ringHolder.BackgroundTransparency = 1
+		ringHolder.ZIndex = 3
+		ringHolder.Parent = root
 
-		-- status text UNDER the progress bar
+		-- faint full track behind the arc
+		local ringTrack = Instance.new('Frame')
+		ringTrack.AnchorPoint = Vector2.new(0.5, 0.5)
+		ringTrack.Position = UDim2.fromScale(0.5, 0.5)
+		ringTrack.Size = UDim2.fromScale(1, 1)
+		ringTrack.BackgroundColor3 = Color3.new(1, 1, 1)
+		ringTrack.BackgroundTransparency = 0.88
+		ringTrack.BorderSizePixel = 0
+		ringTrack.ZIndex = 3
+		ringTrack.Parent = ringHolder
+		Instance.new('UICorner', ringTrack).CornerRadius = UDim.new(1, 0)
+
+		-- Each side is a container clipping to one vertical half of the ring. Inside
+		-- sits a full-ring-sized coloured DISC that only shows through its half. A
+		-- child "cover" disc (bg-coloured) hides half of that disc, leaving a rotating
+		-- semicircle; rotating the wrapper sweeps the exposed arc edge. Right half
+		-- fills 0-50%, left half 50-100%.
+		local function makeHalf(rightSide)
+			local half = Instance.new('Frame')
+			half.AnchorPoint = Vector2.new(0.5, 0.5)
+			half.Position = UDim2.fromScale(rightSide and 0.75 or 0.25, 0.5)
+			half.Size = UDim2.fromScale(0.5, 1)
+			half.BackgroundTransparency = 1
+			half.ClipsDescendants = true
+			half.ZIndex = 4
+			half.Parent = ringHolder
+			-- wrapper spans the FULL ring (2x this half's width), centred on the ring
+			-- centre, rotated to sweep. Anchored on the shared vertical centre line.
+			local wrapper = Instance.new('Frame')
+			wrapper.AnchorPoint = Vector2.new(rightSide and 0 or 1, 0.5)
+			wrapper.Position = UDim2.fromScale(rightSide and 0 or 1, 0.5)
+			wrapper.Size = UDim2.fromScale(2, 1)
+			wrapper.BackgroundTransparency = 1
+			wrapper.Rotation = 0
+			wrapper.ZIndex = 4
+			wrapper.Parent = half
+			-- coloured full disc
+			local disc = Instance.new('Frame')
+			disc.AnchorPoint = Vector2.new(0.5, 0.5)
+			disc.Position = UDim2.fromScale(0.5, 0.5)
+			disc.Size = UDim2.fromScale(1, 1)
+			disc.BackgroundColor3 = Color3.fromRGB(255, 106, 31)
+			disc.BorderSizePixel = 0
+			disc.ZIndex = 4
+			disc.Parent = wrapper
+			Instance.new('UICorner', disc).CornerRadius = UDim.new(1, 0)
+			-- cover the far half of the disc so only the near semicircle shows
+			local cover = Instance.new('Frame')
+			cover.AnchorPoint = Vector2.new(rightSide and 1 or 0, 0.5)
+			cover.Position = UDim2.fromScale(rightSide and 1 or 0, 0.5)
+			cover.Size = UDim2.fromScale(0.5, 1)
+			cover.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+			cover.BackgroundTransparency = 1 -- transparent: clip on `half` already hides it
+			cover.BorderSizePixel = 0
+			cover.ZIndex = 5
+			cover.Parent = wrapper
+			return wrapper
+		end
+		local rightPivot = makeHalf(true)
+		local leftPivot  = makeHalf(false)
+
+		-- punch a hole so it reads as a ring, not a pie
+		local ringHole = Instance.new('Frame')
+		ringHole.AnchorPoint = Vector2.new(0.5, 0.5)
+		ringHole.Position = UDim2.fromScale(0.5, 0.5)
+		ringHole.Size = UDim2.fromScale(0.72, 0.72)
+		ringHole.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+		ringHole.BackgroundTransparency = 0.35 -- match the bg tint so the game shows through
+		ringHole.BorderSizePixel = 0
+		ringHole.ZIndex = 5
+		ringHole.Parent = ringHolder
+		Instance.new('UICorner', ringHole).CornerRadius = UDim.new(1, 0)
+
+		-- percentage in the centre of the ring
+		local ringPct = Instance.new('TextLabel')
+		ringPct.AnchorPoint = Vector2.new(0.5, 0.5)
+		ringPct.Position = UDim2.fromScale(0.5, 0.5)
+		ringPct.Size = UDim2.fromScale(1, 1)
+		ringPct.BackgroundTransparency = 1
+		ringPct.Font = Enum.Font.GothamBold
+		ringPct.Text = '0%'
+		ringPct.TextSize = 20
+		ringPct.TextColor3 = Color3.fromRGB(255, 160, 90)
+		ringPct.TextTransparency = 1
+		ringPct.ZIndex = 6
+		ringPct.Parent = ringHolder
+
+		-- drive the ring from a 0..1 fraction
+		setRingProgress = function(frac)
+			frac = math.clamp(frac, 0, 1)
+			-- right half sweeps the first 50%, left half the second 50%
+			rightPivot.Rotation = math.min(frac, 0.5) * 360
+			leftPivot.Rotation  = math.max(frac - 0.5, 0) * 360
+			ringPct.Text = tostring(math.floor(frac * 100 + 0.5)) .. '%'
+		end
+
+		-- status text UNDER the ring (kept for API compatibility, hidden for now)
 		statusLabel = Instance.new('TextLabel')
 		statusLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-		statusLabel.Position = UDim2.new(0.5, 0, 0.5, 58)
+		statusLabel.Position = UDim2.new(0.5, 0, 0.5, 108)
 		statusLabel.Size = UDim2.fromOffset(600, 20)
 		statusLabel.BackgroundTransparency = 1
 		statusLabel.Font = Enum.Font.Gotham
@@ -112,13 +226,28 @@ do
 		statusLabel.TextSize = 14
 		statusLabel.TextColor3 = Color3.fromRGB(170, 170, 170)
 		statusLabel.TextTruncate = Enum.TextTruncate.AtEnd
+		statusLabel.Visible = false -- status title hidden for now
 		statusLabel.ZIndex = 3
 		statusLabel.Parent = root
 
-		-- intro animation: wordmark + bar fade in.
+		-- intro animation: wordmark (+ glow) + ring fade in.
 		tween(wordmark, 0.6, { TextTransparency = 0 })
+		tween(wordmarkStroke, 0.6, { Transparency = 0.35 })
+		tween(wordmarkGlow, 0.6, { TextTransparency = 0.55, TextStrokeTransparency = 0.4 })
 		task.delay(0.25, function()
-			tween(barTrack, 0.6, { BackgroundTransparency = 0.75 })
+			tween(ringTrack, 0.6, { BackgroundTransparency = 0.82 })
+			tween(ringPct, 0.6, { TextTransparency = 0 })
+		end)
+		-- gentle glow breathing on the wordmark
+		task.spawn(function()
+			while wordmark.Parent and not finished do
+				tween(wordmarkStroke, 1.4, { Transparency = 0.15 }, Enum.EasingStyle.Sine)
+				tween(wordmarkGlow, 1.4, { TextTransparency = 0.4 }, Enum.EasingStyle.Sine)
+				task.wait(1.4)
+				tween(wordmarkStroke, 1.4, { Transparency = 0.5 }, Enum.EasingStyle.Sine)
+				tween(wordmarkGlow, 1.4, { TextTransparency = 0.65 }, Enum.EasingStyle.Sine)
+				task.wait(1.4)
+			end
 		end)
 
 		-- rising ember particles across the FULL screen width, floating up from the
@@ -158,11 +287,11 @@ do
 				t.Completed:Wait()
 			end
 		end)
-		-- smoothly chase the progress target every frame
+		-- smoothly chase the progress target every frame -> drive the ring
 		task.spawn(function()
 			while screenGui.Parent and not finished do
 				progressShown = progressShown + (progressTarget - progressShown) * 0.12
-				barFill.Size = UDim2.new(math.clamp(progressShown, 0.03, 1), 0, 1, 0)
+				if setRingProgress then setRingProgress(math.clamp(progressShown, 0.02, 1)) end
 				RunService.Heartbeat:Wait()
 			end
 		end)
@@ -209,7 +338,7 @@ do
 			finished = true
 			if not built then if after then task.spawn(after) end return end
 			task.spawn(function()
-				tween(barFill, 0.3, { Size = UDim2.new(1, 0, 1, 0) })
+				if setRingProgress then setRingProgress(1) end
 				if statusLabel then statusLabel.Text = 'Done' end
 				task.wait(0.45)
 				-- fade every element out (plain Frame root has no GroupTransparency)
