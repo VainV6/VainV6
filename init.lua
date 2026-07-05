@@ -168,16 +168,27 @@ do
 		end)
 
 		-- keep removing the old top "Downloading..." banner if a stale init.lua /
-		-- auto-exec keeps re-creating it alongside this screen.
+		-- auto-exec keeps re-creating it alongside this screen. Scan BOTH gethui and
+		-- CoreGui (the old loader may parent to either), and any nested TextLabel
+		-- (not just a single direct child), so it's caught regardless of structure.
 		task.spawn(function()
+			local roots = {}
+			pcall(function() if gethui then roots[#roots + 1] = gethui() end end)
+			pcall(function() roots[#roots + 1] = cloneref(game:GetService('CoreGui')) end)
 			while screenGui.Parent and not finished do
 				pcall(function()
-					for _, g in ipairs(guiParent:GetChildren()) do
-						if g:IsA('ScreenGui') and g ~= screenGui then
-							local kids = g:GetChildren()
-							if #kids == 1 and kids[1]:IsA('TextLabel') then
-								local t = tostring(kids[1].Text)
-								if t:match('^Downloading ') or t:match('^Creating ') then g:Destroy() end
+					for _, container in ipairs(roots) do
+						for _, g in ipairs(container:GetChildren()) do
+							if g:IsA('ScreenGui') and g ~= screenGui and g.Name ~= 'VainLoadingScreen' then
+								for _, d in ipairs(g:GetDescendants()) do
+									if d:IsA('TextLabel') then
+										local t = tostring(d.Text)
+										if t:match('^Downloading ') or t:match('^Creating ') then
+											g:Destroy()
+											break
+										end
+									end
+								end
 							end
 						end
 					end
