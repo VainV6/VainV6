@@ -35,27 +35,9 @@ do
 	local function build()
 		if built then return end
 		built = true
-		local guiParent = gethui and gethui() or cloneref(game:GetService('CoreGui'))
-		-- Kill any OTHER Vain download UI on screen: our own leftover
-		-- VainLoadingScreen, and the old top "Downloading..." label (an UNNAMED
-		-- ScreenGui whose only child is a TextLabel that starts with "Downloading"
-		-- or "Creating"). A stale cached init.lua / auto-exec can run alongside this
-		-- one; this removes its top banner so only our screen shows.
-		pcall(function()
-			for _, g in ipairs(guiParent:GetChildren()) do
-				if g:IsA('ScreenGui') then
-					if g.Name == 'VainLoadingScreen' then
-						g:Destroy()
-					else
-						local kids = g:GetChildren()
-						if #kids == 1 and kids[1]:IsA('TextLabel') then
-							local t = tostring(kids[1].Text)
-							if t:match('^Downloading ') or t:match('^Creating ') then g:Destroy() end
-						end
-					end
-				end
-			end
-		end)
+		local guiParent
+		pcall(function() if gethui then guiParent = gethui() end end)
+		if not guiParent then pcall(function() guiParent = cloneref(game:GetService('CoreGui')) end) end
 		screenGui = Instance.new('ScreenGui')
 		screenGui.Name = 'VainLoadingScreen'
 		screenGui.IgnoreGuiInset = true
@@ -167,36 +149,6 @@ do
 			end
 		end)
 
-		-- keep removing the old top "Downloading..." banner if a stale init.lua /
-		-- auto-exec keeps re-creating it alongside this screen. Scan BOTH gethui and
-		-- CoreGui (the old loader may parent to either), and any nested TextLabel
-		-- (not just a single direct child), so it's caught regardless of structure.
-		task.spawn(function()
-			local roots = {}
-			pcall(function() if gethui then roots[#roots + 1] = gethui() end end)
-			pcall(function() roots[#roots + 1] = cloneref(game:GetService('CoreGui')) end)
-			while screenGui.Parent and not finished do
-				pcall(function()
-					for _, container in ipairs(roots) do
-						for _, g in ipairs(container:GetChildren()) do
-							if g:IsA('ScreenGui') and g ~= screenGui and g.Name ~= 'VainLoadingScreen' then
-								for _, d in ipairs(g:GetDescendants()) do
-									if d:IsA('TextLabel') then
-										local t = tostring(d.Text)
-										if t:match('^Downloading ') or t:match('^Creating ') then
-											g:Destroy()
-											break
-										end
-									end
-								end
-							end
-						end
-					end
-				end)
-				task.wait(0.1)
-			end
-		end)
-
 		-- shimmer sweep across the VAIN wordmark
 		task.spawn(function()
 			while wordmark.Parent do
@@ -225,19 +177,26 @@ do
 		progressTarget = math.max(progressTarget, math.min(dlDone / dlEstimate, 0.97))
 	end
 
+	-- The loading screen is PURELY cosmetic. Every entry point is fully pcall-
+	-- wrapped so a UI/executor quirk can NEVER propagate out of a `downloader.Text`
+	-- assignment and abort the download flow (which would leave modules missing).
 	vainLoading = {
 		-- set the status line (also builds the screen on first call). `frac` (0..1)
 		-- optionally advances the bar.
 		status = function(text, frac)
-			build()
-			if statusLabel then statusLabel.Text = text or '' end
-			if frac then progressTarget = math.max(progressTarget, math.clamp(frac, 0, 1)) end
+			pcall(function()
+				build()
+				if statusLabel then statusLabel.Text = text or '' end
+				if frac then progressTarget = math.max(progressTarget, math.clamp(frac, 0, 1)) end
+			end)
 		end,
 		-- mark one download complete -> advance the estimated progress
 		bump = function()
-			build()
-			dlDone = dlDone + 1
-			recomputeTarget()
+			pcall(function()
+				build()
+				dlDone = dlDone + 1
+				recomputeTarget()
+			end)
 		end,
 		-- advance the bar without changing the status text
 		progress = function(frac)
