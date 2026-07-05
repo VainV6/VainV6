@@ -107,90 +107,43 @@ do
 		gradient.Parent = wordmark
 
 		-- ── circular progress ring ────────────────────────────────────────────
-		-- Roblox has no native ring, so build one from two half-circle wedges that
-		-- each rotate to reveal an orange arc. `setRingProgress(frac)` (0..1) drives
-		-- the right half 0-180deg then the left half 180-360deg.
-		local ringSize = 96
+		-- Roblox has no native arc, so (per circular_progress.lua) the ring is drawn
+		-- as N little dots placed around a circle with cos/sin. Dots up to the current
+		-- fraction light up with the accent gradient; the rest stay a faint track.
+		-- Starts at 12 o'clock and sweeps clockwise. `setRingProgress(frac)` fills it.
+		local ringSize   = 120
+		local ringDots   = 72          -- segment count around the circle
+		local dotSize    = 8
+		local accent     = Color3.fromRGB(255, 138, 92)  -- #ff8a5c
+		local accent2    = Color3.fromRGB(255, 178, 124) -- #ffb27c
+		local trackCol   = Color3.fromRGB(255, 255, 255)
+
 		local ringHolder = Instance.new('Frame')
 		ringHolder.AnchorPoint = Vector2.new(0.5, 0.5)
-		ringHolder.Position = UDim2.new(0.5, 0, 0.5, 42)
+		ringHolder.Position = UDim2.new(0.5, 0, 0.5, 52)
 		ringHolder.Size = UDim2.fromOffset(ringSize, ringSize)
 		ringHolder.BackgroundTransparency = 1
 		ringHolder.ZIndex = 3
 		ringHolder.Parent = root
 
-		-- faint full track behind the arc
-		local ringTrack = Instance.new('Frame')
-		ringTrack.AnchorPoint = Vector2.new(0.5, 0.5)
-		ringTrack.Position = UDim2.fromScale(0.5, 0.5)
-		ringTrack.Size = UDim2.fromScale(1, 1)
-		ringTrack.BackgroundColor3 = Color3.new(1, 1, 1)
-		ringTrack.BackgroundTransparency = 0.88
-		ringTrack.BorderSizePixel = 0
-		ringTrack.ZIndex = 3
-		ringTrack.Parent = ringHolder
-		Instance.new('UICorner', ringTrack).CornerRadius = UDim.new(1, 0)
-
-		-- Each side is a container clipping to one vertical half of the ring. Inside
-		-- sits a full-ring-sized coloured DISC that only shows through its half. A
-		-- child "cover" disc (bg-coloured) hides half of that disc, leaving a rotating
-		-- semicircle; rotating the wrapper sweeps the exposed arc edge. Right half
-		-- fills 0-50%, left half 50-100%.
-		local function makeHalf(rightSide)
-			local half = Instance.new('Frame')
-			half.AnchorPoint = Vector2.new(0.5, 0.5)
-			half.Position = UDim2.fromScale(rightSide and 0.75 or 0.25, 0.5)
-			half.Size = UDim2.fromScale(0.5, 1)
-			half.BackgroundTransparency = 1
-			half.ClipsDescendants = true
-			half.ZIndex = 4
-			half.Parent = ringHolder
-			-- wrapper spans the FULL ring (2x this half's width), centred on the ring
-			-- centre, rotated to sweep. Anchored on the shared vertical centre line.
-			local wrapper = Instance.new('Frame')
-			wrapper.AnchorPoint = Vector2.new(rightSide and 0 or 1, 0.5)
-			wrapper.Position = UDim2.fromScale(rightSide and 0 or 1, 0.5)
-			wrapper.Size = UDim2.fromScale(2, 1)
-			wrapper.BackgroundTransparency = 1
-			wrapper.Rotation = 0
-			wrapper.ZIndex = 4
-			wrapper.Parent = half
-			-- coloured full disc
-			local disc = Instance.new('Frame')
-			disc.AnchorPoint = Vector2.new(0.5, 0.5)
-			disc.Position = UDim2.fromScale(0.5, 0.5)
-			disc.Size = UDim2.fromScale(1, 1)
-			disc.BackgroundColor3 = Color3.fromRGB(255, 106, 31)
-			disc.BorderSizePixel = 0
-			disc.ZIndex = 4
-			disc.Parent = wrapper
-			Instance.new('UICorner', disc).CornerRadius = UDim.new(1, 0)
-			-- cover the far half of the disc so only the near semicircle shows
-			local cover = Instance.new('Frame')
-			cover.AnchorPoint = Vector2.new(rightSide and 1 or 0, 0.5)
-			cover.Position = UDim2.fromScale(rightSide and 1 or 0, 0.5)
-			cover.Size = UDim2.fromScale(0.5, 1)
-			cover.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
-			cover.BackgroundTransparency = 1 -- transparent: clip on `half` already hides it
-			cover.BorderSizePixel = 0
-			cover.ZIndex = 5
-			cover.Parent = wrapper
-			return wrapper
+		local radiusScale = 0.5 - (dotSize / 2 + 2) / ringSize -- keep dots inside bounds
+		local dots = {}
+		for i = 1, ringDots do
+			-- -90deg puts dot 1 at the top; increasing angle sweeps clockwise
+			local ang = -math.pi / 2 + (i - 1) / ringDots * (math.pi * 2)
+			local dot = Instance.new('Frame')
+			dot.AnchorPoint = Vector2.new(0.5, 0.5)
+			dot.Position = UDim2.fromScale(0.5 + math.cos(ang) * radiusScale,
+			                               0.5 + math.sin(ang) * radiusScale)
+			dot.Size = UDim2.fromOffset(dotSize, dotSize)
+			dot.BackgroundColor3 = trackCol
+			dot.BackgroundTransparency = 0.85 -- faint track by default
+			dot.BorderSizePixel = 0
+			dot.ZIndex = 4
+			dot.Parent = ringHolder
+			Instance.new('UICorner', dot).CornerRadius = UDim.new(1, 0)
+			dots[i] = dot
 		end
-		local rightPivot = makeHalf(true)
-		local leftPivot  = makeHalf(false)
-
-		-- punch a hole so it reads as a ring, not a pie
-		local ringHole = Instance.new('Frame')
-		ringHole.AnchorPoint = Vector2.new(0.5, 0.5)
-		ringHole.Position = UDim2.fromScale(0.5, 0.5)
-		ringHole.Size = UDim2.fromScale(0.72, 0.72)
-		ringHole.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
-		ringHole.BackgroundTransparency = 0.35 -- match the bg tint so the game shows through
-		ringHole.BorderSizePixel = 0
-		ringHole.ZIndex = 5
-		ringHole.Parent = ringHolder
-		Instance.new('UICorner', ringHole).CornerRadius = UDim.new(1, 0)
 
 		-- percentage in the centre of the ring
 		local ringPct = Instance.new('TextLabel')
@@ -200,20 +153,64 @@ do
 		ringPct.BackgroundTransparency = 1
 		ringPct.Font = Enum.Font.GothamBold
 		ringPct.Text = '0%'
-		ringPct.TextSize = 20
-		ringPct.TextColor3 = Color3.fromRGB(255, 160, 90)
+		ringPct.TextSize = 26
+		ringPct.TextColor3 = Color3.fromRGB(245, 245, 248)
 		ringPct.TextTransparency = 1
 		ringPct.ZIndex = 6
 		ringPct.Parent = ringHolder
 
-		-- drive the ring from a 0..1 fraction
+		-- drive the ring from a 0..1 fraction: light dots up to `frac`, colour them
+		-- along the accent->accent2 gradient, and brighten the leading "tip" dot.
+		local litCount = 0
 		setRingProgress = function(frac)
 			frac = math.clamp(frac, 0, 1)
-			-- right half sweeps the first 50%, left half the second 50%
-			rightPivot.Rotation = math.min(frac, 0.5) * 360
-			leftPivot.Rotation  = math.max(frac - 0.5, 0) * 360
+			local lit = math.floor(frac * ringDots + 0.5)
+			for i = 1, ringDots do
+				local dot = dots[i]
+				if i <= lit then
+					local t = ringDots > 1 and (i - 1) / (ringDots - 1) or 0
+					dot.BackgroundColor3 = accent:Lerp(accent2, t)
+					dot.BackgroundTransparency = 0
+				else
+					dot.BackgroundColor3 = trackCol
+					dot.BackgroundTransparency = 0.85
+				end
+			end
+			-- glowing leading tip
+			if lit >= 1 and lit <= ringDots then
+				dots[lit].Size = UDim2.fromOffset(dotSize + 3, dotSize + 3)
+				if litCount ~= lit and litCount >= 1 and litCount <= ringDots then
+					dots[litCount].Size = UDim2.fromOffset(dotSize, dotSize)
+				end
+			end
+			litCount = lit
 			ringPct.Text = tostring(math.floor(frac * 100 + 0.5)) .. '%'
 		end
+
+		-- slowly spinning ambient halo dot pair for a bit of life
+		task.spawn(function()
+			local haloA, haloB = Instance.new('Frame'), Instance.new('Frame')
+			for _, h in {haloA, haloB} do
+				h.AnchorPoint = Vector2.new(0.5, 0.5)
+				h.Size = UDim2.fromOffset(dotSize + 4, dotSize + 4)
+				h.BackgroundColor3 = accent
+				h.BackgroundTransparency = 0.75
+				h.BorderSizePixel = 0
+				h.ZIndex = 3
+				h.Parent = ringHolder
+				Instance.new('UICorner', h).CornerRadius = UDim.new(1, 0)
+			end
+			local a = 0
+			while ringHolder.Parent and not finished do
+				a = a + 0.05
+				haloA.Position = UDim2.fromScale(0.5 + math.cos(a) * (radiusScale + 0.06),
+				                                 0.5 + math.sin(a) * (radiusScale + 0.06))
+				haloB.Position = UDim2.fromScale(0.5 + math.cos(a + math.pi) * (radiusScale + 0.06),
+				                                 0.5 + math.sin(a + math.pi) * (radiusScale + 0.06))
+				RunService.Heartbeat:Wait()
+			end
+			pcall(function() haloA:Destroy() haloB:Destroy() end)
+		end)
 
 		-- status text UNDER the ring (kept for API compatibility, hidden for now)
 		statusLabel = Instance.new('TextLabel')
@@ -235,7 +232,6 @@ do
 		tween(wordmarkStroke, 0.6, { Transparency = 0.35 })
 		tween(wordmarkGlow, 0.6, { TextTransparency = 0.55, TextStrokeTransparency = 0.4 })
 		task.delay(0.25, function()
-			tween(ringTrack, 0.6, { BackgroundTransparency = 0.82 })
 			tween(ringPct, 0.6, { TextTransparency = 0 })
 		end)
 		-- gentle glow breathing on the wordmark
