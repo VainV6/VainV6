@@ -2639,9 +2639,6 @@ function mainapi:CreateGUI()
 	addBlur(window)
 	addCorner(window)
 	makeDraggable(window)
-	-- Official Vain logo: metallic-orange gradient wordmark with a slow shimmer
-	-- sweep (from VainLogo.lua). The gradient tints the glyphs, so TextColor3 just
-	-- needs to be white for the gradient to read cleanly.
 	local logo = Instance.new('TextLabel')
 	logo.Name = 'VainLogo'
 	logo.Size = UDim2.fromOffset(60, 20)
@@ -2653,29 +2650,8 @@ function mainapi:CreateGUI()
 	logo.TextSize = 16
 	logo.FontFace = uipallet.FontSemiBold
 	logo.RichText = false
-	-- Solid, always-bright ORANGE base so it's readable at all times; the gradient
-	-- only adds a bright metallic highlight sweep (never dips to a dark/invisible
-	-- colour, and no theme tint since TextColor3 is white).
-	logo.TextColor3 = Color3.fromRGB(255, 120, 40)
+	logo.TextColor3 = select(3, uipallet.Main:ToHSV()) > 0.5 and uipallet.Text or Color3.new(1, 1, 1)
 	logo.Parent = window
-	local logoGrad = Instance.new('UIGradient')
-	logoGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 120, 40)),
-		ColorSequenceKeypoint.new(0.42, Color3.fromRGB(255, 120, 40)),
-		ColorSequenceKeypoint.new(0.50, Color3.fromRGB(255, 210, 150)),
-		ColorSequenceKeypoint.new(0.58, Color3.fromRGB(255, 120, 40)),
-		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 120, 40)),
-	})
-	logoGrad.Parent = logo
-	task.spawn(function()
-		while logo.Parent do
-			logoGrad.Offset = Vector2.new(-1, 0)
-			local tw = tweenService:Create(logoGrad, TweenInfo.new(2.5, Enum.EasingStyle.Linear), { Offset = Vector2.new(1, 0) })
-			tw:Play()
-			tw.Completed:Wait()
-			task.wait(2.5)
-		end
-	end)
 	local children = Instance.new('Frame')
 	children.Name = 'Children'
 	children.Size = UDim2.new(1, 0, 1, -33)
@@ -6449,36 +6425,18 @@ local function showPatchNotes(force)
 	local prev = mainapi.PatchNotes[2]
 	local PAD = 26
 
-	-- ── header: VAIN wordmark (metallic logo) + title/date (right) ───────────
+	-- ── header: VAIN wordmark (left) + title/date (right) ────────────────────
 	local brand = Instance.new('TextLabel')
 	brand.BackgroundTransparency = 1
-	brand.Position = UDim2.fromOffset(PAD, 22)
+	brand.Position = UDim2.fromOffset(PAD, 26)
 	brand.AutomaticSize = Enum.AutomaticSize.X
-	brand.Size = UDim2.fromOffset(0, 32)
+	brand.Size = UDim2.fromOffset(0, 24)
 	brand.Text = 'VAIN'
 	brand.TextXAlignment = Enum.TextXAlignment.Left
-	brand.TextColor3 = Color3.fromRGB(255, 120, 40)
-	brand.TextSize = 30
+	brand.TextColor3 = textColor
+	brand.TextSize = 20
 	brand.FontFace = uipallet.FontSemiBold
 	brand.Parent = card
-	local brandGrad = Instance.new('UIGradient')
-	brandGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 120, 40)),
-		ColorSequenceKeypoint.new(0.42, Color3.fromRGB(255, 120, 40)),
-		ColorSequenceKeypoint.new(0.50, Color3.fromRGB(255, 210, 150)),
-		ColorSequenceKeypoint.new(0.58, Color3.fromRGB(255, 120, 40)),
-		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 120, 40)),
-	})
-	brandGrad.Parent = brand
-	task.spawn(function()
-		while brand.Parent do
-			brandGrad.Offset = Vector2.new(-1, 0)
-			local tw = tweenService:Create(brandGrad, TweenInfo.new(2.5, Enum.EasingStyle.Linear), { Offset = Vector2.new(1, 0) })
-			tw:Play()
-			tw.Completed:Wait()
-			task.wait(2.5)
-		end
-	end)
 	local htitle = Instance.new('TextLabel')
 	htitle.AnchorPoint = Vector2.new(1, 0)
 	htitle.Position = UDim2.new(1, -PAD, 0, 24)
