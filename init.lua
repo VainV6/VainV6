@@ -65,8 +65,8 @@ do
 		-- as a crisp modern wordmark rather than a chunky puffy logo.
 		local wordmark = Instance.new('Frame')
 		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
-		wordmark.Position = UDim2.new(0.5, 0, 0.5, -40)
-		wordmark.Size = UDim2.fromOffset(420, 84)
+		wordmark.Position = UDim2.new(0.5, 0, 0.5, -66)   -- lifted up for more gap to the bar
+		wordmark.Size = UDim2.fromOffset(480, 120)        -- taller
 		wordmark.BackgroundTransparency = 1
 		wordmark.ZIndex = 3
 		wordmark.Parent = root
@@ -74,21 +74,21 @@ do
 		wmLayout.FillDirection = Enum.FillDirection.Horizontal
 		wmLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 		wmLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-		wmLayout.Padding = UDim.new(0, 14) -- wide, modern letter-spacing / tracking
+		wmLayout.Padding = UDim.new(0, 16) -- wide, modern letter-spacing / tracking
 		wmLayout.Parent = wordmark
 
-		local titleCol = Color3.fromRGB(245, 150, 40) -- flat orange, matches the bar
+		local titleCol = Color3.fromRGB(200, 96, 16) -- darker, deeper orange
 		local letters = {}
 		for i = 1, 4 do
 			local ch = ('VAIN'):sub(i, i)
 			local l = Instance.new('TextLabel')
 			l.LayoutOrder = i
 			l.AutomaticSize = Enum.AutomaticSize.X
-			l.Size = UDim2.fromOffset(0, 84)
+			l.Size = UDim2.fromOffset(0, 120)
 			l.BackgroundTransparency = 1
 			l.Font = Enum.Font.GothamBold      -- medium weight, not puffy
 			l.Text = ch
-			l.TextSize = 66
+			l.TextSize = 96                    -- bigger
 			l.TextColor3 = titleCol
 			l.TextTransparency = 1
 			l.ZIndex = 3
@@ -106,7 +106,7 @@ do
 
 		local barTrack = Instance.new('Frame')
 		barTrack.AnchorPoint = Vector2.new(0.5, 0.5)
-		barTrack.Position = UDim2.new(0.5, 0, 0.5, 40)
+		barTrack.Position = UDim2.new(0.5, 0, 0.5, 66)   -- lower -> more gap from the title
 		barTrack.Size = UDim2.fromOffset(barW, barH)
 		barTrack.BackgroundColor3 = trackCol
 		barTrack.BackgroundTransparency = 0.75
@@ -127,22 +127,22 @@ do
 		barFill.Parent = barTrack
 		Instance.new('UICorner', barFill).CornerRadius = UDim.new(1, 0)
 
-		-- shimmer: a soft brighter-ORANGE highlight that sweeps across the fill. It is
-		-- a lighter shade of the accent (NOT white), soft-edged via a gradient mask, so
-		-- it reads as a clean modern sheen rather than a gradient-to-white.
+		-- shimmer: a BRIGHT hot-orange highlight that sweeps across the fill. Fully
+		-- opaque at its peak and much lighter than the fill so it clearly reads as a
+		-- moving sheen, soft-edged via a gradient mask so the edges still blend.
 		local shimmer = Instance.new('Frame')
 		shimmer.AnchorPoint = Vector2.new(0.5, 0.5)
-		shimmer.Size = UDim2.new(0, 70, 1, 0)
+		shimmer.Size = UDim2.new(0, 90, 1, 0)                    -- wider streak
 		shimmer.Position = UDim2.fromScale(-0.3, 0.5)
-		shimmer.BackgroundColor3 = Color3.fromRGB(255, 190, 105) -- brighter orange, not white
-		shimmer.BackgroundTransparency = 0.45
+		shimmer.BackgroundColor3 = Color3.fromRGB(255, 224, 170) -- bright, near-white hot orange
+		shimmer.BackgroundTransparency = 0                       -- fully opaque peak (gradient masks the edges)
 		shimmer.BorderSizePixel = 0
 		shimmer.ZIndex = 5
 		shimmer.Parent = barFill
 		local shimGrad = Instance.new('UIGradient')
 		shimGrad.Transparency = NumberSequence.new({
 			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(0.5, 0),
+			NumberSequenceKeypoint.new(0.5, 0),   -- solid bright at the center
 			NumberSequenceKeypoint.new(1, 1),
 		})
 		shimGrad.Parent = shimmer
