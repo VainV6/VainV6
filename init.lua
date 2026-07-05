@@ -36,11 +36,24 @@ do
 		if built then return end
 		built = true
 		local guiParent = gethui and gethui() or cloneref(game:GetService('CoreGui'))
-		-- clear any leftover loading GUI from a previous inject (e.g. an old
-		-- version's top "Downloading..." label) so it can't linger on screen.
+		-- Kill any OTHER Vain download UI on screen: our own leftover
+		-- VainLoadingScreen, and the old top "Downloading..." label (an UNNAMED
+		-- ScreenGui whose only child is a TextLabel that starts with "Downloading"
+		-- or "Creating"). A stale cached init.lua / auto-exec can run alongside this
+		-- one; this removes its top banner so only our screen shows.
 		pcall(function()
 			for _, g in ipairs(guiParent:GetChildren()) do
-				if g:IsA('ScreenGui') and g.Name == 'VainLoadingScreen' then g:Destroy() end
+				if g:IsA('ScreenGui') then
+					if g.Name == 'VainLoadingScreen' then
+						g:Destroy()
+					else
+						local kids = g:GetChildren()
+						if #kids == 1 and kids[1]:IsA('TextLabel') then
+							local t = tostring(kids[1].Text)
+							if t:match('^Downloading ') or t:match('^Creating ') then g:Destroy() end
+						end
+					end
+				end
 			end
 		end)
 		screenGui = Instance.new('ScreenGui')
@@ -67,15 +80,16 @@ do
 		-- stays large and correctly stacked on any screen size (portrait mobile
 		-- included) -- the old fixed 420px container made it tiny + low.
 
-		-- big V, centred and a little above middle
+		-- big V, centred and a little above middle. Fixed TextSize (not TextScaled)
+		-- so the glyph is a guaranteed large size instead of underfilling a box.
 		local vLabel = Instance.new('TextLabel')
 		vLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-		vLabel.Position = UDim2.new(0.5, 0, 0.5, -40)
-		vLabel.Size = UDim2.fromOffset(60, 60)
+		vLabel.Position = UDim2.new(0.5, 0, 0.5, -50)
+		vLabel.Size = UDim2.fromOffset(360, 300)
 		vLabel.BackgroundTransparency = 1
 		vLabel.Text = 'V'
 		vLabel.Font = Enum.Font.GothamBlack
-		vLabel.TextScaled = true
+		vLabel.TextSize = 40
 		vLabel.TextColor3 = Color3.new(1, 1, 1)
 		vLabel.TextTransparency = 1
 		vLabel.ZIndex = 3
@@ -139,11 +153,57 @@ do
 
 		-- intro animation
 		tween(root, 0.3, { GroupTransparency = 0 })
-		tween(vLabel, 0.9, { Size = UDim2.fromOffset(460, 460), TextTransparency = 0 }, Enum.EasingStyle.Back)
+		tween(vLabel, 0.9, { TextSize = 260, TextTransparency = 0 }, Enum.EasingStyle.Back)
 		task.delay(0.4, function()
 			tween(wordmark, 0.6, { TextTransparency = 0 })
 			tween(barTrack, 0.6, { BackgroundTransparency = 0.75 })
 		end)
+
+		-- rising ember particles: small orange dots that drift up + fade behind the V
+		task.spawn(function()
+			while screenGui.Parent and not finished do
+				local size = math.random(3, 7)
+				local p = Instance.new('Frame')
+				p.AnchorPoint = Vector2.new(0.5, 0.5)
+				p.Size = UDim2.fromOffset(size, size)
+				p.Position = UDim2.new(0.5, math.random(-220, 220), 0.5, math.random(120, 260))
+				p.BackgroundColor3 = Color3.fromRGB(255, math.random(120, 190), 40)
+				p.BackgroundTransparency = math.random(20, 50) / 100
+				p.BorderSizePixel = 0
+				p.ZIndex = 2
+				Instance.new('UICorner', p).CornerRadius = UDim.new(1, 0)
+				p.Parent = root
+				local rise = math.random(240, 420)
+				local dur = math.random(18, 30) / 10
+				tween(p, dur, {
+					Position = p.Position - UDim2.fromOffset(math.random(-30, 30), rise),
+					BackgroundTransparency = 1,
+					Size = UDim2.fromOffset(1, 1),
+				}, Enum.EasingStyle.Sine)
+				task.delay(dur, function() pcall(function() p:Destroy() end) end)
+				task.wait(math.random(6, 16) / 100)
+			end
+		end)
+
+		-- keep removing the old top "Downloading..." banner if a stale init.lua /
+		-- auto-exec keeps re-creating it alongside this screen.
+		task.spawn(function()
+			while screenGui.Parent and not finished do
+				pcall(function()
+					for _, g in ipairs(guiParent:GetChildren()) do
+						if g:IsA('ScreenGui') and g ~= screenGui then
+							local kids = g:GetChildren()
+							if #kids == 1 and kids[1]:IsA('TextLabel') then
+								local t = tostring(kids[1].Text)
+								if t:match('^Downloading ') or t:match('^Creating ') then g:Destroy() end
+							end
+						end
+					end
+				end)
+				task.wait(0.1)
+			end
+		end)
+
 		-- shimmer sweep across the V
 		task.spawn(function()
 			while vLabel.Parent do
