@@ -2810,12 +2810,15 @@ local AimAssist
 			gui.Parent = gethui and gethui() or lplr:WaitForChild('PlayerGui')
 
 			local root = Instance.new('Frame')
-			root.Size = UDim2.fromOffset(230, 0)
+			root.Size = UDim2.fromOffset(220, 0)
 			root.AutomaticSize = Enum.AutomaticSize.Y
-			root.Position = UDim2.new(0, 12, 0.28, 0)
+			-- top-left, clear of the ranked kit-ban grid / player columns. Draggable.
+			root.Position = UDim2.new(0, 12, 0, 90)
 			root.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
 			root.BackgroundTransparency = 0.15
 			root.BorderSizePixel = 0
+			root.Active = true
+			root.Draggable = true
 			root.Parent = gui
 			local rc = Instance.new('UICorner') rc.CornerRadius = UDim.new(0, 10) rc.Parent = root
 			local pad = Instance.new('UIPadding')
@@ -2893,9 +2896,17 @@ local AimAssist
 
 		PartyList = vain.Categories.Render:CreateModule({
 			Name = 'Party List',
-			Tooltip = "Shows which players queued together as a PARTY in this match (friends grouped onto the same slot -- distinct from teams). Reads the match's replicated party data and draws a small overlay on the left, one card per party. Solo players are hidden by default.",
+			Tooltip = "Shows which players queued together as a PARTY (friends grouped onto the same slot -- distinct from teams), including during the ranked kit-ban draft. Draws a small draggable overlay top-left, one card per party. Solo players hidden by default. If the panel doesn't appear, this match has no multi-player parties.",
 			Function = function(callback)
 				if callback then
+					-- one-shot diagnostic: how many parties / multi-parties are visible
+					local parties = collectParties()
+					local multi = 0
+					for _, ids in parties do if #ids >= 2 then multi += 1 end end
+					notif('Party List', ('%d partie(s) found, %d with 2+ players%s'):format(
+						#parties, multi,
+						multi == 0 and ' -- nothing to show (all solo-queued)' or ''),
+						6, multi > 0 and 'success' or 'warning')
 					task.spawn(function()
 						repeat
 							pcall(build)
