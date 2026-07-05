@@ -118,42 +118,45 @@ do
 		gradient = letters[1]:FindFirstChildOfClass('UIGradient')
 
 		-- ── circular progress ring ────────────────────────────────────────────
-		-- Roblox has no native arc, so (per circular_progress.lua) the ring is drawn
-		-- as N little dots placed around a circle with cos/sin. Dots up to the current
-		-- fraction light up with the accent gradient; the rest stay a faint track.
-		-- Starts at 12 o'clock and sweeps clockwise. `setRingProgress(frac)` fills it.
-		local ringSize   = 120
-		local ringDots   = 72          -- segment count around the circle
-		local dotSize    = 8
+		-- Roblox has no native arc, so the ring is drawn as many thin tangent bars
+		-- placed around a circle with cos/sin. With a high segment count and each bar
+		-- rotated to lie along the circle (+ a little overlap) they merge into one
+		-- SMOOTH continuous line. Bars up to the current fraction light up with the
+		-- accent gradient; the rest stay a faint track. Starts at 12 o'clock, CW.
+		local ringSize   = 128
+		local segCount   = 140         -- high count -> reads as a continuous line
+		local segThick   = 5           -- ring stroke thickness (px)
 		local accent     = Color3.fromRGB(255, 138, 92)  -- #ff8a5c
 		local accent2    = Color3.fromRGB(255, 178, 124) -- #ffb27c
 		local trackCol   = Color3.fromRGB(255, 255, 255)
 
 		local ringHolder = Instance.new('Frame')
 		ringHolder.AnchorPoint = Vector2.new(0.5, 0.5)
-		ringHolder.Position = UDim2.new(0.5, 0, 0.5, 52)
+		ringHolder.Position = UDim2.new(0.5, 0, 0.5, 54)
 		ringHolder.Size = UDim2.fromOffset(ringSize, ringSize)
 		ringHolder.BackgroundTransparency = 1
 		ringHolder.ZIndex = 3
 		ringHolder.Parent = root
 
-		local radiusScale = 0.5 - (dotSize / 2 + 2) / ringSize -- keep dots inside bounds
-		local dots = {}
-		for i = 1, ringDots do
-			-- -90deg puts dot 1 at the top; increasing angle sweeps clockwise
-			local ang = -math.pi / 2 + (i - 1) / ringDots * (math.pi * 2)
-			local dot = Instance.new('Frame')
-			dot.AnchorPoint = Vector2.new(0.5, 0.5)
-			dot.Position = UDim2.fromScale(0.5 + math.cos(ang) * radiusScale,
-			                               0.5 + math.sin(ang) * radiusScale)
-			dot.Size = UDim2.fromOffset(dotSize, dotSize)
-			dot.BackgroundColor3 = trackCol
-			dot.BackgroundTransparency = 0.85 -- faint track by default
-			dot.BorderSizePixel = 0
-			dot.ZIndex = 4
-			dot.Parent = ringHolder
-			Instance.new('UICorner', dot).CornerRadius = UDim.new(1, 0)
-			dots[i] = dot
+		local radius = ringSize / 2 - segThick / 2 - 2 -- px radius of the stroke centre
+		-- each bar spans a touch more than one segment's arc length so neighbours
+		-- overlap and the seam disappears -> a smooth stroke.
+		local segLen = (2 * math.pi * radius) / segCount + 2
+		local segs = {}
+		for i = 1, segCount do
+			local ang = -math.pi / 2 + (i - 1) / segCount * (math.pi * 2)
+			local seg = Instance.new('Frame')
+			seg.AnchorPoint = Vector2.new(0.5, 0.5)
+			seg.Position = UDim2.new(0.5, math.cos(ang) * radius, 0.5, math.sin(ang) * radius)
+			seg.Size = UDim2.fromOffset(segLen, segThick)
+			seg.Rotation = math.deg(ang) + 90 -- tangent to the circle
+			seg.BackgroundColor3 = trackCol
+			seg.BackgroundTransparency = 0.86 -- faint track by default
+			seg.BorderSizePixel = 0
+			seg.ZIndex = 4
+			seg.Parent = ringHolder
+			Instance.new('UICorner', seg).CornerRadius = UDim.new(1, 0)
+			segs[i] = seg
 		end
 
 		-- percentage in the centre of the ring
@@ -170,58 +173,24 @@ do
 		ringPct.ZIndex = 6
 		ringPct.Parent = ringHolder
 
-		-- drive the ring from a 0..1 fraction: light dots up to `frac`, colour them
-		-- along the accent->accent2 gradient, and brighten the leading "tip" dot.
-		local litCount = 0
+		-- drive the ring from a 0..1 fraction: light segments up to `frac`, coloured
+		-- along the accent->accent2 gradient; the rest fade back to the faint track.
 		setRingProgress = function(frac)
 			frac = math.clamp(frac, 0, 1)
-			local lit = math.floor(frac * ringDots + 0.5)
-			for i = 1, ringDots do
-				local dot = dots[i]
+			local lit = math.floor(frac * segCount + 0.5)
+			for i = 1, segCount do
+				local seg = segs[i]
 				if i <= lit then
-					local t = ringDots > 1 and (i - 1) / (ringDots - 1) or 0
-					dot.BackgroundColor3 = accent:Lerp(accent2, t)
-					dot.BackgroundTransparency = 0
+					local t = segCount > 1 and (i - 1) / (segCount - 1) or 0
+					seg.BackgroundColor3 = accent:Lerp(accent2, t)
+					seg.BackgroundTransparency = 0
 				else
-					dot.BackgroundColor3 = trackCol
-					dot.BackgroundTransparency = 0.85
+					seg.BackgroundColor3 = trackCol
+					seg.BackgroundTransparency = 0.86
 				end
 			end
-			-- glowing leading tip
-			if lit >= 1 and lit <= ringDots then
-				dots[lit].Size = UDim2.fromOffset(dotSize + 3, dotSize + 3)
-				if litCount ~= lit and litCount >= 1 and litCount <= ringDots then
-					dots[litCount].Size = UDim2.fromOffset(dotSize, dotSize)
-				end
-			end
-			litCount = lit
 			ringPct.Text = tostring(math.floor(frac * 100 + 0.5)) .. '%'
 		end
-
-		-- slowly spinning ambient halo dot pair for a bit of life
-		task.spawn(function()
-			local haloA, haloB = Instance.new('Frame'), Instance.new('Frame')
-			for _, h in {haloA, haloB} do
-				h.AnchorPoint = Vector2.new(0.5, 0.5)
-				h.Size = UDim2.fromOffset(dotSize + 4, dotSize + 4)
-				h.BackgroundColor3 = accent
-				h.BackgroundTransparency = 0.75
-				h.BorderSizePixel = 0
-				h.ZIndex = 3
-				h.Parent = ringHolder
-				Instance.new('UICorner', h).CornerRadius = UDim.new(1, 0)
-			end
-			local a = 0
-			while ringHolder.Parent and not finished do
-				a = a + 0.05
-				haloA.Position = UDim2.fromScale(0.5 + math.cos(a) * (radiusScale + 0.06),
-				                                 0.5 + math.sin(a) * (radiusScale + 0.06))
-				haloB.Position = UDim2.fromScale(0.5 + math.cos(a + math.pi) * (radiusScale + 0.06),
-				                                 0.5 + math.sin(a + math.pi) * (radiusScale + 0.06))
-				RunService.Heartbeat:Wait()
-			end
-			pcall(function() haloA:Destroy() haloB:Destroy() end)
-		end)
 
 		-- status text UNDER the ring (kept for API compatibility, hidden for now)
 		statusLabel = Instance.new('TextLabel')
