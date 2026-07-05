@@ -60,28 +60,62 @@ do
 		bg.Parent = root
 
 		-- (V removed) -- centred VAIN wordmark + circular progress ring + status.
-		local wordmark = Instance.new('TextLabel')
+		-- Modern wordmark: heavy GothamBlack, letter-spaced (via a UIListLayout of
+		-- per-letter labels) with a metallic vertical gradient, a crisp thin stroke
+		-- for definition, and an animated horizontal shimmer sweep.
+		local wordmark = Instance.new('Frame')
 		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
-		wordmark.Position = UDim2.new(0.5, 0, 0.5, -40)
-		wordmark.Size = UDim2.fromOffset(600, 100)
+		wordmark.Position = UDim2.new(0.5, 0, 0.5, -46)
+		wordmark.Size = UDim2.fromOffset(420, 108)
 		wordmark.BackgroundTransparency = 1
-		wordmark.Font = Enum.Font.GothamBold
-		wordmark.Text = 'VAIN'
-		wordmark.TextSize = 90
-		wordmark.TextTransparency = 1
-		wordmark.TextColor3 = Color3.new(1, 1, 1)
 		wordmark.ZIndex = 3
 		wordmark.Parent = root
-		-- orange metallic gradient on the wordmark (the V's old look)
-		gradient = Instance.new('UIGradient')
-		gradient.Color = ColorSequence.new({
-			ColorSequenceKeypoint.new(0.00, Color3.fromRGB(154, 61, 10)),
-			ColorSequenceKeypoint.new(0.28, Color3.fromRGB(255, 106, 31)),
-			ColorSequenceKeypoint.new(0.48, Color3.fromRGB(255, 196, 138)),
-			ColorSequenceKeypoint.new(0.68, Color3.fromRGB(255, 106, 31)),
-			ColorSequenceKeypoint.new(1.00, Color3.fromRGB(122, 47, 8)),
-		})
-		gradient.Parent = wordmark
+		local wmLayout = Instance.new('UIListLayout')
+		wmLayout.FillDirection = Enum.FillDirection.Horizontal
+		wmLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		wmLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+		wmLayout.Padding = UDim.new(0, 8) -- letter spacing / tracking
+		wmLayout.Parent = wordmark
+
+		-- metallic vertical gradient (bright top -> deep base), shared per letter
+		local function makeGradient()
+			local g = Instance.new('UIGradient')
+			g.Rotation = 90
+			g.Color = ColorSequence.new({
+				ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 214, 170)),
+				ColorSequenceKeypoint.new(0.30, Color3.fromRGB(255, 150, 70)),
+				ColorSequenceKeypoint.new(0.55, Color3.fromRGB(255, 106, 31)),
+				ColorSequenceKeypoint.new(1.00, Color3.fromRGB(168, 66, 12)),
+			})
+			return g
+		end
+		local letters = {}
+		for i = 1, 4 do
+			local ch = ('VAIN'):sub(i, i)
+			local l = Instance.new('TextLabel')
+			l.LayoutOrder = i
+			l.AutomaticSize = Enum.AutomaticSize.X
+			l.Size = UDim2.fromOffset(0, 108)
+			l.BackgroundTransparency = 1
+			l.Font = Enum.Font.GothamBlack
+			l.Text = ch
+			l.TextSize = 96
+			l.TextColor3 = Color3.new(1, 1, 1)
+			l.TextTransparency = 1
+			l.ZIndex = 3
+			l.Parent = wordmark
+			-- crisp thin stroke for definition against any background
+			local st = Instance.new('UIStroke')
+			st.Color = Color3.fromRGB(90, 30, 5)
+			st.Thickness = 2
+			st.Transparency = 0.15
+			st.LineJoinMode = Enum.LineJoinMode.Round
+			st.Parent = l
+			makeGradient().Parent = l
+			letters[i] = l
+		end
+		-- keep a single gradient handle for the shimmer sweep loop (drives all letters)
+		gradient = letters[1]:FindFirstChildOfClass('UIGradient')
 
 		-- ── circular progress ring ────────────────────────────────────────────
 		-- Roblox has no native arc, so (per circular_progress.lua) the ring is drawn
@@ -204,9 +238,13 @@ do
 		statusLabel.ZIndex = 3
 		statusLabel.Parent = root
 
-		-- intro animation: wordmark + ring fade in.
-		tween(wordmark, 0.6, { TextTransparency = 0 })
-		task.delay(0.25, function()
+		-- intro animation: letters fade in with a subtle left-to-right stagger.
+		for i, l in ipairs(letters) do
+			task.delay(0.06 * (i - 1), function()
+				tween(l, 0.5, { TextTransparency = 0 })
+			end)
+		end
+		task.delay(0.35, function()
 			tween(ringPct, 0.6, { TextTransparency = 0 })
 		end)
 
@@ -238,13 +276,21 @@ do
 			end
 		end)
 
-		-- shimmer sweep across the VAIN wordmark
+		-- shimmer sweep: a metallic sheen travels left->right across the letters by
+		-- phase-shifting each letter's vertical gradient offset (a staggered wave).
 		task.spawn(function()
-			while wordmark.Parent do
-				gradient.Offset = Vector2.new(-1, 0)
-				local t = TweenService:Create(gradient, TweenInfo.new(2.2, Enum.EasingStyle.Linear), { Offset = Vector2.new(1, 0) })
-				t:Play()
-				t.Completed:Wait()
+			local grads = {}
+			for i, l in ipairs(letters) do grads[i] = l:FindFirstChildOfClass('UIGradient') end
+			local phase = 0
+			while wordmark.Parent and not finished do
+				phase = phase + 0.03
+				for i, g in ipairs(grads) do
+					if g then
+						-- each letter lags the previous -> the shine rolls across the word
+						g.Offset = Vector2.new(0, math.sin(phase - (i - 1) * 0.6) * 0.45)
+					end
+				end
+				RunService.Heartbeat:Wait()
 			end
 		end)
 		-- smoothly chase the progress target every frame -> drive the ring
