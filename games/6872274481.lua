@@ -14739,9 +14739,6 @@ run(function()
     local Mode
     local Smart
     local Switch
-    local HoleFiller
-    local ShowGaps
-    local GapsOnly
 
     local function getBedNear()
         local localPosition = entitylib.isAlive and entitylib.character.RootPart.Position or Vector3.zero
@@ -14793,9 +14790,6 @@ run(function()
                 repeat
                     local bed = getBedNear()
                     if bed then
-                        -- "Gaps Only": don't build the pyramid at all -- the Hole Filler
-                        -- (auto-enabled with this) handles just the exposed gaps.
-                        if not (GapsOnly and GapsOnly.Enabled) then
                         for i, block in getBlocks() do
                             local switch, old = Switch.Enabled, store.hand and store.hand.tool and getHotbar(store.hand.tool) or nil
                             local hotbar = nil
@@ -14825,7 +14819,6 @@ run(function()
                             if switch and old and hotbarSwitch(old) then
                                 task.wait()
                             end
-                        end
                         end
                     else
                         if Mode.Value == 'On Key' then
@@ -14873,174 +14866,164 @@ run(function()
     })
     Switch = BedProtector:CreateToggle({Name = 'Auto Switch', Tooltip = 'Automatically switches to the required tool or item'})
     Smart = BedProtector:CreateToggle({Name = 'Smart', Default = true, Tooltip = 'Uses smart detection to avoid triggering unnecessarily'})
+end)
 
-    -- ── Bed Hole Filler ──────────────────────────────────────────────────────
-    -- Reactively patches only the EXPOSED gaps in the immediate shell around your
-    -- bed (the face-adjacent cells of each bed block) rather than rebuilding the
-    -- whole pyramid. Fires the instant a block is broken near the bed, plus a
-    -- short backup scan, so someone breaking through gets the hole re-sealed
-    -- immediately. Reuses getBedNear/getBlocks/getPlacedBlock above.
-    do
-        local GRID = 3
+-- ══════════════════════════════════════════════════════════════════════════════
+--  BED GAP FIXER  (own module: patch / visualise gaps in the bed defense)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- Split out of Bed Protector. Never builds the full pyramid -- it only detects
+-- the EXPOSED cells in the shell around the bed and either fills them (reactively,
+-- the moment a block breaks) or highlights them so you can see what's missing.
+run(function()
+    local GapFixer, AutoFill, ShowGaps, Range
+    local GRID = 3
 
-        -- Find YOUR team's bed with NO distance limit (getBedNear caps at 14 studs,
-        -- which meant the gap features silently did nothing whenever you stepped
-        -- back). Prefer the team-tagged bed; fall back to the nearest bed.
-        local function getMyBed()
-            local myTeam = lplr:GetAttribute('Team')
-            local lp = entitylib.isAlive and entitylib.character.RootPart and entitylib.character.RootPart.Position or Vector3.zero
-            local nearest, nearestDist
-            for _, v in collectionService:GetTagged('bed') do
-                local ok = pcall(function() return v.Position end)
-                if ok then
-                    if myTeam and v:GetAttribute('Team' .. myTeam .. 'NoBreak') then
-                        return v
-                    end
-                    local d = (lp - v.Position).Magnitude
-                    if not nearestDist or d < nearestDist then nearestDist, nearest = d, v end
-                end
-            end
-            return nearest
-        end
-
-        -- Gaps = the exact cells the Bed Protector pyramid would cover, but which are
-        -- currently EMPTY. We reuse getPyramid() + (bed.CFrame * offset), the same
-        -- proven coordinate logic the pyramid placer uses, so detection can't drift
-        -- from placement. `size` controls how many pyramid layers to consider
-        -- (2 = the immediate shell around a 2-block bed, which is what matters).
-        local function gapPositions(bed, size)
-            size = size or 2
-            local gaps, seen = {}, {}
-            for _, off in getPyramid(size, GRID) do
-                local pos = (bed.CFrame * CFrame.new(off)).Position
-                local key = tostring(bedwars.BlockController:getBlockPosition(pos))
-                if not seen[key] then
-                    seen[key] = true
-                    if not getPlacedBlock(pos) then gaps[#gaps + 1] = pos end
-                end
-            end
-            return gaps
-        end
-
-        local function gapFillingOn()
-            return BedProtector.Enabled and ((HoleFiller and HoleFiller.Enabled) or (GapsOnly and GapsOnly.Enabled))
-        end
-        local function fillHoles()
-            if not gapFillingOn() then return end
-            if not entitylib.isAlive or not entitylib.character.RootPart then return end
-            local bed = getMyBed()
-            if not bed then return end
-            local blocks = getBlocks()
-            if #blocks == 0 then return end
-            local strongest = blocks[1] -- {itemType, health, tool}
-            local rootPos = entitylib.character.RootPart.Position
-
-            local switch = Switch.Enabled
-            local old = switch and store.hand and store.hand.tool and getHotbar(store.hand.tool) or nil
-            local hotbar = switch and getHotbar(strongest[3]) or nil
-
-            for _, pos in gapPositions(bed) do
-                if (rootPos - pos).Magnitude <= PlaceRange.Value then
-                    if hotbar and hotbarSwitch(hotbar) then task.wait() end
-                    task.spawn(bedwars.placeBlock, pos, strongest[1], false)
-                end
-            end
-            if switch and old and hotbarSwitch(old) then task.wait() end
-        end
-
-        -- Start the fill hooks once; used by BOTH Hole Filler and Gaps Only. A flag
-        -- prevents double-registering when both are toggled.
-        local fillHooksActive = false
-        local function startFillHooks()
-            if fillHooksActive then return end
-            fillHooksActive = true
-            -- react instantly to any block break near the bed
-            BedProtector:Clean(vainEvents.BreakBlockEvent.Event:Connect(function()
-                task.spawn(fillHoles)
-            end))
-            -- backup scan so gaps still close even if an event is missed
-            task.spawn(function()
-                repeat
-                    pcall(fillHoles)
-                    task.wait(0.3)
-                until not gapFillingOn()
-                fillHooksActive = false
-            end)
-        end
-
-        HoleFiller = BedProtector:CreateToggle({
-            Name = 'Hole Filler',
-            Tooltip = 'Instantly re-seals only the exposed gaps in the shell directly around your bed (reacts the moment a block is broken). Lighter than the full pyramid.',
-            Default = false,
-            Function = function(callback)
-                if callback then startFillHooks() end
-            end,
-        })
-        GapsOnly = BedProtector:CreateToggle({
-            Name = 'Gaps Only',
-            Tooltip = 'Only patch exposed gaps around the bed -- never builds the full protective pyramid. (Runs the gap filler on its own; no need to also enable Hole Filler.)',
-            Default = false,
-            Function = function(callback)
-                if callback then startFillHooks() end
-            end,
-        })
-
-        -- ── Show Gaps ─────────────────────────────────────────────────────────
-        -- Draws a red box at each exposed air cell around the bed so you can see
-        -- exactly what's missing/needs fixing. Works whether or not Hole Filler
-        -- is auto-placing.
-        local GapFolder = Instance.new('Folder')
-        GapFolder.Parent = (gethui and gethui()) or cloneref(game:GetService('CoreGui'))
-        local gapBoxes = {}
-        local function clearGaps()
-            for _, b in gapBoxes do b:Destroy() end
-            table.clear(gapBoxes)
-        end
-        local function drawGaps()
-            clearGaps()
-            if not (ShowGaps and ShowGaps.Enabled and BedProtector.Enabled) then return end
-            local bed = getMyBed()
-            if not bed then return end
-            for _, pos in gapPositions(bed) do
-                local part = Instance.new('Part')
-                part.Anchored = true
-                part.CanCollide = false
-                part.CanQuery = false
-                part.Transparency = 1
-                part.Size = Vector3.new(GRID, GRID, GRID)
-                part.CFrame = CFrame.new(bedwars.BlockController:getBlockPosition(pos) * GRID)
-                local box = Instance.new('BoxHandleAdornment')
-                box.Adornee = part
-                box.Size = Vector3.new(GRID, GRID, GRID)
-                box.Color3 = Color3.fromRGB(255, 60, 60)
-                box.Transparency = 0.35
-                box.AlwaysOnTop = true
-                box.ZIndex = 0
-                box.Parent = part
-                part.Parent = GapFolder
-                gapBoxes[#gapBoxes + 1] = part
+    -- Find your team's bed (mirrors Bed Protector's 14-stud + team-attribute rule).
+    local function getBed()
+        local lp = entitylib.isAlive and entitylib.character.RootPart and entitylib.character.RootPart.Position or Vector3.zero
+        for _, v in collectionService:GetTagged('bed') do
+            local ok, pos = pcall(function() return v.Position end)
+            if ok and (lp - pos).Magnitude < 14
+                and v:GetAttribute('Team' .. (lplr:GetAttribute('Team') or -1) .. 'NoBreak') then
+                return v
             end
         end
+        return nil
+    end
 
-        ShowGaps = BedProtector:CreateToggle({
-            Name = 'Show Gaps',
-            Tooltip = 'Highlights the missing (air) blocks around your bed in red so you can see what needs fixing.',
-            Default = false,
-            Function = function(callback)
-                if not callback then clearGaps() return end
-                BedProtector:Clean(clearGaps)
-                BedProtector:Clean(vainEvents.BreakBlockEvent.Event:Connect(function() task.spawn(drawGaps) end))
-                BedProtector:Clean(vainEvents.PlaceBlockEvent.Event:Connect(function() task.spawn(drawGaps) end))
+    -- strongest placeable block in the hotbar {itemType, health, tool}
+    local function strongestBlock()
+        local best
+        for _, item in store.inventory.inventory.items do
+            local meta = bedwars.ItemMeta[item.itemType]
+            local block = meta and meta.block
+            if block and (not best or block.health > best[2]) then
+                best = { item.itemType, block.health, item.tool }
+            end
+        end
+        return best
+    end
+
+    -- pyramid pattern (same shape Bed Protector uses) so gap detection matches how
+    -- protection is actually placed.
+    local function getPyramid(size, grid)
+        local positions = {}
+        for h = size, 0, -1 do
+            for w = h, 0, -1 do
+                table.insert(positions, Vector3.new(w, (size - h), ((h + 1) - w)) * grid)
+                table.insert(positions, Vector3.new(w * -1, (size - h), ((h + 1) - w)) * grid)
+                table.insert(positions, Vector3.new(w, (size - h), (h - w) * -1) * grid)
+                table.insert(positions, Vector3.new(w * -1, (size - h), (h - w) * -1) * grid)
+            end
+        end
+        return positions
+    end
+
+    -- the currently EMPTY cells in the bed's protective shell
+    local function gapPositions(bed)
+        local gaps, seen = {}, {}
+        for _, off in getPyramid(2, GRID) do
+            local pos = (bed.CFrame * CFrame.new(off)).Position
+            local key = tostring(bedwars.BlockController:getBlockPosition(pos))
+            if not seen[key] then
+                seen[key] = true
+                if not getPlacedBlock(pos) then gaps[#gaps + 1] = pos end
+            end
+        end
+        return gaps
+    end
+
+    -- ── fill ──────────────────────────────────────────────────────────────────
+    local function fillGaps()
+        if not (GapFixer.Enabled and AutoFill.Enabled) then return end
+        if not entitylib.isAlive or not entitylib.character.RootPart then return end
+        local bed = getBed()
+        if not bed then return end
+        local block = strongestBlock()
+        if not block then return end
+        local rootPos = entitylib.character.RootPart.Position
+        for _, pos in gapPositions(bed) do
+            if (rootPos - pos).Magnitude <= Range.Value then
+                task.spawn(bedwars.placeBlock, pos, block[1], false)
+            end
+        end
+    end
+
+    -- ── highlight ──────────────────────────────────────────────────────────────
+    local GapFolder = Instance.new('Folder')
+    GapFolder.Parent = (gethui and gethui()) or cloneref(game:GetService('CoreGui'))
+    local gapBoxes = {}
+    local function clearBoxes()
+        for _, b in gapBoxes do b:Destroy() end
+        table.clear(gapBoxes)
+    end
+    local function drawGaps()
+        clearBoxes()
+        if not (GapFixer.Enabled and ShowGaps.Enabled) then return end
+        local bed = getBed()
+        if not bed then return end
+        for _, pos in gapPositions(bed) do
+            local part = Instance.new('Part')
+            part.Anchored = true
+            part.CanCollide = false
+            part.CanQuery = false
+            part.Transparency = 1
+            part.Size = Vector3.new(GRID, GRID, GRID)
+            part.CFrame = CFrame.new(bedwars.BlockController:getBlockPosition(pos) * GRID)
+            local box = Instance.new('BoxHandleAdornment')
+            box.Adornee = part
+            box.Size = Vector3.new(GRID, GRID, GRID)
+            box.Color3 = Color3.fromRGB(255, 60, 60)
+            box.Transparency = 0.35
+            box.AlwaysOnTop = true
+            box.ZIndex = 0
+            box.Parent = part
+            part.Parent = GapFolder
+            gapBoxes[#gapBoxes + 1] = part
+        end
+    end
+
+    GapFixer = vain.Categories.World:CreateModule({
+        Name = 'Bed Gap Fixer',
+        Tooltip = 'Detects the exposed gaps in your bed defense and fills them the moment a block is broken (Auto Fill), and/or highlights the missing blocks (Show Gaps). Never builds the full pyramid.',
+        Function = function(callback)
+            if callback then
+                GapFixer:Clean(clearBoxes)
+                GapFixer:Clean(vainEvents.BreakBlockEvent.Event:Connect(function()
+                    task.spawn(fillGaps) task.spawn(drawGaps)
+                end))
+                GapFixer:Clean(vainEvents.PlaceBlockEvent.Event:Connect(function()
+                    task.spawn(drawGaps)
+                end))
                 task.spawn(function()
                     repeat
+                        pcall(fillGaps)
                         pcall(drawGaps)
                         task.wait(0.3)
-                    until not (ShowGaps.Enabled and BedProtector.Enabled)
-                    clearGaps()
+                    until not GapFixer.Enabled
+                    clearBoxes()
                 end)
-            end,
-        })
-    end
+            else
+                clearBoxes()
+            end
+        end,
+    })
+    AutoFill = GapFixer:CreateToggle({
+        Name = 'Auto Fill',
+        Default = true,
+        Tooltip = 'Automatically place blocks into the exposed gaps around your bed.',
+    })
+    ShowGaps = GapFixer:CreateToggle({
+        Name = 'Show Gaps',
+        Default = false,
+        Tooltip = 'Highlight the missing (air) blocks around your bed in red.',
+        Function = function() task.spawn(drawGaps) end,
+    })
+    Range = GapFixer:CreateSlider({
+        Name = 'Fill Range',
+        Tooltip = 'Max distance in studs to place gap-filling blocks.',
+        Min = 1, Max = 30, Default = 15,
+    })
 end)
 
 run(function()
