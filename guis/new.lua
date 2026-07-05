@@ -12,6 +12,13 @@ local mainapi = {
 	Libraries = {},
 	Modules = {},
 	FavouritesCategory = false,
+	-- Manual module badges: which modules show a NEW / UPD tag next to their name,
+	-- until the next release edits this list. Set per update by hand (no GitHub
+	-- auto-diff). Keys are exact module names; value is 'NEW' or 'UPD'.
+	ModuleBadges = {
+		-- ['Loot Display'] = 'NEW',
+		-- ['AimAssist'] = 'UPD',
+	},
 	-- Patch notes shown in the changelog popup (newest first). Each entry is
 	-- { Version = '...', Date = '...', Changes = { 'line', ... } }.
 	PatchNotes = {
