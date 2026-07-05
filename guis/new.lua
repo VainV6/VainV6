@@ -2893,54 +2893,24 @@ function mainapi:CreateGUI()
 		local order = 0
 		local function nextOrder() order += 1 return order end
 
-		-- ── header: "VAIN" wordmark + title + subtitle ───────────────────────
-		local head = Instance.new('Frame')
-		head.Name = 'Head'
-		head.Size = UDim2.new(1, 0, 0, 40)
-		head.BackgroundTransparency = 1
-		head.LayoutOrder = nextOrder()
-		head.ZIndex = 2
-		head.Parent = card
-		local wordmark = Instance.new('TextLabel')
-		wordmark.AnchorPoint = Vector2.new(0, 0.5)
-		wordmark.Position = UDim2.new(0, 0, 0.5, 0)
-		wordmark.AutomaticSize = Enum.AutomaticSize.X
-		wordmark.Size = UDim2.fromOffset(0, 24)
-		wordmark.BackgroundTransparency = 1
-		wordmark.Text = 'VAIN'
-		wordmark.TextColor3 = uipallet.Text
-		wordmark.TextSize = 20
-		wordmark.FontFace = uipallet.FontSemiBold
-		wordmark.ZIndex = 2
-		wordmark.Parent = head
-		local htitle = Instance.new('TextLabel')
-		htitle.AnchorPoint = Vector2.new(1, 0)
-		htitle.Position = UDim2.new(1, 0, 0, 4)
-		htitle.Size = UDim2.new(1, -60, 0, 16)
-		htitle.BackgroundTransparency = 1
-		htitle.Text = 'Update available'
-		htitle.TextXAlignment = Enum.TextXAlignment.Right
-		htitle.TextColor3 = uipallet.Text
-		htitle.TextSize = 14
-		htitle.FontFace = uipallet.FontSemiBold
-		htitle.ZIndex = 2
-		htitle.Parent = head
-		local hsub = Instance.new('TextLabel')
-		hsub.AnchorPoint = Vector2.new(1, 0)
-		hsub.Position = UDim2.new(1, 0, 0, 21)
-		hsub.Size = UDim2.new(1, -60, 0, 14)
-		hsub.BackgroundTransparency = 1
-		hsub.Text = entry.Date and ('released ' .. entry.Date) or ''
-		hsub.TextXAlignment = Enum.TextXAlignment.Right
-		hsub.TextColor3 = color.Dark(uipallet.Text, 0.42)
-		hsub.TextSize = 11
-		hsub.FontFace = uipallet.Font
-		hsub.ZIndex = 2
-		hsub.Parent = head
+		-- ── header (narrow-friendly vertical stack) ──────────────────────────
+		-- eyebrow: "VAIN  ·  released <date>"
+		local eyebrow = Instance.new('TextLabel')
+		eyebrow.Name = 'Eyebrow'
+		eyebrow.Size = UDim2.new(1, 0, 0, 14)
+		eyebrow.BackgroundTransparency = 1
+		eyebrow.Text = 'VAIN' .. (entry.Date and ('   ·   released ' .. entry.Date) or '')
+		eyebrow.TextXAlignment = Enum.TextXAlignment.Left
+		eyebrow.TextColor3 = color.Dark(uipallet.Text, 0.42)
+		eyebrow.TextSize = 11
+		eyebrow.FontFace = uipallet.FontSemiBold
+		eyebrow.LayoutOrder = nextOrder()
+		eyebrow.ZIndex = 2
+		eyebrow.Parent = card
 
-		-- ── big version + "from <prev>" (baseline-aligned inline row) ─────────
+		-- big version + "from <prev>" on one baseline-aligned row
 		local vrow = Instance.new('Frame')
-		vrow.Size = UDim2.new(1, 0, 0, 26)
+		vrow.Size = UDim2.new(1, 0, 0, 30)
 		vrow.BackgroundTransparency = 1
 		vrow.LayoutOrder = nextOrder()
 		vrow.ZIndex = 2
@@ -2952,11 +2922,11 @@ function mainapi:CreateGUI()
 		vlist.Parent = vrow
 		local vbig = Instance.new('TextLabel')
 		vbig.AutomaticSize = Enum.AutomaticSize.X
-		vbig.Size = UDim2.fromOffset(0, 26)
+		vbig.Size = UDim2.fromOffset(0, 30)
 		vbig.BackgroundTransparency = 1
 		vbig.Text = tostring(entry.Version)
 		vbig.TextColor3 = uipallet.Text
-		vbig.TextSize = 22
+		vbig.TextSize = 26
 		vbig.FontFace = uipallet.FontSemiBold
 		vbig.LayoutOrder = 1
 		vbig.ZIndex = 2

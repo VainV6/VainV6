@@ -508,8 +508,13 @@ local function finishLoading()
 	end
 
 	-- Load saved settings and start the local save loop FIRST. These are fast,
-	-- local-only operations, so the GUI becomes usable immediately.
-	vain:Load()
+	-- local-only operations, so the GUI becomes usable immediately. Wrapped in
+	-- pcall so a single bad option / GUI element can't abort the rest of loading
+	-- (which previously left half the modules unregistered / unshown).
+	local okLoad, loadErr = pcall(function() vain:Load() end)
+	if not okLoad then
+		pcall(function() vain:CreateNotification('Vain', 'Settings load error (some may not apply): '..tostring(loadErr), 8, 'warning') end)
+	end
 	task.spawn(function()
 		repeat
 			vain:Save()
