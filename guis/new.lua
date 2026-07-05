@@ -2639,8 +2639,8 @@ function mainapi:CreateGUI()
 	addBlur(window)
 	addCorner(window)
 	makeDraggable(window)
-	-- VainLogo.lua treatment (1:1), but white/silver metallic instead of orange:
-	-- a 5-keypoint gradient + a slow shimmer sweep across the glyphs.
+	-- VainLogo.lua treatment (1:1): orange metallic 5-keypoint gradient + a slow
+	-- shimmer sweep across the glyphs.
 	local logo = Instance.new('TextLabel')
 	logo.Name = 'VainLogo'
 	logo.Size = UDim2.fromOffset(60, 20)
@@ -2652,15 +2652,18 @@ function mainapi:CreateGUI()
 	logo.TextSize = 16
 	logo.FontFace = uipallet.FontSemiBold
 	logo.RichText = false
-	logo.TextColor3 = Color3.fromRGB(255, 255, 255)
+	-- White base so the orange gradient defines the colour purely (UIGradient
+	-- multiplies against TextColor3); this keeps the logo independent of the
+	-- system/theme colour instead of picking it up.
+	logo.TextColor3 = Color3.new(1, 1, 1)
 	logo.Parent = window
 	local logoGrad = Instance.new('UIGradient')
 	logoGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(150, 150, 150)),
-		ColorSequenceKeypoint.new(0.28, Color3.fromRGB(220, 220, 220)),
-		ColorSequenceKeypoint.new(0.48, Color3.fromRGB(255, 255, 255)),
-		ColorSequenceKeypoint.new(0.68, Color3.fromRGB(220, 220, 220)),
-		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(140, 140, 140)),
+		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(154, 61, 10)),
+		ColorSequenceKeypoint.new(0.28, Color3.fromRGB(255, 106, 31)),
+		ColorSequenceKeypoint.new(0.48, Color3.fromRGB(255, 196, 138)),
+		ColorSequenceKeypoint.new(0.68, Color3.fromRGB(255, 106, 31)),
+		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(122, 47, 8)),
 	})
 	logoGrad.Rotation = 115
 	logoGrad.Parent = logo
@@ -6353,7 +6356,7 @@ local function showPatchNotes(force)
 	-- ── palette ────────────────────────────────────────────────────────────
 	local accent      = color.Light(uipallet.Main, 0.30)
 	local accentGlow  = color.Light(uipallet.Main, 0.58)
-	local cardColor   = color.Light(uipallet.Main, 0.05)
+	local cardColor   = color.Dark(uipallet.Main, 0.02) -- match the system window grey
 	local railColor   = color.Dark(uipallet.Main, 0.06)
 	local textColor   = uipallet.Text
 	local mutedText   = color.Dark(uipallet.Text, 0.42)
@@ -6433,10 +6436,6 @@ local function showPatchNotes(force)
 	cardStroke.Thickness = 1
 	cardStroke.Transparency = 0.2
 	cardStroke.Parent = card
-	local cardGrad = Instance.new('UIGradient')
-	cardGrad.Rotation = 90
-	cardGrad.Color = ColorSequence.new(color.Light(uipallet.Main, 0.04), color.Dark(uipallet.Main, 0.05))
-	cardGrad.Parent = card
 
 	-- pop in
 	tweenService:Create(card, TweenInfo.new(0.28), {GroupTransparency = 0}):Play()
@@ -6445,25 +6444,25 @@ local function showPatchNotes(force)
 	local prev = mainapi.PatchNotes[2]
 	local PAD = 26
 
-	-- ── header: VAIN wordmark (white metallic VainLogo treatment) ────────────
+	-- ── header: VAIN wordmark (orange metallic VainLogo treatment) ───────────
 	local brand = Instance.new('TextLabel')
 	brand.BackgroundTransparency = 1
-	brand.Position = UDim2.fromOffset(PAD, 26)
+	brand.Position = UDim2.fromOffset(PAD, 22)
 	brand.AutomaticSize = Enum.AutomaticSize.X
-	brand.Size = UDim2.fromOffset(0, 24)
+	brand.Size = UDim2.fromOffset(0, 32)
 	brand.Text = 'VAIN'
 	brand.TextXAlignment = Enum.TextXAlignment.Left
-	brand.TextColor3 = Color3.fromRGB(255, 255, 255)
-	brand.TextSize = 20
+	brand.TextColor3 = Color3.new(1, 1, 1)
+	brand.TextSize = 30
 	brand.FontFace = uipallet.FontSemiBold
 	brand.Parent = card
 	local brandGrad = Instance.new('UIGradient')
 	brandGrad.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(150, 150, 150)),
-		ColorSequenceKeypoint.new(0.28, Color3.fromRGB(220, 220, 220)),
-		ColorSequenceKeypoint.new(0.48, Color3.fromRGB(255, 255, 255)),
-		ColorSequenceKeypoint.new(0.68, Color3.fromRGB(220, 220, 220)),
-		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(140, 140, 140)),
+		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(154, 61, 10)),
+		ColorSequenceKeypoint.new(0.28, Color3.fromRGB(255, 106, 31)),
+		ColorSequenceKeypoint.new(0.48, Color3.fromRGB(255, 196, 138)),
+		ColorSequenceKeypoint.new(0.68, Color3.fromRGB(255, 106, 31)),
+		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(122, 47, 8)),
 	})
 	brandGrad.Rotation = 115
 	brandGrad.Parent = brand
