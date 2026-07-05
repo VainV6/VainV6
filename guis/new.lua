@@ -3712,7 +3712,7 @@ function mainapi:CreateGUI()
 	function categoryapi:CreateGUISlider(optionsettings)
 		local optionapi = {
 			Type = 'GUISlider',
-			Notch = 4,
+			Notch = 5, -- slidercolors[5] = blue (47,122,229); default accent
 			Hue = 0.598,
 			Sat = 0.795,
 			Value = 0.898,
@@ -3802,7 +3802,7 @@ function mainapi:CreateGUI()
 				reset.FontFace = uipallet.Font
 				reset.Parent = slider
 				reset.MouseButton1Click:Connect(function()
-					optionapi:SetValue(nil, nil, nil, 4)
+					optionapi:SetValue(nil, nil, nil, 5)
 				end)
 			end
 
@@ -4079,7 +4079,7 @@ function mainapi:CreateGUI()
 					end)
 				end)
 			else
-				self:SetValue(nil, nil, nil, 4)
+				self:SetValue(nil, nil, nil, 5)
 				knob.Image = normalknob
 				local ind = table.find(mainapi.RainbowTable, self)
 				if ind then
@@ -5894,7 +5894,7 @@ end
 local guipane
 function mainapi:Load(skipgui, profile)
 	if not skipgui then
-		self.GUIColor:SetValue(nil, nil, nil, 4)
+		self.GUIColor:SetValue(nil, nil, nil, 5) -- default accent = blue (notch 5)
 	end
 	local guidata = {}
 	local savecheck = true
