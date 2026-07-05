@@ -11586,6 +11586,7 @@ run(function()
     local Color
     local ShowAmount
     local ShowAll
+    local ShowOwnTeam
     local ResourceAlert, DetectOwnTeam, EmeraldThreshold, DiamondThreshold
     local Reference = {}
     local Connections = {}
@@ -11619,11 +11620,23 @@ run(function()
         return best
     end
 
+    -- Is this chest on MY team? IMPORTANT: chestTeam() returns a NUMBER (from the
+    -- "<id>_spawn" part name via tonumber), but the player's Team attribute is a
+    -- STRING (the game does SetAttribute("Team", "1")). Comparing them directly is
+    -- always false (1 ~= "1"), which is why own-team chests slipped through. Compare
+    -- as strings so it actually matches.
+    local function isOwnTeam(teamId)
+        if teamId == nil then return false end
+        local mine = lplr:GetAttribute('Team')
+        if mine == nil then return false end
+        return tostring(teamId) == tostring(mine)
+    end
+
     -- Describe a chest's team for the alert: "your team" if it's yours, otherwise
     -- the team's colour name (e.g. "the Blue team") rather than a numeric id.
     local function teamDescriptor(teamId)
         if teamId == nil then return 'a team chest' end
-        if teamId == lplr:GetAttribute('Team') then return 'YOUR team\'s chest' end
+        if isOwnTeam(teamId) then return 'YOUR team\'s chest' end
         local name
         pcall(function()
             local teams = bedwars.Store:getState().Game.teams
@@ -11643,7 +11656,7 @@ run(function()
         if not (ResourceAlert and ResourceAlert.Enabled and adornee) then return end
         local team = chestTeam(adornee)
         if team ~= nil and not (DetectOwnTeam and DetectOwnTeam.Enabled) then
-            if team == lplr:GetAttribute('Team') then return end
+            if isOwnTeam(team) then return end
         end
         local st = alertState[adornee]
         if not st then st = {}; alertState[adornee] = st end
@@ -11680,6 +11693,14 @@ run(function()
     	local chest = v.Adornee:FindFirstChild('ChestFolderValue')
     	chest = chest and chest.Value or nil
     	if not chest then
+    		v.Enabled = false
+    		return
+    	end
+
+    	-- Only show loot on ENEMY chests. Your own team's chest is hidden unless
+    	-- "Show Own Team" is on. (Same team-id-vs-attribute string fix as the alert:
+    	-- chestTeam is a number, the Team attribute is a string.)
+    	if not (ShowOwnTeam and ShowOwnTeam.Enabled) and isOwnTeam(chestTeam(v.Adornee)) then
     		v.Enabled = false
     		return
     	end
@@ -11905,6 +11926,16 @@ run(function()
     ShowAll = StorageESP:CreateToggle({
     	Name = 'Show All Items',
     	Tooltip = 'Show EVERY item stored in the chest, ignoring the item whitelist above',
+    	Default = false,
+    	Function = function()
+    		for _, v in Reference do
+    			task.spawn(refreshAdornee, v)
+    		end
+    	end,
+    })
+    ShowOwnTeam = StorageESP:CreateToggle({
+    	Name = 'Show Own Team',
+    	Tooltip = "Also show loot on your OWN team's chest. Off (default) = enemy chests only.",
     	Default = false,
     	Function = function()
     		for _, v in Reference do
