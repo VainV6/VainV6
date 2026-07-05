@@ -11622,11 +11622,15 @@ run(function()
     local Folder = Instance.new('Folder')
     Folder.Parent = vain.gui
 
-    -- Attribute a chest to a team by nearest team spawn (workspace.MapCFrames has a
-    -- '<teamId>_spawn' part per team). Returns the team id, or nil if unknown.
-    local function chestTeam(adornee)
-        local ok, pos = pcall(function() return adornee:GetPivot().Position end)
-        if not ok then return nil end
+    -- Nearest team-spawn id for a WORLD POSITION. workspace.MapCFrames holds a
+    -- '<id>_spawn' part per team. Returns the id as a string, or nil.
+    -- NOTE: we deliberately do NOT try to match this against the store's team id or
+    -- the player's Team attribute -- those live in a DIFFERENT namespace (the store
+    -- team id can be an arbitrary string like "4", while spawns are named "1"/"2"),
+    -- so they never line up. Instead we compare a chest's nearest spawn to OUR OWN
+    -- character's nearest spawn (same primitive), which is namespace-proof.
+    local function nearestSpawnId(pos)
+        if not pos then return nil end
         local mapcf = workspace:FindFirstChild('MapCFrames')
         if not mapcf then return nil end
         local best, bestDist
@@ -11640,7 +11644,7 @@ run(function()
                     local d = (spos - pos).Magnitude
                     if not bestDist or d < bestDist then
                         bestDist = d
-                        best = tonumber(id) or id
+                        best = tostring(id)
                     end
                 end
             end
@@ -11648,16 +11652,33 @@ run(function()
         return best
     end
 
-    -- Is this chest on MY team? IMPORTANT: chestTeam() returns a NUMBER (from the
-    -- "<id>_spawn" part name via tonumber), but the player's Team attribute is a
-    -- STRING (the game does SetAttribute("Team", "1")). Comparing them directly is
-    -- always false (1 ~= "1"), which is why own-team chests slipped through. Compare
-    -- as strings so it actually matches.
-    local function isOwnTeam(teamId)
-        if teamId == nil then return false end
-        local mine = lplr:GetAttribute('Team')
+    local function chestTeam(adornee)
+        local ok, pos = pcall(function() return adornee:GetPivot().Position end)
+        if not ok then return nil end
+        return nearestSpawnId(pos)
+    end
+
+    -- MY team's spawn id = the spawn nearest to my own character (or my bed as a
+    -- fallback when I'm dead / not spawned). Cached briefly since it never changes
+    -- mid-match. This is compared against a chest's nearestSpawnId -> same namespace.
+    local myTeamCache, myTeamCacheAt = nil, 0
+    local function myTeamId()
+        if myTeamCache ~= nil and (tick() - myTeamCacheAt) < 5 then return myTeamCache end
+        local pos
+        local char = lplr.Character
+        local hrp = char and char:FindFirstChild('HumanoidRootPart')
+        if hrp then pos = hrp.Position end
+        local id = pos and nearestSpawnId(pos) or nil
+        if id then myTeamCache, myTeamCacheAt = id, tick() end
+        return id
+    end
+
+    -- Is this chest on MY team? Compare the chest's nearest spawn to mine.
+    local function isOwnTeam(chestSpawnId)
+        if chestSpawnId == nil then return false end
+        local mine = myTeamId()
         if mine == nil then return false end
-        return tostring(teamId) == tostring(mine)
+        return tostring(chestSpawnId) == tostring(mine)
     end
 
     -- Describe a chest's team for the alert: "your team" if it's yours, otherwise
