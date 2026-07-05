@@ -2730,101 +2730,124 @@ local AimAssist
 	end
 
 	-- ══════════════════════════════════════════════════════════════════════════
-	--  TABLIST PARTIES  (mark each player's party with a coloured tag in the tab-list)
+	--  PARTY LIST  (show party / team groupings -- tab-list tags and/or an overlay)
 	-- ══════════════════════════════════════════════════════════════════════════
-	-- Same painting mechanism as the winstreak module, but the suffix is a coloured
-	-- party marker. Players who queued together get the SAME colour + party number, so
-	-- you can read the parties straight off the tab-list. Party groupings come from
-	-- MatchController (works during the ranked kit-ban draft too).
+	-- Groupings come from two sources, most-specific first:
+	--   1) MatchController.parties -- the real "who queued together" list, BUT the
+	--      server only replicates it (MatchPartiesUpdate) for some queues, so it is
+	--      often empty.
+	--   2) bedwars.Store:getState().Game.teams -- the team each player is on. This is
+	--      ALWAYS populated in a match (and during the ranked kit-ban draft), so it's
+	--      the reliable fallback. In ranked the team grouping IS the party grouping
+	--      you see in the draft.
+	-- One module, two display modes (tab-list tag and/or a floating overlay).
 	do
-		local TablistParties
+		local PartyList
+		local ShowTablist, ShowOverlay, OnlyMulti
+		local gui
 
-		-- distinct, readable colours per party index (cycles if there are more)
 		local PARTY_COLORS = {
-			'#FF5C5C', '#4DA6FF', '#5CE05C', '#FFD24D',
-			'#C77DFF', '#33E0D0', '#FF9A4D', '#FF6FD8',
+			Color3.fromRGB(255, 92, 92), Color3.fromRGB(77, 166, 255),
+			Color3.fromRGB(92, 224, 92), Color3.fromRGB(255, 210, 77),
+			Color3.fromRGB(199, 125, 255), Color3.fromRGB(51, 224, 208),
+			Color3.fromRGB(255, 154, 77), Color3.fromRGB(255, 111, 216),
 		}
+		local function hex(c)
+			return string.format('#%02X%02X%02X',
+				math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0.5), math.floor(c.B * 255 + 0.5))
+		end
 
-		local function mc()
-			local ok, c = pcall(function() return bedwars.Knit.Controllers.MatchController end)
+		local function matchController()
+			local ok, c = pcall(function() return bedwars.MatchController end)
 			return ok and c or nil
 		end
 
-		-- build: userId -> { idx = partyNumber, color = hex } for every player who is
-		-- in a party of 2+. Solo players are omitted (no tag).
-		local function partyMap()
-			local controller = mc()
-			if not controller then return {} end
-			local parties = {}
-			local direct
-			pcall(function() if controller.getParties then direct = controller:getParties() end end)
-
-			local seen, list = {}, {}
-			local function addParty(members)
+		-- Returns a list of groups, each { members = { userId, ... } }. Tries real
+		-- parties first, then team membership. Groups are de-duped by member set.
+		local function collectGroups()
+			local groups, seen = {}, {}
+			local function add(members)
 				if type(members) ~= 'table' then return end
 				local ids, key = {}, {}
-				for _, m in members do
-					local uid = tonumber(m) or (type(m) == 'table' and tonumber(m.userId or m.UserId))
+				for k, m in pairs(members) do
+					-- members may be a LIST of userIds, or a MAP keyed by userId
+					local uid = tonumber(m) or (type(m) == 'table' and tonumber(m.userId or m.UserId)) or tonumber(k)
 					if uid then ids[#ids + 1] = uid key[#key + 1] = uid end
 				end
-				if #ids < 2 then return end   -- only real parties
+				if #ids == 0 then return end
 				table.sort(key)
 				local sig = table.concat(key, ',')
-				if not seen[sig] then seen[sig] = true list[#list + 1] = ids end
+				if not seen[sig] then seen[sig] = true groups[#groups + 1] = ids end
 			end
 
-			if type(direct) == 'table' and next(direct) then
-				for _, p in direct do addParty(type(p) == 'table' and (p.members or p) or nil) end
-			else
-				for _, plr in playersService:GetPlayers() do
-					local ok, p = pcall(function() return controller:getPlayerParty(plr) end)
-					if ok and type(p) == 'table' then addParty(p.members or p) end
+			-- 1) real parties
+			local mc = matchController()
+			if mc then
+				local parties = nil
+				pcall(function() parties = mc.parties end)      -- direct field
+				if type(parties) ~= 'table' or not next(parties) then
+					pcall(function() if mc.getParties then parties = mc:getParties() end end)
+				end
+				if type(parties) == 'table' and next(parties) then
+					for _, p in pairs(parties) do add(type(p) == 'table' and (p.members or p) or nil) end
 				end
 			end
 
-			local map = {}
-			for i, ids in list do
-				local col = PARTY_COLORS[((i - 1) % #PARTY_COLORS) + 1]
-				for _, uid in ids do
-					map[uid] = { idx = i, color = col }
-				end
+			-- 2) fallback: team membership from the store (always present)
+			if #groups == 0 then
+				pcall(function()
+					local teams = bedwars.Store:getState().Game.teams
+					if type(teams) == 'table' then
+						for _, t in pairs(teams) do
+							if type(t) == 'table' and t.members then add(t.members) end
+						end
+					end
+				end)
 			end
-			return map
+
+			return groups
 		end
 
-		-- name (lowercased) -> party info, resolved from live players each pass so a
-		-- recycled Roact row re-keys correctly.
-		local function nameParty(map)
-			local out = {}
+		-- userId -> { idx, color } for every player in a shown group
+		local function buildMap()
+			local groups = collectGroups()
+			-- filter to multi-member if requested
+			local shown = {}
+			for _, ids in ipairs(groups) do
+				if not (OnlyMulti and OnlyMulti.Enabled) or #ids >= 2 then shown[#shown + 1] = ids end
+			end
+			local map = {}
+			for i, ids in ipairs(shown) do
+				local col = PARTY_COLORS[((i - 1) % #PARTY_COLORS) + 1]
+				for _, uid in ipairs(ids) do map[uid] = { idx = i, color = col } end
+			end
+			return map, shown
+		end
+
+		-- ── tab-list painting ──────────────────────────────────────────────────
+		local function stripTags(s) return (s:gsub('<[^>]->', '')) end
+		local function nameKey(s)
+			return stripTags(s):gsub('^%s+', ''):gsub('%s+$', ''):lower()
+		end
+
+		local function paintTablist(map)
+			local pg = lplr:FindFirstChild('PlayerGui')
+			if not pg then return end
+			-- name -> info from live players
+			local byName = {}
 			for _, plr in playersService:GetPlayers() do
 				local info = map[plr.UserId]
 				if info then
-					out[plr.Name:lower()] = info
-					if plr.DisplayName and plr.DisplayName ~= '' then
-						out[plr.DisplayName:lower()] = info
-					end
+					byName[plr.Name:lower()] = info
+					if plr.DisplayName ~= '' then byName[plr.DisplayName:lower()] = info end
 				end
 			end
-			return out
-		end
 
-		local function stripTags(s)
-			return (s:gsub('<[^>]->', ''))
-		end
-
-		local function paint()
-			local pg = lplr:FindFirstChild('PlayerGui')
-			if not pg then return end
-			local map = partyMap()
-			local byName = nameParty(map)
-
-			local function isAllowedContainer(gui)
+			local function allowed(gui)
 				local a = gui
 				while a and a ~= pg do
 					local n = a.Name:lower()
-					if n:find('leaderboard') or n:find('tablist')
-						or (n:find('tab') and n:find('list'))
-						or n:find('spectat') then
+					if n:find('leaderboard') or n:find('tablist') or (n:find('tab') and n:find('list')) or n:find('spectat') then
 						return true
 					end
 					a = a.Parent
@@ -2832,143 +2855,51 @@ local AimAssist
 				return false
 			end
 
-			for _, gui in pg:GetDescendants() do
-				if gui:IsA('TextLabel') and isAllowedContainer(gui) then
-					local orig = gui:GetAttribute('VainPartyOrig')
-					if orig and gui.Text:sub(1, #orig) ~= orig then
+			for _, g in pg:GetDescendants() do
+				if g:IsA('TextLabel') and allowed(g) then
+					local orig = g:GetAttribute('VainPartyOrig')
+					if orig and g.Text:sub(1, #orig) ~= orig then
 						orig = nil
-						gui:SetAttribute('VainPartyOrig', nil)
-						gui:SetAttribute('VainParty', nil)
+						g:SetAttribute('VainPartyOrig', nil)
+						g:SetAttribute('VainParty', nil)
 					end
-					local key = stripTags((orig or gui.Text)):gsub('^%s+', ''):gsub('%s+$', ''):lower()
-					local info = byName[key]
-					local painted = gui:GetAttribute('VainParty')
-					if info then
-						if not orig then
-							orig = gui.Text
-							gui:SetAttribute('VainPartyOrig', orig)
-						end
-						local tag = "<font color='" .. info.color .. "'>\u{25CF} P" .. info.idx .. "</font>"
+					local info = byName[nameKey(orig or g.Text)]
+					local painted = g:GetAttribute('VainParty')
+					if info and (not ShowTablist or ShowTablist.Enabled) then
+						if not orig then orig = g.Text g:SetAttribute('VainPartyOrig', orig) end
+						local tag = "<font color='" .. hex(info.color) .. "'>\u{25CF} P" .. info.idx .. "</font>"
 						local want = orig .. "  " .. tag
-						if gui.Text ~= want then
-							gui:SetAttribute('VainParty', true)
-							gui.RichText = true
-							gui.Text = want
+						if g.Text ~= want then
+							g:SetAttribute('VainParty', true)
+							g.RichText = true
+							g.Text = want
 						end
 					elseif painted then
-						if type(orig) == 'string' then gui.Text = orig end
-						gui:SetAttribute('VainPartyOrig', nil)
-						gui:SetAttribute('VainParty', nil)
+						if type(orig) == 'string' then g.Text = orig end
+						g:SetAttribute('VainPartyOrig', nil)
+						g:SetAttribute('VainParty', nil)
 					end
 				end
 			end
 		end
 
-		local function restoreAll()
+		local function restoreTablist()
 			local pg = lplr:FindFirstChild('PlayerGui')
 			if not pg then return end
-			for _, gui in pg:GetDescendants() do
-				if gui:IsA('TextLabel') and gui:GetAttribute('VainParty') then
-					local orig = gui:GetAttribute('VainPartyOrig')
-					if type(orig) == 'string' then gui.Text = orig end
-					gui:SetAttribute('VainPartyOrig', nil)
-					gui:SetAttribute('VainParty', nil)
+			for _, g in pg:GetDescendants() do
+				if g:IsA('TextLabel') and g:GetAttribute('VainParty') then
+					local orig = g:GetAttribute('VainPartyOrig')
+					if type(orig) == 'string' then g.Text = orig end
+					g:SetAttribute('VainPartyOrig', nil)
+					g:SetAttribute('VainParty', nil)
 				end
 			end
 		end
 
-		TablistParties = vain.Categories.Render:CreateModule({
-			Name = 'Tablist Parties',
-			Tooltip = "Marks each player's party in the tab-list (Tab): everyone who queued together gets the same coloured \u{25CF} P# tag next to their name, so you can read the parties at a glance. Works in the ranked kit-ban draft too. Solo players get no tag.",
-			Function = function(callback)
-				if callback then
-					task.spawn(function()
-						repeat
-							pcall(paint)
-							task.wait(1)
-						until not TablistParties.Enabled
-						pcall(restoreAll)
-					end)
-				else
-					pcall(restoreAll)
-				end
-			end
-		})
-	end
-
-	-- ══════════════════════════════════════════════════════════════════════════
-	--  PARTY LIST  (show which players queued together as a party in this match)
-	-- ══════════════════════════════════════════════════════════════════════════
-	-- BedWars replicates the match's PARTY groupings (who queued together) to the
-	-- client on the MatchController: MatchController:getParties() returns a list of
-	-- { members = { userId, ... } } and :getPlayerParty(plr) finds one player's party.
-	-- This is distinct from teams -- in solos/duos a party is the friends grouped
-	-- onto the same slot. We read that and draw a small overlay: one card per party
-	-- of 2+ players, each row = avatar + name. Solo players (party of 1) are hidden.
-	do
-		local PartyList
-		local OnlyMulti, gui
-
-		local function matchController()
-			local ok, mc = pcall(function() return bedwars.Knit.Controllers.MatchController end)
-			return ok and mc or nil
-		end
-
-		-- return a list of parties, each a list of member userIds (numbers). Prefer the
-		-- controller's getParties(); fall back to calling getPlayerParty per player and
-		-- de-duping, so it still works if the direct list isn't populated.
-		local function collectParties()
-			local mc = matchController()
-			if not mc then return {} end
-			local seen, out = {}, {}
-
-			local function addParty(members)
-				if type(members) ~= 'table' then return end
-				local ids, key = {}, {}
-				for _, m in members do
-					local uid = tonumber(m) or (type(m) == 'table' and (m.userId or m.UserId))
-					uid = tonumber(uid)
-					if uid then ids[#ids + 1] = uid key[#key + 1] = uid end
-				end
-				if #ids == 0 then return end
-				table.sort(key)
-				local sig = table.concat(key, ',')
-				if not seen[sig] then seen[sig] = true out[#out + 1] = ids end
-			end
-
-			local direct = nil
-			pcall(function()
-				if mc.getParties then direct = mc:getParties() end
-			end)
-			if type(direct) == 'table' and next(direct) then
-				for _, party in direct do
-					addParty(type(party) == 'table' and (party.members or party) or nil)
-				end
-			else
-				-- fallback: ask per player
-				for _, plr in playersService:GetPlayers() do
-					local ok, party = pcall(function() return mc:getPlayerParty(plr) end)
-					if ok and type(party) == 'table' then
-						addParty(party.members or party)
-					end
-				end
-			end
-			return out
-		end
-
-		local function build()
+		-- ── overlay panel ──────────────────────────────────────────────────────
+		local function buildOverlay(shown)
 			if gui then gui:Destroy() gui = nil end
-			local parties = collectParties()
-
-			-- filter to multi-member parties if requested
-			local shown = {}
-			for _, ids in parties do
-				if not (OnlyMulti and OnlyMulti.Enabled) or #ids >= 2 then
-					shown[#shown + 1] = ids
-				end
-			end
-			if #shown == 0 then return end
-
+			if not (ShowOverlay and ShowOverlay.Enabled) or #shown == 0 then return end
 			gui = Instance.new('ScreenGui')
 			gui.Name = 'VainPartyList'
 			gui.ResetOnSpawn = false
@@ -2979,7 +2910,6 @@ local AimAssist
 			local root = Instance.new('Frame')
 			root.Size = UDim2.fromOffset(220, 0)
 			root.AutomaticSize = Enum.AutomaticSize.Y
-			-- top-left, clear of the ranked kit-ban grid / player columns. Draggable.
 			root.Position = UDim2.new(0, 12, 0, 90)
 			root.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
 			root.BackgroundTransparency = 0.15
@@ -2987,7 +2917,7 @@ local AimAssist
 			root.Active = true
 			root.Draggable = true
 			root.Parent = gui
-			local rc = Instance.new('UICorner') rc.CornerRadius = UDim.new(0, 10) rc.Parent = root
+			Instance.new('UICorner', root).CornerRadius = UDim.new(0, 10)
 			local pad = Instance.new('UIPadding')
 			pad.PaddingTop = UDim.new(0, 8) pad.PaddingBottom = UDim.new(0, 8)
 			pad.PaddingLeft = UDim.new(0, 8) pad.PaddingRight = UDim.new(0, 8)
@@ -3008,7 +2938,8 @@ local AimAssist
 			header.LayoutOrder = 0
 			header.Parent = root
 
-			for pi, ids in shown do
+			for pi, ids in ipairs(shown) do
+				local col = PARTY_COLORS[((pi - 1) % #PARTY_COLORS) + 1]
 				local card = Instance.new('Frame')
 				card.Size = UDim2.new(1, 0, 0, 0)
 				card.AutomaticSize = Enum.AutomaticSize.Y
@@ -3017,7 +2948,8 @@ local AimAssist
 				card.BorderSizePixel = 0
 				card.LayoutOrder = pi
 				card.Parent = root
-				local cc = Instance.new('UICorner') cc.CornerRadius = UDim.new(0, 8) cc.Parent = card
+				Instance.new('UICorner', card).CornerRadius = UDim.new(0, 8)
+				local stroke = Instance.new('UIStroke') stroke.Color = col stroke.Thickness = 1.5 stroke.Transparency = 0.2 stroke.Parent = card
 				local cpad = Instance.new('UIPadding')
 				cpad.PaddingTop = UDim.new(0, 6) cpad.PaddingBottom = UDim.new(0, 6)
 				cpad.PaddingLeft = UDim.new(0, 6) cpad.PaddingRight = UDim.new(0, 6)
@@ -3028,14 +2960,13 @@ local AimAssist
 				clist.Parent = card
 
 				local order = 0
-				for _, uid in ids do
+				for _, uid in ipairs(ids) do
 					local row = Instance.new('Frame')
 					row.Size = UDim2.new(1, 0, 0, 30)
 					row.BackgroundTransparency = 1
 					row.LayoutOrder = order
 					row.Parent = card
 					order = order + 1
-
 					local av = Instance.new('ImageLabel')
 					av.Size = UDim2.fromOffset(26, 26)
 					av.Position = UDim2.fromOffset(0, 2)
@@ -3043,8 +2974,7 @@ local AimAssist
 					av.BorderSizePixel = 0
 					av.Image = 'rbxthumb://type=AvatarHeadShot&id=' .. tostring(uid) .. '&w=150&h=150'
 					av.Parent = row
-					local avc = Instance.new('UICorner') avc.CornerRadius = UDim.new(0, 6) avc.Parent = av
-
+					Instance.new('UICorner', av).CornerRadius = UDim.new(0, 6)
 					local plr = playersService:GetPlayerByUserId(uid)
 					local nm = Instance.new('TextLabel')
 					nm.Size = UDim2.new(1, -34, 1, 0)
@@ -3061,37 +2991,52 @@ local AimAssist
 			end
 		end
 
+		local function tick_()
+			local map, shown = buildMap()
+			paintTablist(map)
+			buildOverlay(shown)
+		end
+
 		PartyList = vain.Categories.Render:CreateModule({
 			Name = 'Party List',
-			Tooltip = "Shows which players queued together as a PARTY (friends grouped onto the same slot -- distinct from teams), including during the ranked kit-ban draft. Draws a small draggable overlay top-left, one card per party. Solo players hidden by default. If the panel doesn't appear, this match has no multi-player parties.",
+			Tooltip = "Shows party / team groupings -- both as a coloured \u{25CF} P# tag in the tab-list AND (optionally) a floating overlay. Uses real party data when the server sends it, otherwise falls back to team membership (always available, incl. the ranked kit-ban draft). Players in the same group share a colour.",
 			Function = function(callback)
 				if callback then
-					-- one-shot diagnostic: how many parties / multi-parties are visible
-					local parties = collectParties()
-					local multi = 0
-					for _, ids in parties do if #ids >= 2 then multi += 1 end end
-					notif('Party List', ('%d partie(s) found, %d with 2+ players%s'):format(
-						#parties, multi,
-						multi == 0 and ' -- nothing to show (all solo-queued)' or ''),
-						6, multi > 0 and 'success' or 'warning')
+					local _, shown = buildMap()
+					notif('Party List', ('%d group(s) shown -- source: %s'):format(
+						#shown,
+						(function()
+							local mc = matchController()
+							local p = mc and (function() local ok,v=pcall(function() return mc.parties end) return ok and v end)()
+							return (type(p) == 'table' and next(p)) and 'match parties' or 'teams'
+						end)()), 6, #shown > 0 and 'success' or 'warning')
 					task.spawn(function()
 						repeat
-							pcall(build)
-							task.wait(2)
+							pcall(tick_)
+							task.wait(1)
 						until not PartyList.Enabled
+						pcall(restoreTablist)
 						if gui then gui:Destroy() gui = nil end
 					end)
 				else
+					pcall(restoreTablist)
 					if gui then gui:Destroy() gui = nil end
 				end
 			end
 		})
+		ShowTablist = PartyList:CreateToggle({
+			Name = 'Tab-list Tags', Default = true,
+			Tooltip = 'Show the coloured party tag next to each player\'s tab-list name.',
+			Function = function(on) if not on then pcall(restoreTablist) end end,
+		})
+		ShowOverlay = PartyList:CreateToggle({
+			Name = 'Overlay Panel', Default = false,
+			Tooltip = 'Show a floating draggable panel listing each party and its members (top-left).',
+			Function = function(on) if not on and gui then gui:Destroy() gui = nil end end,
+		})
 		OnlyMulti = PartyList:CreateToggle({
 			Name = 'Hide Solos', Default = true,
-			Tooltip = 'Only show parties of 2 or more players (hide players who queued alone).',
-			Function = function()
-				if PartyList.Enabled then pcall(build) end
-			end,
+			Tooltip = 'Only mark groups of 2+ players (hide players alone in a group).',
 		})
 	end
 
@@ -23182,14 +23127,50 @@ run(function()
 end)
 
 run(function()
-	local a = {Enabled = false}
-	a = vain.Categories.World:CreateModule({
+	-- Instantly leave your current party, whether you're in the lobby or in a game.
+	-- We fire every leave path that exists: the lobby PartyController, and the
+	-- lobby-events "leaveParty" remote directly (found by name, since the exact
+	-- events container name can vary). Whichever applies takes effect; the rest
+	-- no-op. Acts as a one-shot button (toggles itself straight back off).
+	local LeaveParty = {Enabled = false}
+
+	local function fireLeaveRemote()
+		-- find the lobby-events folder and its leaveParty RemoteEvent by name, so we
+		-- don't depend on the exact hashed container name.
+		local ok = pcall(function()
+			for _, inst in replicatedStorage:GetDescendants() do
+				if inst:IsA('RemoteEvent') and inst.Name:lower():find('leaveparty') then
+					inst:FireServer()
+					return
+				end
+			end
+		end)
+		return ok
+	end
+
+	local function leaveNow()
+		local left = false
+		-- 1) the lobby party controller (works in the lobby)
+		pcall(function()
+			if bedwars and bedwars.PartyController and bedwars.PartyController.leaveParty then
+				bedwars.PartyController:leaveParty()
+				left = true
+			end
+		end)
+		-- 2) the raw leaveParty remote (works both lobby and in a game)
+		if fireLeaveRemote() then left = true end
+		notif('Leave Party', left and 'Left your party.' or 'No party remote found.', 4,
+			left and 'success' or 'warning')
+	end
+
+	LeaveParty = vain.Categories.World:CreateModule({
 		Name = "Leave Party",
-		Tooltip = 'Automatically leaves the party under configured conditions',
+		Tooltip = 'Instantly leaves your current party -- works in the lobby AND in-game. Click to leave.',
 		Function = function(call)
 			if call then
-				a:Toggle(false)
-				game:GetService("ReplicatedStorage"):WaitForChild("events-@easy-games/lobby:shared/event/lobby-events@getEvents.Events"):WaitForChild("leaveParty"):FireServer()
+				-- one-shot button: run, then un-toggle
+				if LeaveParty.Toggle then task.defer(function() if LeaveParty.Enabled then pcall(function() LeaveParty:Toggle(false) end) end end) end
+				pcall(leaveNow)
 			end
 		end
 	})
