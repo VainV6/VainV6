@@ -503,7 +503,8 @@ local function finishLoading()
 	local loading = getgenv and getgenv().vainLoading
 	if loading and loading.isActive() then
 		loading.finish(function()
-			if getgenv().vainShowPatchNotes then getgenv().vainShowPatchNotes(true) end
+			-- one-time (no force): only shows once per new version (patchseen.txt)
+			if getgenv().vainShowPatchNotes then getgenv().vainShowPatchNotes(false) end
 		end)
 	end
 

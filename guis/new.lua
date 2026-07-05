@@ -6701,12 +6701,12 @@ end
 -- regardless of patchseen.txt (used for testing).
 if getgenv then getgenv().vainShowPatchNotes = function(force) showPatchNotes(force) end end
 
--- TEST PREVIEW: force-show every load so the new features can be tested before
--- publishing. main.lua also calls this after the loading screen; guard against a
--- double-show. To restore normal one-time behaviour, change `showPatchNotes(true)`
--- to `showPatchNotes()`.
+-- Normal one-time behaviour: show once after a real update (records patchseen.txt
+-- so it won't reappear until the next version). When the loading screen is active
+-- (a fresh update), main.lua triggers it after the screen fades instead, so we
+-- skip here to avoid a double-show.
 if not getgenv or not getgenv().vainLoading or not getgenv().vainLoading.isActive() then
-	task.spawn(function() task.wait(0.4) showPatchNotes(true) end)
+	task.spawn(function() task.wait(0.4) showPatchNotes() end)
 end
 
 mainapi:Clean(gui:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
