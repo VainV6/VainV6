@@ -14883,70 +14883,40 @@ run(function()
     do
         local GRID = 3
 
-        -- Grid cells the bed itself occupies, derived from its bounding box (a bed
-        -- is ~2 blocks long) rather than probing getPlacedBlock (the bed is a tagged
-        -- model, not a stored block, so probing missed it -> only the centre cell
-        -- was scanned and side gaps were never seen).
-        local function bedCells(bed)
-            local cells = {}
-            local ok = pcall(function()
-                local cf, size
-                if bed:IsA('Model') then
-                    cf, size = bed:GetBoundingBox()
-                else
-                    cf, size = bed.CFrame, bed.Size
-                end
-                -- how many grid cells the box spans on each axis (min 1)
-                local nx = math.max(1, math.floor(size.X / GRID + 0.5))
-                local ny = math.max(1, math.floor(size.Y / GRID + 0.5))
-                local nz = math.max(1, math.floor(size.Z / GRID + 0.5))
-                for ix = 0, nx - 1 do
-                    for iy = 0, ny - 1 do
-                        for iz = 0, nz - 1 do
-                            local off = Vector3.new(
-                                (ix - (nx - 1) / 2) * GRID,
-                                (iy - (ny - 1) / 2) * GRID,
-                                (iz - (nz - 1) / 2) * GRID
-                            )
-                            cells[#cells + 1] = (cf * CFrame.new(off)).Position
-                        end
+        -- Find YOUR team's bed with NO distance limit (getBedNear caps at 14 studs,
+        -- which meant the gap features silently did nothing whenever you stepped
+        -- back). Prefer the team-tagged bed; fall back to the nearest bed.
+        local function getMyBed()
+            local myTeam = lplr:GetAttribute('Team')
+            local lp = entitylib.isAlive and entitylib.character.RootPart and entitylib.character.RootPart.Position or Vector3.zero
+            local nearest, nearestDist
+            for _, v in collectionService:GetTagged('bed') do
+                local ok = pcall(function() return v.Position end)
+                if ok then
+                    if myTeam and v:GetAttribute('Team' .. myTeam .. 'NoBreak') then
+                        return v
                     end
+                    local d = (lp - v.Position).Magnitude
+                    if not nearestDist or d < nearestDist then nearestDist, nearest = d, v end
                 end
-            end)
-            if not ok or #cells == 0 then cells[1] = bed.Position end
-            return cells
+            end
+            return nearest
         end
 
-        -- All cells that make up the protective SHELL around the bed: every cell in
-        -- the 3x3x3 neighbourhood of each bed cell that is NOT itself a bed cell.
-        -- This covers side/top/diagonal gaps -- not just the 6 faces.
-        local function gapPositions(bed)
-            local cells = bedCells(bed)
-            -- mark bed cells so we don't treat them as gaps, and find the bed's
-            -- lowest cell Y so we don't flag cells buried under the bed/floor.
-            local isBed, minY = {}, math.huge
-            for _, c in cells do
-                isBed[tostring(bedwars.BlockController:getBlockPosition(c))] = true
-                if c.Y < minY then minY = c.Y end
-            end
+        -- Gaps = the exact cells the Bed Protector pyramid would cover, but which are
+        -- currently EMPTY. We reuse getPyramid() + (bed.CFrame * offset), the same
+        -- proven coordinate logic the pyramid placer uses, so detection can't drift
+        -- from placement. `size` controls how many pyramid layers to consider
+        -- (2 = the immediate shell around a 2-block bed, which is what matters).
+        local function gapPositions(bed, size)
+            size = size or 2
             local gaps, seen = {}, {}
-            for _, cell in cells do
-                for dx = -1, 1 do
-                    for dy = -1, 1 do
-                        for dz = -1, 1 do
-                            if not (dx == 0 and dy == 0 and dz == 0) then
-                                local pos = cell + Vector3.new(dx * GRID, dy * GRID, dz * GRID)
-                                -- skip cells below the bed (into the floor)
-                                if pos.Y >= minY - (GRID * 0.5) then
-                                    local key = tostring(bedwars.BlockController:getBlockPosition(pos))
-                                    if not seen[key] and not isBed[key] then
-                                        seen[key] = true
-                                        if not getPlacedBlock(pos) then gaps[#gaps + 1] = pos end
-                                    end
-                                end
-                            end
-                        end
-                    end
+            for _, off in getPyramid(size, GRID) do
+                local pos = (bed.CFrame * CFrame.new(off)).Position
+                local key = tostring(bedwars.BlockController:getBlockPosition(pos))
+                if not seen[key] then
+                    seen[key] = true
+                    if not getPlacedBlock(pos) then gaps[#gaps + 1] = pos end
                 end
             end
             return gaps
@@ -14958,7 +14928,7 @@ run(function()
         local function fillHoles()
             if not gapFillingOn() then return end
             if not entitylib.isAlive or not entitylib.character.RootPart then return end
-            local bed = getBedNear()
+            local bed = getMyBed()
             if not bed then return end
             local blocks = getBlocks()
             if #blocks == 0 then return end
@@ -15029,7 +14999,7 @@ run(function()
         local function drawGaps()
             clearGaps()
             if not (ShowGaps and ShowGaps.Enabled and BedProtector.Enabled) then return end
-            local bed = getBedNear()
+            local bed = getMyBed()
             if not bed then return end
             for _, pos in gapPositions(bed) do
                 local part = Instance.new('Part')
