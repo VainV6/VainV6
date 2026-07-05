@@ -581,14 +581,16 @@ if not shared.VainIndependent then
 		local gameLoader = loadstring(readfile('vain/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))
 		if gameLoader then gameLoader() end
 	else
-		if not shared.VainDeveloper then
-			local suc, res = pcall(function()
-				return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('vain/profiles/commit.txt')..'/games/'..game.PlaceId..'.lua', true)
-			end)
-			if suc and res ~= '404: Not Found' then
-				local gameLoader = loadstring(downloadFile('vain/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))
-				if gameLoader then gameLoader() end
-			end
+		-- Download the game file if this place has one. This must NOT be gated on
+		-- shared.VainDeveloper: doing so meant a dev/test inject with a wiped cache
+		-- never loaded the game modules at all (only universal), so most BedWars
+		-- modules silently vanished. Probe first so a 404 place is skipped quietly.
+		local suc, res = pcall(function()
+			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..readfile('vain/profiles/commit.txt')..'/games/'..game.PlaceId..'.lua', true)
+		end)
+		if suc and res ~= '404: Not Found' and not isHttpError(res) then
+			local gameLoader = loadstring(downloadFile('vain/games/'..game.PlaceId..'.lua'), tostring(game.PlaceId))
+			if gameLoader then gameLoader() end
 		end
 	end
 	finishLoading()
