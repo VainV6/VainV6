@@ -413,381 +413,235 @@ run(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
---  AUTO DEFENSE  (adaptive, threat-scored defence of your whole country)
+--  AUTO WAR  (smart: justify then declare, never on allies / alliance-mates)
 -- ══════════════════════════════════════════════════════════════════════════════
--- Confirmed from the place file / previous build:
---   * tiles live in workspace.Regions (cached as _G.regionsChildren). Owned when
---     GetAttribute('Country') == MyCountry. CANNOT spawn on a tile whose
---     'OccupiedFrom' attribute is set (server rejects it -> "occupied territory").
---   * geometry is the tile's GeneratedRegion model (pivot = tile centre).
---   * soldiers live in workspace.SoldiersFolder, each has a 'Country' attribute, a
---     'LastFightTick' that updates in combat, and (usually) an 'Amount'/'Count'/'Size'
---     attribute for how many men the stack holds.
---   * spawn troops : Network:FireServer('CreateArmyOnTile', tile, unitTypeString, count)
---   * harden tile  : Network:FireServer('DevelopTile', tile, 'Def')      (raise DefenceTier)
---   * hold soldier : Network:FireServer('ToggleAutoCapture', soldier, false)  (stop advancing)
---
--- Unlike a flat garrison, this build SCORES every frontier tile by the enemy
--- pressure against it (nearby hostile manpower + the adjacent enemy tile's
--- DefenceTier + whether it is actively in combat) and spends its budget on the
--- most-threatened tiles first, hardens the hottest borders, protects your capital
--- first, and can pull your soldiers back from a fight they're losing.
+-- CONFIRMED from the decompiled place file:
+--   * War is a TWO-STEP action, both fired through the game's action remote:
+--       FireServer("JustifyWar",  <country>)   -- start justification (costs PP)
+--       FireServer("DeclareWar",  <country>)   -- declare once justified
+--   * A justification is IN PROGRESS while
+--       CountryRegistry[MyCountry].JustifyingWars.<target>  exists, and it is
+--     READY TO DECLARE when  workspace:GetServerTimeNow() >= that value's "END"
+--     attribute (decoded from CityInfo War button, Line ~2050).
+--   * NEVER-WAR relationships:
+--       - same ALLIANCE: ReplicatedStorage.Alliances.<a>.Members.<country> -- two
+--         countries in the same alliance can't war (game's InAlliance check, Line 426).
+--       - ALLIES: CountryRegistry[MyCountry].Allies.<country> (the FormAlly relation).
+--   * Already at war: ReplicatedStorage.WarsData.<war>.SideA/SideB hold the country
+--     names on each side; if the target is on the opposite side of any war we skip it.
+--   * Country list for the filter comes from CountryRegistry:GetChildren().
 run(function()
-	local AutoDefense
-	local UnitType, DefendBattles, HardenBorders, HoldWhenLosing, ProtectCapital
-	local BaseGarrison, BattleMultiplier, HardenThreshold, CapitalGarrison
-	local MoneyReserve, ManpowerReserve, MaxSpendPct, Interval, Notify
+	local AutoWar
+	local FilterMode, CountryList, Target, MinTiles, OnlyWeaker, Interval, Notify
 
-	local function regionTiles()
-		if type(_G.regionsChildren) == 'table' and #_G.regionsChildren > 0 then
-			return _G.regionsChildren
+	local alliancesFolder
+	local function getAlliances()
+		if not (alliancesFolder and alliancesFolder.Parent) then
+			alliancesFolder = replicatedStorage:FindFirstChild('Alliances')
 		end
-		local r = workspace:FindFirstChild('Regions')
-		return r and r:GetChildren() or {}
+		return alliancesFolder
 	end
-	local function soldiersFolder() return workspace:FindFirstChild('SoldiersFolder') end
-
-	-- how many men a soldier stack represents (best-effort across attribute names)
-	local function soldierAmount(s)
-		return s:GetAttribute('Amount') or s:GetAttribute('Count')
-			or s:GetAttribute('Size') or s:GetAttribute('Troops') or 1
-	end
-	local function soldierPos(s)
-		local ok, p = pcall(function() return s:GetPivot().Position end)
-		if ok and p then return p end
-		local bp = s:IsA('Model') and s:FindFirstChildWhichIsA('BasePart', true)
-		return bp and bp.Position or nil
-	end
-
-	local function tilePos(t)
-		local geo = t:FindFirstChild('GeneratedRegion') or t
-		local ok, p = pcall(function() return geo:GetPivot().Position end)
-		if ok and p then return p end
-		local bp = (geo:IsA('BasePart') and geo) or geo:FindFirstChildWhichIsA('BasePart', true)
-		return bp and bp.Position or nil
-	end
-	-- I own it and it is not occupied (occupied tiles reject spawns)
-	local function spawnable(t, mine)
-		return t:GetAttribute('Country') == mine and t:GetAttribute('OccupiedFrom') == nil
-	end
-
-	-- typical tile spacing = median nearest-neighbour distance, cached; the
-	-- adjacency threshold for "these two tiles touch".
-	local adjDist
-	local function adjacencyDist(snapshot)
-		if adjDist then return adjDist end
-		local nn = {}
-		for i = 1, #snapshot do
-			local best
-			for j = 1, #snapshot do
-				if i ~= j then
-					local d = (snapshot[i].pos - snapshot[j].pos).Magnitude
-					if not best or d < best then best = d end
-				end
-			end
-			if best then table.insert(nn, best) end
+	-- which alliance folder a country belongs to (or nil) -- mirrors game's InAlliance
+	local function allianceOf(country)
+		local al = getAlliances()
+		if not al then return nil end
+		for _, child in al:GetChildren() do
+			local members = child:FindFirstChild('Members')
+			if members and members:FindFirstChild(country) then return child end
 		end
-		if #nn == 0 then return 60 end
-		table.sort(nn)
-		adjDist = nn[math.ceil(#nn / 2)]
-		return adjDist
+		return nil
 	end
 
-	-- snapshot every tile once per sweep
-	local function snapshotTiles(mine)
-		local all = {}
-		for _, t in regionTiles() do
-			local p = tilePos(t)
-			if p then
-				table.insert(all, {
-					tile = t, pos = p,
-					country = t:GetAttribute('Country'),
-					mine = t:GetAttribute('Country') == mine,
-					canSpawn = spawnable(t, mine),
-					pop = t:GetAttribute('DefaultPopulation') or 0,
-					defTier = t:GetAttribute('DefenceTier') or 1,
-				})
+	-- my declared allies (FormAlly relation), as a set
+	local function myAllies()
+		local set = {}
+		local mine = lplr:GetAttribute('MyCountry')
+		local cf = mine and countryFolder(mine)
+		local allies = cf and cf:FindFirstChild('Allies')
+		if allies then
+			for _, c in allies:GetChildren() do set[c.Name] = true end
+		end
+		return set
+	end
+
+	-- am I already at war with `country`? (opposite sides of any WarsData entry)
+	local function alreadyAtWar(mine, country)
+		local wd = replicatedStorage:FindFirstChild('WarsData')
+		if not wd then return false end
+		for _, war in wd:GetChildren() do
+			local a = war:FindFirstChild('SideA')
+			local b = war:FindFirstChild('SideB')
+			if a and b then
+				local mineA = a:FindFirstChild(mine) ~= nil
+				local mineB = b:FindFirstChild(mine) ~= nil
+				local themA = a:FindFirstChild(country) ~= nil
+				local themB = b:FindFirstChild(country) ~= nil
+				if (mineA and themB) or (mineB and themA) then return true end
 			end
 		end
-		return all
+		return false
 	end
 
-	-- index enemy soldiers once per sweep: {pos, amount, fighting}
-	local function enemyForces(mine)
-		local sf = soldiersFolder()
+	-- justification state on a country I'm justifying against:
+	--   nil       -> not justifying
+	--   'pending' -> justifying, not ready yet
+	--   'ready'   -> justified, can declare now
+	local function justifyState(mine, country)
+		local cf = countryFolder(mine)
+		local jw = cf and cf:FindFirstChild('JustifyingWars')
+		local entry = jw and jw:FindFirstChild(country)
+		if not entry then return nil end
+		local endT = entry:GetAttribute('END')
+		if endT and workspace:GetServerTimeNow() >= endT then return 'ready' end
+		return 'pending'
+	end
+
+	-- may I war this country at all? (not me, not ally, not same alliance)
+	local function warAllowed(mine, country)
+		if not country or country == mine then return false end
+		if myAllies()[country] then return false end
+		local myAl = allianceOf(mine)
+		if myAl and allianceOf(country) == myAl then return false end
+		return true
+	end
+
+	-- parse the comma/space separated country textbox into a set (case-insensitive)
+	local function filterSet()
+		local set = {}
+		local raw = CountryList and CountryList.Value or ''
+		for name in string.gmatch(raw, '[^,]+') do
+			local n = name:gsub('^%s+', ''):gsub('%s+$', '')
+			if #n > 0 then set[n:lower()] = true end
+		end
+		return set
+	end
+
+	-- does the filter permit warring this country?
+	--   Off        -> any allowed country
+	--   Whitelist  -> only countries in the list
+	--   Blacklist  -> any allowed country EXCEPT those in the list
+	local function passesFilter(country)
+		local mode = FilterMode and FilterMode.Value or 'Off'
+		if mode == 'Off' then return true end
+		local inList = filterSet()[country:lower()] == true
+		if mode == 'Whitelist' then return inList end
+		if mode == 'Blacklist' then return not inList end
+		return true
+	end
+
+	-- live stats for weakness comparison
+	local function tilesOf(country)
+		return cfValue(countryFolder(country), 'Tiles') or 0
+	end
+
+	-- candidate targets, in priority order (weakest first when OnlyWeaker/Target set)
+	local function candidates(mine)
+		local reg = replicatedStorage:FindFirstChild('CountryRegistry')
+		if not reg then return {} end
+		local myTiles = tilesOf(mine)
+		local minTiles = MinTiles and MinTiles.Value or 0
 		local out = {}
-		if not sf then return out end
-		local now = tick()
-		for _, s in sf:GetChildren() do
-			local sc = s:GetAttribute('Country')
-			if sc and sc ~= mine then
-				local p = soldierPos(s)
-				if p then
-					local lf = s:GetAttribute('LastFightTick')
-					table.insert(out, {
-						pos = p,
-						amount = tonumber(soldierAmount(s)) or 1,
-						fighting = type(lf) == 'number' and (now - lf) < 6,
-					})
-				end
-			end
+		-- explicit single Target overrides everything if set
+		local target = Target and Target.Value or ''
+		target = target:gsub('^%s+', ''):gsub('%s+$', '')
+		if #target > 0 then
+			if countryFolder(target) then out[#out + 1] = target end
+			return out
 		end
-		return out
-	end
-
-	-- my own soldiers, with their stack, so we can pull them back if losing
-	local function myForces(mine)
-		local sf = soldiersFolder()
-		local out = {}
-		if not sf then return out end
-		for _, s in sf:GetChildren() do
-			if s:GetAttribute('Country') == mine then
-				local p = soldierPos(s)
-				if p then table.insert(out, { inst = s, pos = p, amount = tonumber(soldierAmount(s)) or 1 }) end
-			end
-		end
-		return out
-	end
-
-	-- Score each spawnable frontier tile by the ENEMY PRESSURE bearing on it:
-	--   pressure = sum(enemy manpower within ~1.5 tiles, distance-weighted)
-	--            + (adjacent enemy tile's DefenceTier * 500)
-	--            + (in active combat ? big flat bonus)
-	-- Returns a sorted-by-pressure list of { tile, pressure, contested, myNear }.
-	local function scoreFrontier(all, enemies, mine)
-		local thresh = adjacencyDist(all)
-		local myTroopsNear = {}   -- tile -> my manpower sitting on/near it
-		for _, f in myForces(mine) do
-			for _, o in all do
-				if o.canSpawn and (o.pos - f.pos).Magnitude <= thresh * 0.75 then
-					myTroopsNear[o.tile] = (myTroopsNear[o.tile] or 0) + f.amount
-				end
-			end
-		end
-
-		local scored = {}
-		for _, o in all do
-			if o.canSpawn then
-				local pressure, contested = 0, false
-				-- enemy soldiers bearing on this tile
-				for _, e in enemies do
-					local d = (o.pos - e.pos).Magnitude
-					if d <= thresh * 1.5 then
-						local w = 1 - (d / (thresh * 1.5)) * 0.6   -- closer = heavier
-						pressure += e.amount * w
-						if e.fighting and d <= thresh then contested = true end
+		for _, cf in reg:GetChildren() do
+			local c = cf.Name
+			if warAllowed(mine, c) and passesFilter(c) then
+				local t = tilesOf(c)
+				if t >= minTiles then
+					if not (OnlyWeaker and OnlyWeaker.Enabled) or t <= myTiles then
+						out[#out + 1] = c
 					end
 				end
-				-- adjacency to a strong enemy tile is standing pressure even with no
-				-- soldiers currently on the map
-				for _, x in all do
-					if not x.mine and x.country ~= nil and (o.pos - x.pos).Magnitude <= thresh * 1.5 then
-						pressure += x.defTier * 300
-					end
-				end
-				if pressure > 0 or contested then
-					if contested then pressure += 5000 end
-					table.insert(scored, {
-						tile = o.tile, pressure = pressure, contested = contested,
-						defTier = o.defTier, pop = o.pop,
-						myNear = myTroopsNear[o.tile] or 0,
-					})
-				end
 			end
 		end
-		table.sort(scored, function(a, b) return a.pressure > b.pressure end)
-		return scored
-	end
-
-	-- highest-population spawnable tiles = your heartland/capital, defended first
-	local function capitalTiles(all, n)
-		local mineSpawn = {}
-		for _, o in all do if o.canSpawn then table.insert(mineSpawn, o) end end
-		table.sort(mineSpawn, function(a, b) return a.pop > b.pop end)
-		local out = {}
-		for i = 1, math.min(n, #mineSpawn) do table.insert(out, mineSpawn[i]) end
+		-- weakest first so we pick off easy wins
+		table.sort(out, function(a, b) return tilesOf(a) < tilesOf(b) end)
 		return out
 	end
-
-	local lastSpawn = {}   -- anti-spam per tile
-	local lastHarden = {}
 
 	local function sweep()
 		local mine = lplr:GetAttribute('MyCountry')
 		if not (mine and getActionRemote()) then return end
 
-		local moneyReserve = (MoneyReserve.Value or 0) * 1e6
-		local mpReserve    = (ManpowerReserve.Value or 0) * 1e3
-		local unit    = (UnitType and UnitType.Value) or 'Soldier'
-		local baseGar = math.floor(BaseGarrison.Value)
-		local battleX = BattleMultiplier.Value or 2
-		local capGar  = math.floor(CapitalGarrison.Value)
-
-		-- adaptive budget: at most MaxSpendPct of spendable money this sweep
-		local money0, mp0 = getBalance(mine)
-		money0 = money0 or 0
-		mp0 = mp0 or math.huge
-		local spendable = math.max(0, money0 - moneyReserve)
-		local budget = spendable * ((MaxSpendPct.Value or 50) / 100)
-		local spent = 0
-
-		local reinforced, garrisoned, hardened, held = 0, 0, 0, 0
-
-		local function canSpend(estCost)
-			if spent + estCost > budget then return false end
-			local m, p = getBalance(mine)
-			if m and (m - estCost) <= moneyReserve then return false end
-			if p and p <= mpReserve then return false end
-			return true
-		end
-
-		-- rough per-unit money cost (defensive spawns are cheap vs upgrades; we bias
-		-- the estimate high so the reserve is genuinely protected)
-		local function spawnCost(count) return count * 250 end
-
-		local function spawn(tile, count, force)
-			if count <= 0 then return false end
-			local now = tick()
-			if not force and lastSpawn[tile] and (now - lastSpawn[tile]) < (Interval.Value or 8) then
-				return false
-			end
-			local est = spawnCost(count)
-			if not canSpend(est) then return false end
-			lastSpawn[tile] = now
-			spent += est
-			fireAction('CreateArmyOnTile', tile, unit, count)
-			task.wait(0.14)
-			return true
-		end
-
-		local all     = snapshotTiles(mine)
-		local enemies  = enemyForces(mine)
-		local scored   = scoreFrontier(all, enemies, mine)
-
-		-- 1) CAPITAL FIRST -- always keep the heartland stocked
-		if ProtectCapital.Enabled then
-			for _, o in capitalTiles(all, 3) do
-				if not AutoDefense.Enabled then break end
-				if spawn(o.tile, capGar, false) then garrisoned += 1 end
-			end
-		end
-
-		-- 2) THREAT-SCORED FRONTIER -- spend on the hottest borders first, sizing the
-		--    garrison to the pressure and to what I already have sitting there.
-		for _, s in scored do
-			if not AutoDefense.Enabled then break end
-			-- target strength scales with pressure; contested tiles get the multiplier
-			local want = baseGar + math.floor(math.min(s.pressure, 20000) / 1000) * baseGar
-			if s.contested and DefendBattles.Enabled then want = math.floor(want * battleX) end
-			local deficit = want - s.myNear
-			if deficit > 0 then
-				if spawn(s.tile, deficit, s.contested) then
-					if s.contested then reinforced += 1 else garrisoned += 1 end
-				end
-			end
-
-			-- 3) HARDEN the very hottest borders (raise DefenceTier) when they're
-			--    under sustained pressure and not already maxed.
-			if HardenBorders.Enabled and s.defTier < 10 and s.pressure >= (HardenThreshold.Value or 3000) then
-				local now = tick()
-				if not lastHarden[s.tile] or (now - lastHarden[s.tile]) > 15 then
-					local c = tileCosts(s.tile)
-					if c and canSpend(c.defMoney) and (mp0 - c.defManpower) > mpReserve then
-						lastHarden[s.tile] = now
-						spent += c.defMoney
-						fireAction('DevelopTile', s.tile, 'Def')
-						hardened += 1
-						task.wait(0.14)
-					end
+		-- 1) advance any justification that is READY -> declare it
+		local cf = countryFolder(mine)
+		local jw = cf and cf:FindFirstChild('JustifyingWars')
+		if jw then
+			for _, entry in jw:GetChildren() do
+				local country = entry.Name
+				if warAllowed(mine, country) and justifyState(mine, country) == 'ready'
+					and not alreadyAtWar(mine, country) then
+					fireAction('DeclareWar', country)
+					if Notify.Enabled then notif('Auto War', 'Declared war on ' .. country, 4, 'alert') end
+					task.wait(0.4)
 				end
 			end
 		end
 
-		-- 4) HOLD WHEN LOSING -- if a frontier fight is badly outnumbered, stop my
-		--    soldiers there from advancing so they consolidate instead of trickling in.
-		if HoldWhenLosing.Enabled then
-			local thresh = adjacencyDist(all)
-			for _, f in myForces(mine) do
-				if not AutoDefense.Enabled then break end
-				local enemyNear, mineNear = 0, f.amount
-				for _, e in enemies do
-					if (f.pos - e.pos).Magnitude <= thresh then enemyNear += e.amount end
-				end
-				for _, g in myForces(mine) do
-					if g.inst ~= f.inst and (f.pos - g.pos).Magnitude <= thresh then mineNear += g.amount end
-				end
-				-- outnumbered 2:1 or worse -> hold position
-				if enemyNear >= mineNear * 2 and enemyNear > 0 then
-					fireAction('ToggleAutoCapture', f.inst, false)
-					held += 1
-					task.wait(0.05)
+		-- 2) start justifying the next best target if we aren't already
+		for _, country in candidates(mine) do
+			if not AutoWar.Enabled then break end
+			if not alreadyAtWar(mine, country) then
+				local st = justifyState(mine, country)
+				if st == nil then
+					fireAction('JustifyWar', country)
+					if Notify.Enabled then notif('Auto War', 'Justifying war against ' .. country, 3) end
+					task.wait(0.4)
+					break   -- one new justification at a time (PP is limited)
+				elseif st == 'ready' then
+					fireAction('DeclareWar', country)
+					if Notify.Enabled then notif('Auto War', 'Declared war on ' .. country, 4, 'alert') end
+					task.wait(0.4)
+					break
 				end
 			end
-		end
-
-		if Notify.Enabled and (reinforced + garrisoned + hardened + held) > 0 then
-			notif('Auto Defense', string.format(
-				'reinforced %d | garrisoned %d | hardened %d | held %d  ($%s spent)',
-				reinforced, garrisoned, hardened, held, fmtNum(spent)), 4)
 		end
 	end
 
-	AutoDefense = vain.Categories.Utility:CreateModule({
-		Name = 'Auto Defense',
+	AutoWar = vain.Categories.Utility:CreateModule({
+		Name = 'Auto War',
+		Tooltip = "Automatically justifies and then declares wars for you. It NEVER targets your allies or anyone in your alliance, and skips countries you're already at war with. Use Filter Mode + the country list to whitelist (only these) or blacklist (everyone but these), or set a single Target. Justifies one war at a time (political power is limited) and declares each as soon as its justification finishes.",
 		Function = function(callback)
 			if callback then
-				local mine    = lplr:GetAttribute('MyCountry')
-				local all     = snapshotTiles(mine)
-				local enemies = enemyForces(mine)
-				local scored  = scoreFrontier(all, enemies, mine)
-				local spawnCnt = 0
-				for _, o in all do if o.canSpawn then spawnCnt += 1 end end
-				notif('Auto Defense', string.format(
-					'%s | tiles %d | spawnable %d | frontier %d | enemy stacks %d | soldiers %s',
+				local mine = lplr:GetAttribute('MyCountry')
+				local n = #candidates(mine)
+				notif('Auto War', string.format('%s | country %s | valid targets: %d%s',
 					getActionRemote() and 'Remote OK' or 'NO REMOTE',
-					#all, spawnCnt, #scored, #enemies,
-					soldiersFolder() and 'OK' or 'MISSING'), 8,
-					(getActionRemote() and mine and spawnCnt > 0) and nil or 'warning')
-				AutoDefense:Clean(task.spawn(function()
-					repeat
+					tostring(mine), n,
+					(FilterMode and FilterMode.Value ~= 'Off') and (' (' .. FilterMode.Value .. ')') or ''),
+					7, (getActionRemote() and mine) and nil or 'warning')
+				AutoWar:Clean(task.spawn(function()
+					while AutoWar.Enabled do
 						sweep()
 						task.wait(Interval and Interval.Value or 8)
-					until not AutoDefense.Enabled
+					end
 				end))
 			end
-		end,
-		Tooltip = 'Adaptive whole-country defence. Scores every frontier tile by the enemy pressure against it (nearby hostile troops + adjacent enemy defence + active combat) and spends first on the most-threatened borders, hardens the hottest tiles, always keeps your capital garrisoned, and can pull soldiers back from a fight they are losing. Respects money/manpower reserves and a per-sweep spend cap.'
+		end
 	})
 
-	UnitType = AutoDefense:CreateDropdown({ Name = 'Unit',
-		List = { 'Soldier', 'Tank', 'Artillery', 'AntiAircraft' }, Default = 'Soldier',
-		Tooltip = 'Which unit type to spawn when garrisoning/reinforcing.' })
-	BaseGarrison = AutoDefense:CreateSlider({ Name = 'Base Garrison', Min = 1, Max = 500, Default = 15,
-		Tooltip = 'Baseline troops per frontier tile. The real target scales UP with how much enemy pressure that tile is under.' })
-	BattleMultiplier = AutoDefense:CreateSlider({ Name = 'Battle Multiplier', Min = 1, Max = 6, Default = 2,
-		Tooltip = 'A tile in active combat gets its target garrison multiplied by this.' })
-	CapitalGarrison = AutoDefense:CreateSlider({ Name = 'Capital Garrison', Min = 0, Max = 1000, Default = 40,
-		Tooltip = 'Troops to keep on each of your 3 highest-population (capital) tiles, defended before anything else.' })
-	DefendBattles = AutoDefense:CreateToggle({ Name = 'Reinforce Battles', Default = true,
-		Tooltip = 'Rush extra troops (with the battle multiplier) to any owned tile with active enemy combat on it.' })
-	HardenBorders = AutoDefense:CreateToggle({ Name = 'Harden Borders', Default = true,
-		Tooltip = "Auto-raise DefenceTier on the hottest frontier tiles once they cross the harden threshold (costs money + manpower)." })
-	HardenThreshold = AutoDefense:CreateSlider({ Name = 'Harden Threshold', Min = 500, Max = 20000, Default = 3000,
-		Tooltip = 'Enemy-pressure score a tile must reach before its defence is upgraded. Lower = hardens more tiles, more spending.' })
-	ProtectCapital = AutoDefense:CreateToggle({ Name = 'Protect Capital', Default = true,
-		Tooltip = 'Always garrison your 3 highest-population tiles first, even if the frontier is quiet.' })
-	HoldWhenLosing = AutoDefense:CreateToggle({ Name = 'Hold When Losing', Default = true,
-		Tooltip = 'If your soldiers in a fight are outnumbered 2:1 or worse, stop them auto-advancing so they consolidate instead of feeding the fight piecemeal.' })
-	MoneyReserve = AutoDefense:CreateSlider({ Name = 'Money Reserve', Min = 0, Max = 500, Default = 5, Suffix = 'M',
-		Tooltip = 'Never let money drop below this.' })
-	ManpowerReserve = AutoDefense:CreateSlider({ Name = 'Manpower Reserve', Min = 0, Max = 1000, Default = 20, Suffix = 'K',
-		Tooltip = 'Never let manpower drop below this.' })
-	MaxSpendPct = AutoDefense:CreateSlider({ Name = 'Max Spend / Sweep', Min = 5, Max = 100, Default = 50, Suffix = '%',
-		Tooltip = 'Cap how much of your spendable money (money minus reserve) a single sweep may use, so a huge front cannot bankrupt you at once.' })
-	Interval = AutoDefense:CreateSlider({ Name = 'Interval', Min = 1, Max = 60, Default = 6, Suffix = 'sec',
-		Tooltip = 'How often to re-scan the front and re-defend.' })
-	Notify = AutoDefense:CreateToggle({ Name = 'Notify', Default = false,
-		Tooltip = 'Notify each sweep with what it reinforced / garrisoned / hardened / held.' })
+	FilterMode = AutoWar:CreateDropdown({ Name = 'Filter Mode',
+		List = { 'Off', 'Whitelist', 'Blacklist' }, Default = 'Off',
+		Tooltip = "Off = war any valid country. Whitelist = ONLY war countries in the list below. Blacklist = war everyone valid EXCEPT the ones in the list. (Allies / alliance-mates are always protected regardless.)" })
+	CountryList = AutoWar:CreateTextBox({ Name = 'Countries',
+		Default = '',
+		Tooltip = 'Comma-separated country names for the whitelist / blacklist, e.g. "France, Spain, Poland". Case-insensitive. Ignored when Filter Mode is Off.' })
+	Target = AutoWar:CreateTextBox({ Name = 'Single Target',
+		Default = '',
+		Tooltip = 'Optional. Type ONE country name to war only that country (overrides the filter and target-picking). Leave empty to auto-pick targets.' })
+	OnlyWeaker = AutoWar:CreateToggle({ Name = 'Only Weaker', Default = true,
+		Tooltip = 'Only auto-pick countries with no more tiles than you, so you punch down instead of starting wars you will lose.' })
+	MinTiles = AutoWar:CreateSlider({ Name = 'Min Tiles', Min = 0, Max = 200, Default = 0,
+		Tooltip = 'Ignore auto-picked countries smaller than this many tiles (skip tiny irrelevant states).' })
+	Interval = AutoWar:CreateSlider({ Name = 'Interval', Min = 2, Max = 60, Default = 8, Suffix = 'sec',
+		Tooltip = 'How often to advance justifications and start the next war.' })
+	Notify = AutoWar:CreateToggle({ Name = 'Notify', Default = true,
+		Tooltip = 'Notify when it justifies or declares a war.' })
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
