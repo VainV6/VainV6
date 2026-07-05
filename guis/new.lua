@@ -414,6 +414,17 @@ end
 
 local function createDownloader(text)
 	if mainapi.Loaded ~= true then
+		-- The Vain loading screen owns all download status now. If it exists at all,
+		-- route the text to it and NEVER paint the stale top-of-screen banner over
+		-- the game (the user explicitly wants that banner gone).
+		local hasLoadingScreen = false
+		pcall(function()
+			if getgenv and getgenv().vainLoading then
+				hasLoadingScreen = true
+				getgenv().vainLoading.status('Downloading '..text)
+			end
+		end)
+		if hasLoadingScreen then return end
 		local downloader = mainapi.Downloader
 		if not downloader and not license.Closet then
 			downloader = Instance.new('TextLabel')
