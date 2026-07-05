@@ -667,6 +667,201 @@ run(function()
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
+--  AUTO TRAIN  (continuously recruit a chosen unit across your tiles)
+-- ══════════════════════════════════════════════════════════════════════════════
+-- CONFIRMED from the decompiled place file (SpawnArmy UI, Line ~4497):
+--   Recruiting fires  FireServer("CreateArmyOnTile", tile, unitType, count, nil)
+--   * unitType is a key of the ReplicatedStorage `ArmyData` ModuleScript. Units:
+--       Soldier / Tank / Battleship / Artillery / Plane / AntiAircraft
+--   * per-unit cost = ArmyData[unit].PricePerUnitToSpawn (money) +
+--       .ManPowerPerUnit (manpower); .UnitsPerClick is the natural batch size and
+--       .MAXUNITS an optional per-spawn cap. Some units gate on .RequiresShipyard /
+--       .RequiresAirport / .TechnologyREQ (we surface those but let the server
+--       enforce them).
+--   * a tile can be recruited on only when you own it, it is not occupied
+--       (OccupiedFrom unset) and it is not already spawning (no SpawningArmy attr).
+run(function()
+	local AutoTrain
+	local UnitType, Where, BatchSize, MoneyReserve, ManpowerReserve, MaxSpendPct, Interval, Notify
+
+	local armyMod
+	local function armyData()
+		if not armyMod then armyMod = replicatedStorage:FindFirstChild('ArmyData', true) end
+		local ok, data = pcall(function() return require(armyMod) end)
+		return ok and data or nil
+	end
+
+	-- tiles I own that can currently be recruited on
+	local function recruitableTiles(mine)
+		local out = {}
+		local regions = workspace:FindFirstChild('Regions')
+		if not regions then return out end
+		for _, tile in regions:GetChildren() do
+			if tile:GetAttribute('Country') == mine
+				and tile:GetAttribute('OccupiedFrom') == nil
+				and tile:GetAttribute('SpawningArmy') == nil then
+				table.insert(out, tile)
+			end
+		end
+		return out
+	end
+
+	-- pick the tiles to recruit on based on the Where dropdown
+	local function chooseTiles(mine)
+		local tiles = recruitableTiles(mine)
+		local where = (Where and Where.Value) or 'All Tiles'
+		if where == 'All Tiles' then return tiles end
+		if where == 'Capital' then
+			-- highest DefaultPopulation tile
+			table.sort(tiles, function(a, b)
+				return (a:GetAttribute('DefaultPopulation') or 0) > (b:GetAttribute('DefaultPopulation') or 0)
+			end)
+			return { tiles[1] }
+		end
+		if where == 'Borders' then
+			-- tiles adjacent to a tile you don't own
+			local mineSet = {}
+			local regions = workspace:FindFirstChild('Regions')
+			local function pos(t)
+				local geo = t:FindFirstChild('GeneratedRegion') or t
+				local ok, p = pcall(function() return geo:GetPivot().Position end)
+				return ok and p or nil
+			end
+			-- cheap border test: a tile is a border if any tile within ~1.5x nearest
+			-- spacing is not mine. To avoid an O(n^2) blowup we sample distance once.
+			local pts = {}
+			for _, t in regions:GetChildren() do
+				local p = pos(t)
+				if p then table.insert(pts, { tile = t, pos = p, mine = t:GetAttribute('Country') == mine }) end
+			end
+			-- median nearest-neighbour distance
+			local nn
+			do
+				local sample = {}
+				for i = 1, math.min(#pts, 40) do
+					local best
+					for j = 1, #pts do
+						if i ~= j then
+							local d = (pts[i].pos - pts[j].pos).Magnitude
+							if not best or d < best then best = d end
+						end
+					end
+					if best then table.insert(sample, best) end
+				end
+				table.sort(sample)
+				nn = sample[math.ceil(#sample / 2)] or 60
+			end
+			local thresh = nn * 1.5
+			local border = {}
+			for _, a in pts do
+				if a.mine and a.tile:GetAttribute('OccupiedFrom') == nil and a.tile:GetAttribute('SpawningArmy') == nil then
+					for _, b in pts do
+						if not b.mine and (a.pos - b.pos).Magnitude <= thresh then
+							table.insert(border, a.tile)
+							break
+						end
+					end
+				end
+			end
+			return border
+		end
+		return tiles
+	end
+
+	local function sweep()
+		local mine = lplr:GetAttribute('MyCountry')
+		if not (mine and getActionRemote()) then return end
+		local army = armyData()
+		local unit = (UnitType and UnitType.Value) or 'Soldier'
+		local def = army and army[unit]
+		if not def then return end
+
+		local pricePer = def.PricePerUnitToSpawn or 0
+		local mpPer = def.ManPowerPerUnit or 0
+		local batch = math.floor(BatchSize and BatchSize.Value or (def.UnitsPerClick or 100))
+		if def.MAXUNITS then batch = math.min(batch, def.MAXUNITS) end
+		if batch <= 0 then return end
+
+		local moneyReserve = (MoneyReserve.Value or 0) * 1e6
+		local mpReserve = (ManpowerReserve.Value or 0) * 1e3
+
+		local money0 = select(1, getBalance(mine)) or 0
+		local spendable = math.max(0, money0 - moneyReserve)
+		local budget = spendable * ((MaxSpendPct.Value or 50) / 100)
+		local spent = 0
+
+		local trained, tilesUsed = 0, 0
+		for _, tile in chooseTiles(mine) do
+			if not AutoTrain.Enabled or not tile then break end
+			local money, mp = getBalance(mine)
+			money = money or 0
+			mp = mp or math.huge
+			local cost = pricePer * batch
+			local mpCost = mpPer * batch
+			-- affordability + reserves + per-sweep budget cap
+			if spent + cost <= budget
+				and money - cost >= moneyReserve
+				and mp - mpCost >= mpReserve then
+				fireAction('CreateArmyOnTile', tile, unit, batch, nil)
+				spent = spent + cost
+				trained = trained + batch
+				tilesUsed = tilesUsed + 1
+				task.wait(0.14)
+			end
+		end
+
+		if Notify.Enabled and trained > 0 then
+			notif('Auto Train', string.format('Recruited %s %s across %d tile(s)  ($%s)',
+				fmtNum(trained), unit, tilesUsed, fmtNum(spent)), 4)
+		end
+	end
+
+	AutoTrain = vain.Categories.Utility:CreateModule({
+		Name = 'Auto Train',
+		Tooltip = "Continuously recruits a chosen unit (Soldier / Tank / Artillery / Plane / Battleship / AntiAircraft) across your tiles via the game's CreateArmyOnTile. Uses the real ArmyData costs, respects your money/manpower reserves and a per-sweep spend cap, and only recruits on tiles you own that aren't occupied or already spawning. Battleships/Planes need a shipyard/airport and some units a tech level -- the server enforces that.",
+		Function = function(callback)
+			if callback then
+				local mine = lplr:GetAttribute('MyCountry')
+				local army = armyData()
+				local unit = (UnitType and UnitType.Value) or 'Soldier'
+				local def = army and army[unit]
+				local n = #chooseTiles(mine)
+				notif('Auto Train', string.format('%s | ArmyData %s | %s: %s | recruit tiles: %d',
+					getActionRemote() and 'Remote OK' or 'NO REMOTE',
+					army and 'loaded' or 'NOT FOUND',
+					unit, def and (fmtNum(def.PricePerUnitToSpawn or 0) .. '/unit') or 'unknown unit',
+					n), 7, (getActionRemote() and army and def and n > 0) and nil or 'warning')
+				AutoTrain:Clean(task.spawn(function()
+					while AutoTrain.Enabled do
+						sweep()
+						task.wait(Interval and Interval.Value or 5)
+					end
+				end))
+			end
+		end
+	})
+
+	UnitType = AutoTrain:CreateDropdown({ Name = 'Unit',
+		List = { 'Soldier', 'Tank', 'Artillery', 'Plane', 'Battleship', 'AntiAircraft' }, Default = 'Soldier',
+		Tooltip = 'Which unit to recruit. Cost/manpower per unit is read from the game\'s ArmyData.' })
+	Where = AutoTrain:CreateDropdown({ Name = 'Where',
+		List = { 'All Tiles', 'Borders', 'Capital' }, Default = 'All Tiles',
+		Tooltip = 'All Tiles = recruit everywhere you can. Borders = only on tiles next to land you don\'t own (reinforce the front). Capital = only your highest-population tile.' })
+	BatchSize = AutoTrain:CreateSlider({ Name = 'Batch Size', Min = 1, Max = 5000, Default = 100,
+		Tooltip = 'How many units to recruit per tile each sweep (capped by the unit\'s MAXUNITS).' })
+	MoneyReserve = AutoTrain:CreateSlider({ Name = 'Money Reserve', Min = 0, Max = 500, Default = 5, Suffix = 'M',
+		Tooltip = 'Never spend money below this.' })
+	ManpowerReserve = AutoTrain:CreateSlider({ Name = 'Manpower Reserve', Min = 0, Max = 1000, Default = 20, Suffix = 'K',
+		Tooltip = 'Never spend manpower below this.' })
+	MaxSpendPct = AutoTrain:CreateSlider({ Name = 'Max Spend / Sweep', Min = 5, Max = 100, Default = 50, Suffix = '%',
+		Tooltip = 'Cap how much of your spendable money one sweep may use on recruiting.' })
+	Interval = AutoTrain:CreateSlider({ Name = 'Interval', Min = 1, Max = 60, Default = 5, Suffix = 'sec',
+		Tooltip = 'How often to recruit another batch.' })
+	Notify = AutoTrain:CreateToggle({ Name = 'Notify', Default = false,
+		Tooltip = 'Notify each sweep with how many units were recruited.' })
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════════
 --  AUTO ALLIANCE BANK  (dump overflow manpower into the alliance bank when full)
 -- ══════════════════════════════════════════════════════════════════════════════
 -- CONFIRMED from the decompiled place file (Alliance menu, Line 3522):
