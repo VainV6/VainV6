@@ -7541,7 +7541,6 @@ run(function()
                     ChatReveal:Toggle()
                     return
                 end
-                notif('Chat Reveal', 'Revealing hidden messages. Note: enemy team chat is server-scoped and cannot be shown.', 7, 'success')
             else
                 -- restore any legacy hooks; the TextChatService hook self-stops via the
                 -- repeat-until when the module is disabled.

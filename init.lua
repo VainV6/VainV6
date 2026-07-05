@@ -21,7 +21,7 @@ local vainLoading
 do
 	local TweenService = cloneref(game:GetService('TweenService'))
 	local RunService   = cloneref(game:GetService('RunService'))
-	local built, screenGui, root, statusLabel, gradient, setRingProgress
+	local built, screenGui, root, statusLabel, setRingProgress
 	local progressTarget, progressShown = 0, 0
 	local finished = false
 
@@ -59,14 +59,14 @@ do
 		bg.BorderSizePixel = 0
 		bg.Parent = root
 
-		-- (V removed) -- centred VAIN wordmark + circular progress ring + status.
-		-- Modern wordmark: heavy GothamBlack, letter-spaced (via a UIListLayout of
-		-- per-letter labels) with a metallic vertical gradient, a crisp thin stroke
-		-- for definition, and an animated horizontal shimmer sweep.
+		-- (V removed) -- centred VAIN wordmark + progress bar + status.
+		-- Modern, sleek wordmark: medium-weight GothamBold (not the puffy GothamBlack),
+		-- wide letter-spacing, a flat clean orange, and no heavy outline -- so it reads
+		-- as a crisp modern wordmark rather than a chunky puffy logo.
 		local wordmark = Instance.new('Frame')
 		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
 		wordmark.Position = UDim2.new(0.5, 0, 0.5, -40)
-		wordmark.Size = UDim2.fromOffset(420, 108)
+		wordmark.Size = UDim2.fromOffset(420, 84)
 		wordmark.BackgroundTransparency = 1
 		wordmark.ZIndex = 3
 		wordmark.Parent = root
@@ -74,52 +74,31 @@ do
 		wmLayout.FillDirection = Enum.FillDirection.Horizontal
 		wmLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 		wmLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-		wmLayout.Padding = UDim.new(0, 8) -- letter spacing / tracking
+		wmLayout.Padding = UDim.new(0, 14) -- wide, modern letter-spacing / tracking
 		wmLayout.Parent = wordmark
 
-		-- metallic vertical gradient (bright top -> deep base), shared per letter
-		local function makeGradient()
-			local g = Instance.new('UIGradient')
-			g.Rotation = 90
-			g.Color = ColorSequence.new({
-				ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 214, 170)),
-				ColorSequenceKeypoint.new(0.30, Color3.fromRGB(255, 150, 70)),
-				ColorSequenceKeypoint.new(0.55, Color3.fromRGB(255, 106, 31)),
-				ColorSequenceKeypoint.new(1.00, Color3.fromRGB(168, 66, 12)),
-			})
-			return g
-		end
+		local titleCol = Color3.fromRGB(245, 150, 40) -- flat orange, matches the bar
 		local letters = {}
 		for i = 1, 4 do
 			local ch = ('VAIN'):sub(i, i)
 			local l = Instance.new('TextLabel')
 			l.LayoutOrder = i
 			l.AutomaticSize = Enum.AutomaticSize.X
-			l.Size = UDim2.fromOffset(0, 108)
+			l.Size = UDim2.fromOffset(0, 84)
 			l.BackgroundTransparency = 1
-			l.Font = Enum.Font.GothamBlack
+			l.Font = Enum.Font.GothamBold      -- medium weight, not puffy
 			l.Text = ch
-			l.TextSize = 96
-			l.TextColor3 = Color3.new(1, 1, 1)
+			l.TextSize = 66
+			l.TextColor3 = titleCol
 			l.TextTransparency = 1
 			l.ZIndex = 3
 			l.Parent = wordmark
-			-- crisp thin stroke for definition against any background
-			local st = Instance.new('UIStroke')
-			st.Color = Color3.fromRGB(90, 30, 5)
-			st.Thickness = 2
-			st.Transparency = 0.15
-			st.LineJoinMode = Enum.LineJoinMode.Round
-			st.Parent = l
-			makeGradient().Parent = l
 			letters[i] = l
 		end
-		-- keep a single gradient handle for the shimmer sweep loop (drives all letters)
-		gradient = letters[1]:FindFirstChildOfClass('UIGradient')
 
 		-- ── linear progress bar ───────────────────────────────────────────────
-		-- Simple rounded track + orange fill, with a bright shimmer band sweeping
-		-- across the filled portion and the percentage centred above it.
+		-- Simple rounded track + a SOLID orange fill (no gradient / shimmer), with
+		-- the percentage centred above it.
 		local barW    = 320
 		local barH    = 8
 		local accent  = Color3.fromRGB(245, 150, 40)   -- orange fill
@@ -141,28 +120,11 @@ do
 		barFill.AnchorPoint = Vector2.new(0, 0.5)
 		barFill.Position = UDim2.fromScale(0, 0.5)
 		barFill.Size = UDim2.fromScale(0, 1)
-		barFill.BackgroundColor3 = accent
+		barFill.BackgroundColor3 = accent   -- solid orange, no gradient / shimmer
 		barFill.BorderSizePixel = 0
 		barFill.ZIndex = 4
 		barFill.Parent = barTrack
 		Instance.new('UICorner', barFill).CornerRadius = UDim.new(1, 0)
-		-- shimmer band: a bright translucent streak that sweeps across the fill
-		local shimmer = Instance.new('Frame')
-		shimmer.AnchorPoint = Vector2.new(0.5, 0.5)
-		shimmer.Size = UDim2.new(0, 60, 1, 0)
-		shimmer.Position = UDim2.fromScale(-0.2, 0.5)
-		shimmer.BackgroundColor3 = Color3.fromRGB(255, 220, 160)
-		shimmer.BackgroundTransparency = 0.35
-		shimmer.BorderSizePixel = 0
-		shimmer.ZIndex = 5
-		shimmer.Parent = barFill
-		local shimGrad = Instance.new('UIGradient')
-		shimGrad.Transparency = NumberSequence.new({
-			NumberSequenceKeypoint.new(0, 1),
-			NumberSequenceKeypoint.new(0.5, 0),
-			NumberSequenceKeypoint.new(1, 1),
-		})
-		shimGrad.Parent = shimmer
 
 		-- percentage centred above the bar
 		local ringPct = Instance.new('TextLabel')
@@ -184,18 +146,6 @@ do
 			tween(barFill, 0.25, { Size = UDim2.fromScale(curFrac, 1) })
 			ringPct.Text = tostring(math.floor(curFrac * 100 + 0.5)) .. '%'
 		end
-
-		-- shimmer sweep across the filled portion
-		task.spawn(function()
-			while barTrack.Parent and not finished do
-				shimmer.Position = UDim2.fromScale(-0.2, 0.5)
-				local t = TweenService:Create(shimmer,
-					TweenInfo.new(1.1, Enum.EasingStyle.Linear), { Position = UDim2.fromScale(1.2, 0.5) })
-				t:Play()
-				t.Completed:Wait()
-				task.wait(0.5)
-			end
-		end)
 
 		-- status text UNDER the bar (kept for API compatibility, hidden for now)
 		statusLabel = Instance.new('TextLabel')
@@ -250,23 +200,6 @@ do
 			end
 		end)
 
-		-- shimmer sweep: a metallic sheen travels left->right across the letters by
-		-- phase-shifting each letter's vertical gradient offset (a staggered wave).
-		task.spawn(function()
-			local grads = {}
-			for i, l in ipairs(letters) do grads[i] = l:FindFirstChildOfClass('UIGradient') end
-			local phase = 0
-			while wordmark.Parent and not finished do
-				phase = phase + 0.03
-				for i, g in ipairs(grads) do
-					if g then
-						-- each letter lags the previous -> the shine rolls across the word
-						g.Offset = Vector2.new(0, math.sin(phase - (i - 1) * 0.6) * 0.45)
-					end
-				end
-				RunService.Heartbeat:Wait()
-			end
-		end)
 		-- smoothly chase the progress target every frame -> drive the ring
 		task.spawn(function()
 			while screenGui.Parent and not finished do
