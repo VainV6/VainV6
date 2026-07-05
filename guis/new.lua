@@ -2643,13 +2643,13 @@ function mainapi:CreateGUI()
 	-- shimmer sweep across the glyphs.
 	local logo = Instance.new('TextLabel')
 	logo.Name = 'VainLogo'
-	logo.Size = UDim2.fromOffset(60, 20)
-	logo.Position = UDim2.fromOffset(11, 9)
+	logo.Size = UDim2.fromOffset(80, 24)
+	logo.Position = UDim2.fromOffset(11, 7)
 	logo.BackgroundTransparency = 1
 	logo.Text = 'Vain'
 	logo.TextXAlignment = Enum.TextXAlignment.Left
 	logo.TextYAlignment = Enum.TextYAlignment.Center
-	logo.TextSize = 16
+	logo.TextSize = 20
 	logo.FontFace = uipallet.FontSemiBold
 	logo.RichText = false
 	-- White base so the orange gradient defines the colour purely (UIGradient
@@ -8601,9 +8601,8 @@ function mainapi:UpdateGUI(hue, sat, val, default)
 
 	for i, v in mainapi.Categories do
 		if i == 'Main' then
-			if v.Object:FindFirstChild('VainLogo') then
-					v.Object.VainLogo.TextColor3 = Color3.fromHSV(hue, sat, val)
-				end
+			-- (VainLogo keeps its own metallic gradient colour; do NOT re-tint it
+			-- with the system hue here, or the orange logo turns the theme colour.)
 				for _, button in v.Buttons do
 				if button.Enabled then
 					button.Object.TextColor3 = rainbow and Color3.fromHSV(mainapi:Color((hue - (button.Index * 0.025)) % 1)) or Color3.fromHSV(hue, sat, val)
