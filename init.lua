@@ -35,12 +35,20 @@ do
 	local function build()
 		if built then return end
 		built = true
+		local guiParent = gethui and gethui() or cloneref(game:GetService('CoreGui'))
+		-- clear any leftover loading GUI from a previous inject (e.g. an old
+		-- version's top "Downloading..." label) so it can't linger on screen.
+		pcall(function()
+			for _, g in ipairs(guiParent:GetChildren()) do
+				if g:IsA('ScreenGui') and g.Name == 'VainLoadingScreen' then g:Destroy() end
+			end
+		end)
 		screenGui = Instance.new('ScreenGui')
 		screenGui.Name = 'VainLoadingScreen'
 		screenGui.IgnoreGuiInset = true
 		screenGui.DisplayOrder = 2147483647
 		screenGui.ResetOnSpawn = false
-		screenGui.Parent = gethui and gethui() or cloneref(game:GetService('CoreGui'))
+		screenGui.Parent = guiParent
 
 		root = Instance.new('CanvasGroup')
 		root.Name = 'Root'
@@ -55,16 +63,14 @@ do
 		bg.BorderSizePixel = 0
 		bg.Parent = root
 
-		local container = Instance.new('Frame')
-		container.AnchorPoint = Vector2.new(0.5, 0.5)
-		container.Position = UDim2.fromScale(0.5, 0.5)
-		container.Size = UDim2.fromOffset(420, 420)
-		container.BackgroundTransparency = 1
-		container.Parent = root
+		-- Everything is anchored to the SCREEN CENTRE with fixed pixel offsets so it
+		-- stays large and correctly stacked on any screen size (portrait mobile
+		-- included) -- the old fixed 420px container made it tiny + low.
 
+		-- big V, centred and a little above middle
 		local vLabel = Instance.new('TextLabel')
 		vLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-		vLabel.Position = UDim2.fromScale(0.5, 0.42)
+		vLabel.Position = UDim2.new(0.5, 0, 0.5, -40)
 		vLabel.Size = UDim2.fromOffset(60, 60)
 		vLabel.BackgroundTransparency = 1
 		vLabel.Text = 'V'
@@ -73,7 +79,7 @@ do
 		vLabel.TextColor3 = Color3.new(1, 1, 1)
 		vLabel.TextTransparency = 1
 		vLabel.ZIndex = 3
-		vLabel.Parent = container
+		vLabel.Parent = root
 		gradient = Instance.new('UIGradient')
 		gradient.Color = ColorSequence.new({
 			ColorSequenceKeypoint.new(0.00, Color3.fromRGB(154, 61, 10)),
@@ -85,28 +91,29 @@ do
 		gradient.Rotation = 115
 		gradient.Parent = vLabel
 
+		-- wordmark, fixed distance under the V
 		local wordmark = Instance.new('TextLabel')
 		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
-		wordmark.Position = UDim2.new(0.5, 0, 0.72, 0)
-		wordmark.Size = UDim2.fromOffset(200, 24)
+		wordmark.Position = UDim2.new(0.5, 0, 0.5, 150)
+		wordmark.Size = UDim2.fromOffset(280, 32)
 		wordmark.BackgroundTransparency = 1
 		wordmark.Font = Enum.Font.Gotham
 		wordmark.Text = 'VAIN'
-		wordmark.TextSize = 16
+		wordmark.TextSize = 26
 		wordmark.TextTransparency = 1
 		wordmark.TextColor3 = Color3.new(1, 1, 1)
 		wordmark.ZIndex = 3
-		wordmark.Parent = container
+		wordmark.Parent = root
 
 		local barTrack = Instance.new('Frame')
 		barTrack.AnchorPoint = Vector2.new(0.5, 0.5)
-		barTrack.Position = UDim2.new(0.5, 0, 0.84, 0)
-		barTrack.Size = UDim2.fromOffset(200, 3)
+		barTrack.Position = UDim2.new(0.5, 0, 0.5, 192)
+		barTrack.Size = UDim2.fromOffset(320, 4)
 		barTrack.BackgroundColor3 = Color3.new(1, 1, 1)
 		barTrack.BackgroundTransparency = 0.85
 		barTrack.BorderSizePixel = 0
 		barTrack.ZIndex = 3
-		barTrack.Parent = container
+		barTrack.Parent = root
 		Instance.new('UICorner', barTrack).CornerRadius = UDim.new(1, 0)
 		barFill = Instance.new('Frame')
 		barFill.Size = UDim2.new(0, 0, 1, 0)
@@ -118,21 +125,21 @@ do
 
 		-- status text UNDER the progress bar
 		statusLabel = Instance.new('TextLabel')
-		statusLabel.AnchorPoint = Vector2.new(0.5, 0)
-		statusLabel.Position = UDim2.new(0.5, 0, 0.84, 14)
-		statusLabel.Size = UDim2.fromOffset(460, 18)
+		statusLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+		statusLabel.Position = UDim2.new(0.5, 0, 0.5, 218)
+		statusLabel.Size = UDim2.fromOffset(600, 20)
 		statusLabel.BackgroundTransparency = 1
 		statusLabel.Font = Enum.Font.Gotham
 		statusLabel.Text = ''
-		statusLabel.TextSize = 12
-		statusLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
+		statusLabel.TextSize = 14
+		statusLabel.TextColor3 = Color3.fromRGB(170, 170, 170)
 		statusLabel.TextTruncate = Enum.TextTruncate.AtEnd
 		statusLabel.ZIndex = 3
-		statusLabel.Parent = container
+		statusLabel.Parent = root
 
 		-- intro animation
 		tween(root, 0.3, { GroupTransparency = 0 })
-		tween(vLabel, 0.9, { Size = UDim2.fromOffset(300, 300), TextTransparency = 0 }, Enum.EasingStyle.Back)
+		tween(vLabel, 0.9, { Size = UDim2.fromOffset(460, 460), TextTransparency = 0 }, Enum.EasingStyle.Back)
 		task.delay(0.4, function()
 			tween(wordmark, 0.6, { TextTransparency = 0 })
 			tween(barTrack, 0.6, { BackgroundTransparency = 0.75 })
