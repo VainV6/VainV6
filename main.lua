@@ -176,96 +176,18 @@ local function applyBadges(changed)
 	end
 end
 
+-- Manual module badges: tag the modules listed in vain.ModuleBadges with a
+-- NEW / UPD label next to their name. No GitHub auto-diff -- the list is set by
+-- hand per release and shows on every inject until the next release edits it.
 local function detectUpdates()
 	pcall(function()
-		if not isfile('vain/profiles/commit.txt') then return end
-		local commit = readfile('vain/profiles/commit.txt'):match('^%s*(.-)%s*$')
-
-		local prevCommit = isfile('vain/profiles/prev_commit.txt')
-		                   and readfile('vain/profiles/prev_commit.txt'):match('^%s*(.-)%s*$')
-		                   or nil
-
-		-- Always record this commit as the last-seen one for next session
-		writefile('vain/profiles/prev_commit.txt', commit)
-
-		-- First run or already up to date — nothing to do
-		if not prevCommit or prevCommit == '' or prevCommit == commit then return end
-
-		-- ── Fetch GitHub compare ─────────────────────────────────────────────
-		local compareUrl = 'https://api.github.com/repos/VainV6/Vain/compare/'
-		                   ..prevCommit..'...'..commit
-		local ok, res = pcall(game.HttpGet, game, compareUrl, true)
-		if not ok or not res or res:sub(1, 1) ~= '{' then return end
-
-		local parsed
-		ok, parsed = pcall(httpService.JSONDecode, httpService, res)
-		if not ok or not parsed then return end
-
-		-- ── Detect changed modules ────────────────────────────────────────────
+		if not vain or type(vain.ModuleBadges) ~= 'table' then return end
 		local changed = {}
-
-		if parsed.files then
-			for _, file in ipairs(parsed.files) do
-				if not file.filename:match('^games/') then continue end
-				if not file.patch then continue end
-
-				local rawUrl = 'https://raw.githubusercontent.com/VainV6/Vain/'
-				               ..commit..'/'..file.filename
-				local fileOk, fileContent = pcall(game.HttpGet, game, rawUrl, true)
-				if not fileOk or not fileContent or fileContent == '404: Not Found' then continue end
-
-				local lineModules = buildLineModuleMap(fileContent)
-				local newMods = detectNewModulesFromPatch(file.patch)
-				local addedLines = parseAddedLines(file.patch)
-
-				for _, lineNum in ipairs(addedLines) do
-					local modName = lineModules[lineNum]
-					if modName then
-						local tag = newMods[modName] and 'NEW' or 'UPD'
-						if not changed[modName] or tag == 'NEW' then
-							changed[modName] = tag
-						end
-					end
-				end
-			end
+		for name, tag in pairs(vain.ModuleBadges) do
+			if tag == 'NEW' or tag == 'UPD' then changed[name] = tag end
 		end
-
+		if not next(changed) then return end
 		applyBadges(changed)
-
-		-- ── Update notification (after module detection so we have counts) ────
-		if not vain then return end
-		local numCommits = parsed.commits and #parsed.commits or 0
-		local newCount, updCount = 0, 0
-		for _, tag in changed do
-			if tag == 'NEW' then newCount += 1 else updCount += 1 end
-		end
-
-		-- Headline: latest commit message (first line only)
-		local headline = ''
-		if numCommits > 0 then
-			local latest = parsed.commits[numCommits]
-			headline = (latest and latest.commit and latest.commit.message or ''):match('^([^\n]+)') or ''
-		end
-
-		-- Build notification body
-		local parts = {}
-		if headline ~= '' then table.insert(parts, headline) end
-		if numCommits > 1 then
-			table.insert(parts, numCommits..' commits since last session')
-		end
-		if newCount > 0 or updCount > 0 then
-			local modLine = ''
-			if newCount > 0 then modLine = newCount..' new module'..(newCount > 1 and 's' or '') end
-			if updCount > 0 then
-				if modLine ~= '' then modLine = modLine..', ' end
-				modLine = modLine..updCount..' updated'
-			end
-			table.insert(parts, modLine)
-		end
-
-		local body = table.concat(parts, '\n')
-		if body == '' then body = 'See GitHub for details' end
-		vain:CreateNotification('Vain Updated', body, 18)
 	end)
 end
 
