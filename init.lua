@@ -80,12 +80,12 @@ do
 		-- (V removed) -- centred VAIN wordmark + progress bar + status.
 		local wordmark = Instance.new('TextLabel')
 		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
-		wordmark.Position = UDim2.new(0.5, 0, 0.5, -30)
-		wordmark.Size = UDim2.fromOffset(400, 60)
+		wordmark.Position = UDim2.new(0.5, 0, 0.5, -40)
+		wordmark.Size = UDim2.fromOffset(600, 100)
 		wordmark.BackgroundTransparency = 1
 		wordmark.Font = Enum.Font.GothamBold
 		wordmark.Text = 'VAIN'
-		wordmark.TextSize = 46
+		wordmark.TextSize = 90
 		wordmark.TextTransparency = 1
 		wordmark.TextColor3 = Color3.new(1, 1, 1)
 		wordmark.ZIndex = 3
