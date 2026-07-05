@@ -60,26 +60,9 @@ do
 		bg.Parent = root
 
 		-- (V removed) -- centred VAIN wordmark + circular progress ring + status.
-		-- soft glow copy of the wordmark BEHIND it (blurred look via a faint, slightly
-		-- larger duplicate) so the text reads as if it's glowing.
-		local wordmarkGlow = Instance.new('TextLabel')
-		wordmarkGlow.AnchorPoint = Vector2.new(0.5, 0.5)
-		wordmarkGlow.Position = UDim2.new(0.5, 0, 0.5, -60)
-		wordmarkGlow.Size = UDim2.fromOffset(600, 110)
-		wordmarkGlow.BackgroundTransparency = 1
-		wordmarkGlow.Font = Enum.Font.GothamBold
-		wordmarkGlow.Text = 'VAIN'
-		wordmarkGlow.TextSize = 96
-		wordmarkGlow.TextTransparency = 1
-		wordmarkGlow.TextColor3 = Color3.fromRGB(255, 106, 31)
-		wordmarkGlow.TextStrokeColor3 = Color3.fromRGB(255, 130, 40)
-		wordmarkGlow.TextStrokeTransparency = 1
-		wordmarkGlow.ZIndex = 2
-		wordmarkGlow.Parent = root
-
 		local wordmark = Instance.new('TextLabel')
 		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
-		wordmark.Position = UDim2.new(0.5, 0, 0.5, -60)
+		wordmark.Position = UDim2.new(0.5, 0, 0.5, -40)
 		wordmark.Size = UDim2.fromOffset(600, 100)
 		wordmark.BackgroundTransparency = 1
 		wordmark.Font = Enum.Font.GothamBold
@@ -89,12 +72,6 @@ do
 		wordmark.TextColor3 = Color3.new(1, 1, 1)
 		wordmark.ZIndex = 3
 		wordmark.Parent = root
-		-- glowing orange stroke on the wordmark itself
-		local wordmarkStroke = Instance.new('UIStroke')
-		wordmarkStroke.Color = Color3.fromRGB(255, 120, 40)
-		wordmarkStroke.Thickness = 2
-		wordmarkStroke.Transparency = 1
-		wordmarkStroke.Parent = wordmark
 		-- orange metallic gradient on the wordmark (the V's old look)
 		gradient = Instance.new('UIGradient')
 		gradient.Color = ColorSequence.new({
@@ -227,23 +204,10 @@ do
 		statusLabel.ZIndex = 3
 		statusLabel.Parent = root
 
-		-- intro animation: wordmark (+ glow) + ring fade in.
+		-- intro animation: wordmark + ring fade in.
 		tween(wordmark, 0.6, { TextTransparency = 0 })
-		tween(wordmarkStroke, 0.6, { Transparency = 0.35 })
-		tween(wordmarkGlow, 0.6, { TextTransparency = 0.55, TextStrokeTransparency = 0.4 })
 		task.delay(0.25, function()
 			tween(ringPct, 0.6, { TextTransparency = 0 })
-		end)
-		-- gentle glow breathing on the wordmark
-		task.spawn(function()
-			while wordmark.Parent and not finished do
-				tween(wordmarkStroke, 1.4, { Transparency = 0.15 }, Enum.EasingStyle.Sine)
-				tween(wordmarkGlow, 1.4, { TextTransparency = 0.4 }, Enum.EasingStyle.Sine)
-				task.wait(1.4)
-				tween(wordmarkStroke, 1.4, { Transparency = 0.5 }, Enum.EasingStyle.Sine)
-				tween(wordmarkGlow, 1.4, { TextTransparency = 0.65 }, Enum.EasingStyle.Sine)
-				task.wait(1.4)
-			end
 		end)
 
 		-- rising ember particles across the FULL screen width, floating up from the
