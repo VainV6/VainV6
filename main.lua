@@ -40,7 +40,9 @@ local function downloadFile(path, func)
 	if not isfile(path) then
 		-- surface progress on the Vain loading screen (built lazily in init.lua)
 		if getgenv and getgenv().vainLoading then getgenv().vainLoading.status('Downloading '..path) end
-		local commit = (readfile('vain/profiles/commit.txt') or ''):match('^%s*(.-)%s*$')
+		-- readfile throws on a missing commit.txt; guard it and fall back to main.
+		local ok, raw = pcall(readfile, 'vain/profiles/commit.txt')
+		local commit = (ok and type(raw) == 'string' and raw or ''):match('^%s*(.-)%s*$')
 		if commit == '' then commit = 'main' end
 		local suc, res = pcall(function()
 			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..commit..'/'..select(1, path:gsub('vain/', '')), true)

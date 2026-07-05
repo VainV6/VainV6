@@ -259,8 +259,11 @@ local function downloadFile(path, func)
 	end
 	if not isfile(path) then
 		downloader.Text = 'Downloading '.. path
-		-- trim the ref: a stray newline/space turns "<sha>" into an invalid ref -> 400
-		local commit = (readfile('vain/profiles/commit.txt') or ''):match('^%s*(.-)%s*$')
+		-- trim the ref: a stray newline/space turns "<sha>" into an invalid ref -> 400.
+		-- readfile THROWS "file does not exist" on a missing commit.txt (it doesn't
+		-- return nil), so guard it with pcall and fall back to the main ref.
+		local ok, raw = pcall(readfile, 'vain/profiles/commit.txt')
+		local commit = (ok and type(raw) == 'string' and raw or ''):match('^%s*(.-)%s*$')
 		if commit == '' then commit = 'main' end
 		local suc, res = pcall(function()
 			return game:HttpGet('https://raw.githubusercontent.com/VainV6/Vain/'..commit..'/'..select(1, path:gsub('vain/', '')), true)
