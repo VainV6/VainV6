@@ -11036,7 +11036,7 @@ end)
 -- offset a little higher than the head, and Name Tags sits at the head, so the
 -- rows stack cleanly instead of overlapping.
 run(function()
-    local LootDisplay, Highlight, TargetClass, ClassDropdown, SizeSlider
+    local LootDisplay, Highlight, TargetClass, ClassDropdown, SizeSlider, HideTeam
     local LootShow = {}       -- resource key -> "Show X" toggle
     local LootThresholds = {} -- resource key -> threshold slider
 
@@ -11235,6 +11235,13 @@ run(function()
         local adornee = ent.Character and (ent.Character.PrimaryPart or ent.Character:FindFirstChild('HumanoidRootPart'))
         if not (plr and adornee) then clear(ent) return end
 
+        -- Hide teammates: only show loot on ENEMIES. isEnemy(ent) uses the same
+        -- Targetable flag the rest of the cheat uses to tell enemies from teammates,
+        -- so a player on your team (Targetable == false) is skipped when this is on.
+        if (not HideTeam or HideTeam.Enabled) and plr ~= lplr and not isEnemy(ent) then
+            clear(ent) return
+        end
+
         -- Target Kit Class: when on, only show players whose kit is in the chosen
         -- class ("Any" = no filter). Players whose class is unknown are hidden.
         if TargetClass and TargetClass.Enabled and ClassDropdown and ClassDropdown.Value ~= 'Any' then
@@ -11377,6 +11384,11 @@ run(function()
         Name = 'Size',
         Tooltip = 'Scale of the loot plate (100 = default).',
         Min = 30, Max = 200, Default = 65, Suffix = '%',
+        Function = rebuild,
+    })
+    HideTeam = LootDisplay:CreateToggle({
+        Name = 'Hide Teammates', Default = true,
+        Tooltip = 'Only show loot on enemies. Off = also show your own teammates\' loot.',
         Function = rebuild,
     })
     LootShow.iron = LootDisplay:CreateToggle({ Name = 'Show Iron', Default = true, Function = rebuild })
