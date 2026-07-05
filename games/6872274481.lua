@@ -1698,8 +1698,9 @@ run(function()
 	-- DEBUG: trace which module in this block loaded, so we can see exactly where
 	-- it crashes (this whole run() block holds 5 modules; an error kills the rest).
 	local function trace(name)
-		pcall(function() vain:CreateNotification('Load', 'ok: '..name, 3) end)
+		pcall(function() vain:CreateNotification('Load', name, 4) end)
 	end
+	trace('block START')
 local AimAssist
 	local Targets
 	local Sort
@@ -1887,7 +1888,7 @@ local AimAssist
 		vain:Clean(playersService.PlayerAdded:Connect(refreshTargets))
 		vain:Clean(playersService.PlayerRemoving:Connect(function() task.defer(refreshTargets) end))
 	end
-	trace('Sigrid Charge')
+	trace('after Sigrid Charge')
 
 	-- ══════════════════════════════════════════════════════════════════════════
 	--  ADVANCED SPECTATE  (spectate anyone; optionally lock to one player)
