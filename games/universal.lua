@@ -7144,11 +7144,23 @@ run(function()
 end)
 
 run(function()
+    -- Dex Explorer as a clickable one-shot. We DON'T rely on the GUI's `Button`
+    -- flag -- only the "new" skin honours it; on old/rise it silently renders as a
+    -- toggle. Instead this is a normal module that loads Dex on enable and then
+    -- immediately un-toggles itself, so it behaves like a momentary button on EVERY
+    -- skin. `loaded` guards against loading Dex twice.
     local loaded = false
-    vain.Categories.Utility:CreateModule({
+    local Dex
+    Dex = vain.Categories.Utility:CreateModule({
         Name = 'Dex Explorer',
-        Button = true, -- clickable one-shot action, not a toggle
-        Function = function()
+        Button = true, -- honoured by the "new" skin; harmless on the others
+        Function = function(callback)
+            -- when it renders as a toggle, only act on the enable edge
+            if callback == false then return end
+            -- un-latch immediately so it reads as a one-shot action, not a toggle
+            task.defer(function()
+                if Dex and Dex.Enabled and Dex.Toggle then pcall(function() Dex:Toggle() end) end
+            end)
             if loaded then
                 notif('Dex Explorer', 'Dex is already open.', 4)
                 return
