@@ -5483,20 +5483,14 @@ run(function()
 
     local function applyTerrain()
         if terrain and LowQuality and LowQuality.Enabled then
-            if saved.WaterWaveSize == nil then
-                saved.WaterWaveSize = terrain.WaterWaveSize
-                saved.WaterWaveSpeed = terrain.WaterWaveSpeed
-                saved.WaterReflectance = terrain.WaterReflectance
-                saved.WaterTransparency = terrain.WaterTransparency
-                saved.Decoration = terrain.Decoration
+            -- Roblox removed Terrain.Decoration, so reading/writing it throws. Guard
+            -- every property individually so one missing prop can't abort the rest.
+            for _, prop in { 'WaterWaveSize', 'WaterWaveSpeed', 'WaterReflectance', 'WaterTransparency', 'Decoration' } do
+                pcall(function()
+                    if saved[prop] == nil then saved[prop] = terrain[prop] end
+                    terrain[prop] = prop == 'Decoration' and false or 0
+                end)
             end
-            pcall(function()
-                terrain.WaterWaveSize = 0
-                terrain.WaterWaveSpeed = 0
-                terrain.WaterReflectance = 0
-                terrain.WaterTransparency = 0
-                terrain.Decoration = false
-            end)
         end
     end
 
@@ -5543,14 +5537,12 @@ run(function()
                     if saved[k] ~= nil then pcall(function() fx.Enabled = saved[k] end) end
                 end
                 -- restore terrain
-                if terrain and saved.WaterWaveSize ~= nil then
-                    pcall(function()
-                        terrain.WaterWaveSize = saved.WaterWaveSize
-                        terrain.WaterWaveSpeed = saved.WaterWaveSpeed
-                        terrain.WaterReflectance = saved.WaterReflectance
-                        terrain.WaterTransparency = saved.WaterTransparency
-                        terrain.Decoration = saved.Decoration
-                    end)
+                if terrain then
+                    for _, prop in { 'WaterWaveSize', 'WaterWaveSpeed', 'WaterReflectance', 'WaterTransparency', 'Decoration' } do
+                        if saved[prop] ~= nil then
+                            pcall(function() terrain[prop] = saved[prop] end)
+                        end
+                    end
                 end
                 -- restore particles
                 for inst, en in pairs(touched) do
