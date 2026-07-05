@@ -1698,9 +1698,14 @@ run(function()
 	-- DEBUG: trace which module in this block loaded, so we can see exactly where
 	-- it crashes (this whole run() block holds 5 modules; an error kills the rest).
 	local function trace(name)
-		pcall(function() vain:CreateNotification('Load', name, 4) end)
+		-- use warn (always visible in console) + a StarterGui toast, so it can't be
+		-- suppressed by notification settings.
+		pcall(function() warn('[VAIN LOAD] '..name) end)
+		pcall(function()
+			game:GetService('StarterGui'):SetCore('SendNotification', { Title = 'VAIN LOAD', Text = name, Duration = 3 })
+		end)
 	end
-	trace('block START')
+	trace('block START (AimAssist run block)')
 local AimAssist
 	local Targets
 	local Sort
