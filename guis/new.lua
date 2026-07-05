@@ -16,8 +16,14 @@ local mainapi = {
 	-- until the next release edits this list. Set per update by hand (no GitHub
 	-- auto-diff). Keys are exact module names; value is 'NEW' or 'UPD'.
 	ModuleBadges = {
-		-- ['Loot Display'] = 'NEW',
-		-- ['AimAssist'] = 'UPD',
+		['Loot Display'] = 'NEW',
+		['Cheat Detector'] = 'NEW',
+		['Better Spectating'] = 'UPD',
+		['Storage ESP'] = 'UPD',
+		['Name Tags'] = 'UPD',
+		['Preparation Preview'] = 'UPD',
+		['Bed Protector'] = 'UPD',
+		['Show Advanced Stats'] = 'UPD',
 	},
 	-- Patch notes shown in the changelog popup (newest first). Each entry is
 	-- { Version = '...', Date = '...', Changes = { 'line', ... } }.
