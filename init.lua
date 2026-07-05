@@ -63,11 +63,12 @@ do
 		screenGui.ResetOnSpawn = false
 		screenGui.Parent = guiParent
 
-		root = Instance.new('CanvasGroup')
+		-- Plain Frame root (NOT a CanvasGroup -- that renders to a downscaled texture
+		-- which made everything look small/soft). We fade elements individually.
+		root = Instance.new('Frame')
 		root.Name = 'Root'
 		root.Size = UDim2.fromScale(1, 1)
 		root.BackgroundTransparency = 1
-		root.GroupTransparency = 1
 		root.Parent = screenGui
 		local bg = Instance.new('Frame')
 		bg.Size = UDim2.fromScale(1, 1)
@@ -76,20 +77,16 @@ do
 		bg.BorderSizePixel = 0
 		bg.Parent = root
 
-		-- Everything is anchored to the SCREEN CENTRE with fixed pixel offsets so it
-		-- stays large and correctly stacked on any screen size (portrait mobile
-		-- included) -- the old fixed 420px container made it tiny + low.
-
-		-- big V, centred and a little above middle. Fixed TextSize (not TextScaled)
-		-- so the glyph is a guaranteed large size instead of underfilling a box.
+		-- Everything anchored to the SCREEN CENTRE. The V is a HUGE TextScaled glyph
+		-- in a 500px box so it fills a big chunk of the screen.
 		local vLabel = Instance.new('TextLabel')
 		vLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-		vLabel.Position = UDim2.new(0.5, 0, 0.5, -50)
-		vLabel.Size = UDim2.fromOffset(360, 300)
+		vLabel.Position = UDim2.new(0.5, 0, 0.5, -60)
+		vLabel.Size = UDim2.fromOffset(0, 0)
 		vLabel.BackgroundTransparency = 1
 		vLabel.Text = 'V'
 		vLabel.Font = Enum.Font.GothamBlack
-		vLabel.TextSize = 40
+		vLabel.TextScaled = true
 		vLabel.TextColor3 = Color3.new(1, 1, 1)
 		vLabel.TextTransparency = 1
 		vLabel.ZIndex = 3
@@ -108,12 +105,12 @@ do
 		-- wordmark, fixed distance under the V
 		local wordmark = Instance.new('TextLabel')
 		wordmark.AnchorPoint = Vector2.new(0.5, 0.5)
-		wordmark.Position = UDim2.new(0.5, 0, 0.5, 150)
-		wordmark.Size = UDim2.fromOffset(280, 32)
+		wordmark.Position = UDim2.new(0.5, 0, 0.5, 170)
+		wordmark.Size = UDim2.fromOffset(320, 40)
 		wordmark.BackgroundTransparency = 1
 		wordmark.Font = Enum.Font.Gotham
 		wordmark.Text = 'VAIN'
-		wordmark.TextSize = 26
+		wordmark.TextSize = 30
 		wordmark.TextTransparency = 1
 		wordmark.TextColor3 = Color3.new(1, 1, 1)
 		wordmark.ZIndex = 3
@@ -121,8 +118,8 @@ do
 
 		local barTrack = Instance.new('Frame')
 		barTrack.AnchorPoint = Vector2.new(0.5, 0.5)
-		barTrack.Position = UDim2.new(0.5, 0, 0.5, 192)
-		barTrack.Size = UDim2.fromOffset(320, 4)
+		barTrack.Position = UDim2.new(0.5, 0, 0.5, 216)
+		barTrack.Size = UDim2.fromOffset(340, 5)
 		barTrack.BackgroundColor3 = Color3.new(1, 1, 1)
 		barTrack.BackgroundTransparency = 0.85
 		barTrack.BorderSizePixel = 0
@@ -140,7 +137,7 @@ do
 		-- status text UNDER the progress bar
 		statusLabel = Instance.new('TextLabel')
 		statusLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-		statusLabel.Position = UDim2.new(0.5, 0, 0.5, 218)
+		statusLabel.Position = UDim2.new(0.5, 0, 0.5, 244)
 		statusLabel.Size = UDim2.fromOffset(600, 20)
 		statusLabel.BackgroundTransparency = 1
 		statusLabel.Font = Enum.Font.Gotham
@@ -151,37 +148,38 @@ do
 		statusLabel.ZIndex = 3
 		statusLabel.Parent = root
 
-		-- intro animation
-		tween(root, 0.3, { GroupTransparency = 0 })
-		tween(vLabel, 0.9, { TextSize = 260, TextTransparency = 0 }, Enum.EasingStyle.Back)
+		-- intro animation: V box grows to 500px (TextScaled fills it) with a bounce.
+		tween(vLabel, 0.9, { Size = UDim2.fromOffset(500, 500), TextTransparency = 0 }, Enum.EasingStyle.Back)
 		task.delay(0.4, function()
 			tween(wordmark, 0.6, { TextTransparency = 0 })
 			tween(barTrack, 0.6, { BackgroundTransparency = 0.75 })
 		end)
 
-		-- rising ember particles: small orange dots that drift up + fade behind the V
+		-- rising ember particles across the FULL screen width, floating up from the
+		-- bottom and fading out.
 		task.spawn(function()
 			while screenGui.Parent and not finished do
-				local size = math.random(3, 7)
+				local size = math.random(4, 9)
 				local p = Instance.new('Frame')
 				p.AnchorPoint = Vector2.new(0.5, 0.5)
 				p.Size = UDim2.fromOffset(size, size)
-				p.Position = UDim2.new(0.5, math.random(-220, 220), 0.5, math.random(120, 260))
+				-- spawn anywhere across the width, starting near/just below the bottom
+				p.Position = UDim2.new(math.random() , 0, 1, math.random(0, 120))
 				p.BackgroundColor3 = Color3.fromRGB(255, math.random(120, 190), 40)
-				p.BackgroundTransparency = math.random(20, 50) / 100
+				p.BackgroundTransparency = math.random(15, 45) / 100
 				p.BorderSizePixel = 0
 				p.ZIndex = 2
 				Instance.new('UICorner', p).CornerRadius = UDim.new(1, 0)
 				p.Parent = root
-				local rise = math.random(240, 420)
-				local dur = math.random(18, 30) / 10
+				local dur = math.random(30, 55) / 10 -- 3-5.5s to cross the screen
 				tween(p, dur, {
-					Position = p.Position - UDim2.fromOffset(math.random(-30, 30), rise),
+					-- drift up past the top with a little horizontal sway
+					Position = p.Position + UDim2.new((math.random(-6, 6)) / 100, 0, -(1.2 + math.random(0, 40) / 100), 0),
 					BackgroundTransparency = 1,
 					Size = UDim2.fromOffset(1, 1),
-				}, Enum.EasingStyle.Sine)
+				}, Enum.EasingStyle.Linear)
 				task.delay(dur, function() pcall(function() p:Destroy() end) end)
-				task.wait(math.random(6, 16) / 100)
+				task.wait(math.random(5, 14) / 100)
 			end
 		end)
 
@@ -260,7 +258,17 @@ do
 				tween(barFill, 0.3, { Size = UDim2.new(1, 0, 1, 0) })
 				if statusLabel then statusLabel.Text = 'Done' end
 				task.wait(0.45)
-				tween(root, 0.6, { GroupTransparency = 1 })
+				-- fade every element out (plain Frame root has no GroupTransparency)
+				pcall(function()
+					for _, d in ipairs(root:GetDescendants()) do
+						if d:IsA('TextLabel') then
+							tween(d, 0.6, { TextTransparency = 1 })
+						elseif d:IsA('Frame') then
+							tween(d, 0.6, { BackgroundTransparency = 1 })
+						end
+					end
+					tween(root, 0.6, { BackgroundTransparency = 1 })
+				end)
 				task.wait(0.65)
 				pcall(function() screenGui:Destroy() end)
 				if after then task.spawn(after) end
