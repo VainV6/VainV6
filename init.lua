@@ -81,21 +81,16 @@ do
 		-- in a 500px box so it fills a big chunk of the screen.
 		local vLabel = Instance.new('TextLabel')
 		vLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-		vLabel.Position = UDim2.new(0.5, 0, 0.5, -60)
-		vLabel.Size = UDim2.fromScale(0.1, 0.1) -- grows to 0.6 in the intro
+		vLabel.Position = UDim2.new(0.5, 0, 0.5, -70)
+		vLabel.Size = UDim2.fromOffset(400, 400)
 		vLabel.BackgroundTransparency = 1
 		vLabel.Text = 'V'
 		vLabel.Font = Enum.Font.GothamBlack
-		vLabel.TextScaled = true
-		vLabel.TextWrapped = false
+		vLabel.TextSize = 40 -- animated up to 220 in the intro
 		vLabel.TextColor3 = Color3.new(1, 1, 1)
 		vLabel.TextTransparency = 1
 		vLabel.ZIndex = 3
 		vLabel.Parent = root
-		-- TextScaled clamps to this cap; make it large so the V can grow huge.
-		local sizeConstraint = Instance.new('UITextSizeConstraint')
-		sizeConstraint.MaxTextSize = 100000
-		sizeConstraint.Parent = vLabel
 		gradient = Instance.new('UIGradient')
 		gradient.Color = ColorSequence.new({
 			ColorSequenceKeypoint.new(0.00, Color3.fromRGB(154, 61, 10)),
@@ -153,8 +148,8 @@ do
 		statusLabel.ZIndex = 3
 		statusLabel.Parent = root
 
-		-- intro animation: V box grows to 60% of the screen (TextScaled fills it).
-		tween(vLabel, 0.9, { Size = UDim2.fromScale(0.6, 0.6), TextTransparency = 0 }, Enum.EasingStyle.Back)
+		-- intro animation: the V's TextSize grows to a big 220 with a bounce.
+		tween(vLabel, 0.9, { TextSize = 220, TextTransparency = 0 }, Enum.EasingStyle.Back)
 		task.delay(0.4, function()
 			tween(wordmark, 0.6, { TextTransparency = 0 })
 			tween(barTrack, 0.6, { BackgroundTransparency = 0.75 })
