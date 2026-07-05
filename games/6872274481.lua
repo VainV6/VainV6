@@ -23126,62 +23126,12 @@ run(function()
 	})
 end)
 
-run(function()
-	-- Instantly leave your current party, whether you're in the lobby or in a game.
-	-- We fire every leave path that exists: the lobby PartyController, and the
-	-- lobby-events "leaveParty" remote directly (found by name, since the exact
-	-- events container name can vary). Whichever applies takes effect; the rest
-	-- no-op. Acts as a one-shot button (toggles itself straight back off).
-	local LeaveParty = {Enabled = false}
-
-	local function fireLeaveRemote()
-		-- find the lobby-events folder and its leaveParty RemoteEvent by name, so we
-		-- don't depend on the exact hashed container name.
-		local ok = pcall(function()
-			for _, inst in replicatedStorage:GetDescendants() do
-				if inst:IsA('RemoteEvent') and inst.Name:lower():find('leaveparty') then
-					inst:FireServer()
-					return
-				end
-			end
-		end)
-		return ok
-	end
-
-	local function leaveNow()
-		local left = false
-		-- 1) the lobby party controller (works in the lobby)
-		pcall(function()
-			if bedwars and bedwars.PartyController and bedwars.PartyController.leaveParty then
-				bedwars.PartyController:leaveParty()
-				left = true
-			end
-		end)
-		-- 2) the raw leaveParty remote (works both lobby and in a game)
-		if fireLeaveRemote() then left = true end
-		notif('Leave Party', left and 'Left your party.' or 'No party remote found.', 4,
-			left and 'success' or 'warning')
-	end
-
-	LeaveParty = vain.Categories.World:CreateModule({
-		Name = "Leave Party",
-		Tooltip = 'Instantly leaves your current party -- works in the lobby AND in-game. Click to leave.',
-		Function = function(call)
-			if call then
-				-- one-shot button: run, then un-toggle
-				if LeaveParty.Toggle then task.defer(function() if LeaveParty.Enabled then pcall(function() LeaveParty:Toggle(false) end) end end) end
-				pcall(leaveNow)
-			end
-		end
-	})
-end)
-
--- Clickable "Leave Party Now": a one-shot button that leaves your party no matter
--- what (lobby or in-game). Fires EVERY known leave path -- PartyController and any
+-- Clickable "Leave Party": a one-shot button that leaves your party no matter what
+-- (lobby or in-game). Fires EVERY known leave path -- PartyController and any
 -- party-leave remote (found by name) -- then un-toggles itself so it acts like a
 -- click, not a toggle.
 run(function()
-	local LeavePartyNow
+	local LeaveParty
 
 	local function leaveEverything()
 		pcall(function()
@@ -23203,18 +23153,18 @@ run(function()
 		end)
 	end
 
-	LeavePartyNow = vain.Categories.World:CreateModule({
-		Name = 'Leave Party Now',
+	LeaveParty = vain.Categories.World:CreateModule({
+		Name = 'Leave Party',
 		Tooltip = 'Click to instantly leave your current party -- lobby or in-game, no matter what.',
 		Function = function(call)
 			if not call then return end
 			task.defer(function()
-				if LeavePartyNow.Enabled and LeavePartyNow.Toggle then
-					pcall(function() LeavePartyNow:Toggle(false) end)
+				if LeaveParty.Enabled and LeaveParty.Toggle then
+					pcall(function() LeaveParty:Toggle(false) end)
 				end
 			end)
 			pcall(leaveEverything)
-			pcall(function() notif('Leave Party Now', 'Left party.', 3, 'success') end)
+			pcall(function() notif('Leave Party', 'Left party.', 3, 'success') end)
 		end
 	})
 end)
