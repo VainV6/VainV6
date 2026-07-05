@@ -23126,45 +23126,16 @@ run(function()
 	})
 end)
 
--- Clickable "Leave Party": a one-shot button that leaves your party no matter what
--- (lobby or in-game). Fires EVERY known leave path -- PartyController and any
--- party-leave remote (found by name) -- then un-toggles itself so it acts like a
--- click, not a toggle.
 run(function()
-	local LeaveParty
-
-	local function leaveEverything()
-		pcall(function()
-			if bedwars and bedwars.PartyController and bedwars.PartyController.leaveParty then
-				bedwars.PartyController:leaveParty()
-			end
-		end)
-		pcall(function()
-			for _, inst in replicatedStorage:GetDescendants() do
-				if inst:IsA('RemoteEvent') or inst:IsA('RemoteFunction') then
-					local n = inst.Name:lower()
-					if n:find('leaveparty') or (n:find('party') and n:find('leave')) then
-						pcall(function()
-							if inst:IsA('RemoteEvent') then inst:FireServer() else inst:InvokeServer() end
-						end)
-					end
-				end
-			end
-		end)
-	end
-
-	LeaveParty = vain.Categories.World:CreateModule({
-		Name = 'Leave Party',
-		Tooltip = 'Click to instantly leave your current party -- lobby or in-game, no matter what.',
+	local a = {Enabled = false}
+	a = vain.Categories.World:CreateModule({
+		Name = "Leave Party",
+		Tooltip = 'Automatically leaves the party under configured conditions',
 		Function = function(call)
-			if not call then return end
-			task.defer(function()
-				if LeaveParty.Enabled and LeaveParty.Toggle then
-					pcall(function() LeaveParty:Toggle(false) end)
-				end
-			end)
-			pcall(leaveEverything)
-			pcall(function() notif('Leave Party', 'Left party.', 3, 'success') end)
+			if call then
+				a:Toggle(false)
+				game:GetService("ReplicatedStorage"):WaitForChild("events-@easy-games/lobby:shared/event/lobby-events@getEvents.Events"):WaitForChild("leaveParty"):FireServer()
+			end
 		end
 	})
 end)
