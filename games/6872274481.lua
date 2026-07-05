@@ -1804,10 +1804,29 @@ local AimAssist
 	-- This is a BUTTON (press = one charge), it requires you to be mounted on your
 	-- Elk first, targets the player you pick from the dropdown, and is Premium-only.
 	do
-		local SigridCharge, Target, Notify, AutoMount, SkipMount
+		local SigridCharge, Target, Notify, AutoMount, SkipMount, WaitEnergy
 		local function getRemote()
 			local ok, r = pcall(function() return bedwars.Client:Get('SigridBeginChargeRequest') end)
 			return ok and r or nil
+		end
+		-- The antler-uppercut charge is gated on the Elk's ENERGY: when it drops below a
+		-- threshold the server disables the ability (ElkBelowChargeThreshold), so firing
+		-- then gives a short, weak charge that "stops early". canUseAbility mirrors the
+		-- game's own readiness check -> true only when energy is up and the charge is
+		-- actually usable. We wait for it so every charge is a full one.
+		local UPPERCUT_ABILITY = 'elk_antler_uppercut'
+		local function chargeReady()
+			local ok, ready = pcall(function()
+				return bedwars.AbilityController:canUseAbility(UPPERCUT_ABILITY)
+			end)
+			return ok and ready == true
+		end
+		-- wait up to `timeout`s for the charge energy to be ready
+		local function waitForEnergy(timeout)
+			if chargeReady() then return true end
+			local deadline = tick() + (timeout or 3)
+			repeat task.wait(0.05) until chargeReady() or tick() > deadline
+			return chargeReady()
 		end
 		-- mounted on the Elk? getActiveMounts() is keyed by player (place: line 451593)
 		local function isMounted()
@@ -1867,6 +1886,15 @@ local AimAssist
 					vain:CreateNotification('Sigrid Charge', 'Pick a target player in the dropdown first.', 5, 'warning')
 					return done()
 				end
+				-- Only fire when the charge energy is up, so it doesn't stop early. Skip
+				-- this wait when Skip Mount Check is on (spectator/no-elk testing) since
+				-- the ability state won't be meaningful there.
+				if (not WaitEnergy or WaitEnergy.Enabled) and not (SkipMount and SkipMount.Enabled) then
+					if not waitForEnergy(3) then
+						vain:CreateNotification('Sigrid Charge', 'Charge energy not ready -- waiting timed out. Let the Elk recharge.', 5, 'warning')
+						return done()
+					end
+				end
 				pcall(function() remote:CallServer({ player = target }) end)
 				if Notify and Notify.Enabled then
 					vain:CreateNotification('Sigrid Charge', 'Charge fired on ' .. target.Name, 3)
@@ -1877,6 +1905,8 @@ local AimAssist
 		Target = SigridCharge:CreateDropdown({ Name = 'Target', List = { 'None' }, Default = 'None',
 			Function = function() end,
 			Tooltip = 'Player to send the charge to (updates as players join/leave).' })
+		WaitEnergy = SigridCharge:CreateToggle({ Name = 'Wait For Energy', Default = true,
+			Tooltip = 'Only fire when the Elk charge energy is up (waits up to 3s), so the charge is always a full one instead of stopping early on low energy.' })
 		AutoMount = SigridCharge:CreateToggle({ Name = 'Auto Mount', Default = false,
 			Tooltip = 'If you are not on your Elk when you press, summon it first (uses the ELK_SUMMON ability) and wait for the mount before charging. Requires the Sigrid kit.' })
 		SkipMount = SigridCharge:CreateToggle({ Name = 'Skip Mount Check', Default = false,
