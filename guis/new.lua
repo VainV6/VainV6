@@ -2,9 +2,9 @@ local license = ... or {}
 local mainapi = {
 	Categories = {},
 	GUIColor = {
-		Hue = 0.33,
-		Sat = 0.9,
-		Value = 0.72
+		Hue = 0.598,
+		Sat = 0.795,
+		Value = 0.898
 	},
 	HeldKeybinds = {},
 	Keybind = {'RightShift'},
@@ -3713,9 +3713,9 @@ function mainapi:CreateGUI()
 		local optionapi = {
 			Type = 'GUISlider',
 			Notch = 4,
-			Hue = 0.33,
-			Sat = 0.9,
-			Value = 0.72,
+			Hue = 0.598,
+			Sat = 0.795,
+			Value = 0.898,
 			Rainbow = false,
 			CustomColor = false
 		}
