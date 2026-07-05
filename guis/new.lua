@@ -35,13 +35,15 @@ local mainapi = {
 			Changes = {
 				-- ── FEATURES ──────────────────────────────────────────────────
 				'[feature] BedWars — new "Loot Display" module: a large, distance-legible plate under each player showing exactly what they carry (iron, gold, emerald, diamond, telepearls, vitality & crit stars, bees, arrows, blocks, teslas). Every resource has its own toggle, there\'s a Size slider, a "Target Kit Class" filter, and a "Highlight On Threshold" that glows the player once they cross the amount you set.',
-				'[feature] BedWars — Bed Protector: added "Hole Filler" (instantly re-seals only the exposed gaps around your bed the moment a block breaks), "Gaps Only" (patch gaps without building the full pyramid), and "Show Gaps" (highlights the missing blocks so you can see what needs fixing).',
+				'[feature] BedWars — Storage ESP: new "Resource Alert" notifies you when a team chest holds at least your set number of emeralds or diamonds, with per-resource thresholds and a "Detect Own Team" toggle (off = only enemy chests).',
+				'[feature] BedWars — Better Spectating: new "Spectate Team" dropdown lets you spectate every team ("All Teams") or lock the spectate cycle to one specific team.',
+				'[feature] BedWars — Preparation Preview now shows the current draft phase (Kit Banning / Kit Selection) as a banner above the teams.',
+				'[feature] BedWars — Bed Protector: added "Gaps Only" (patch the exposed gaps around your bed without building the full pyramid) and "Show Gaps" (highlights the missing blocks so you can see what needs fixing).',
 				'[feature] Loader — a redesigned animated loading screen shows while Vain downloads an update, with a live progress bar and status text; the What\'s New panel pops once everything\'s ready.',
 				'[feature] Better Spectating — turning the module (or Fixed Spectate) off now cleanly un-fixates you, and fixating actually snaps onto your chosen player.',
 
 				-- ── FIXES & IMPROVEMENTS ──────────────────────────────────────
-				'[fix] BedWars — a dev/test load with a wiped cache no longer skips the game file, which had left most BedWars modules missing.',
-				'[fix] BedWars — Preparation Preview now shows enemy teams\' kits (not just your own), with the kit renders displaying correctly.',
+				'[fix] BedWars — Preparation Preview now shows every team\'s kits (not just your own), with the kit renders displaying correctly.',
 				'[fix] BedWars — Loot Display highlight only counts the resources you have toggled on, works on custom-kit characters, and icons (incl. tesla / blocks) resolve from the real carried item.',
 				'[fix] FPS Boost — no longer errors on the removed Terrain.Decoration property.',
 				'[fix] Discord — /whitelist edit and /whitelist info are now case-insensitive and store the account\'s canonical Roblox name.',
