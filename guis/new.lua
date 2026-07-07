@@ -36,18 +36,16 @@ local mainapi = {
 			Version = '4.26',
 			Date = 'July 2026',
 			Highlight = 'New in-game commands and quality-of-life additions.',
+			-- Line format: '[Game][feature|fix] short text'. Grouped by game in the UI.
 			Changes = {
-				-- ── FEATURES ──────────────────────────────────────────────────
-				'[feature] Commands — new ;invert command reverses a target\'s WASD movement (W↔S, A↔D); run ;invert on them again to restore normal controls. Works with a name, "me", or "all".',
-				'[feature] Commands — new ;scramblekeys command (BedWars) shuffles a target\'s in-game keyboard controls (hotbar, interact, inventory, drop, ping…) and saves it to their profile, so it applies instantly and sticks until they reset their controls in settings.',
-				'[feature] BedWars — Bed Protector: added a "Place Speed" slider (blocks per second) to control how fast it places blocks around your bed.',
-				'[feature] BedWars — Block-In: added a Place Speed slider (blocks/sec), a Duration slider (keep the box up and re-place broken blocks for N seconds; 0 = place once), a Priority Block dropdown (wool/wood/stone/obsidian/ceramic — wool is your team colour), a No Switch toggle (use only one block type and stop instead of switching when it runs out), and a Legit toggle (only valid face-adjacent placements — no diagonal or floating blocks).',
-
-				-- ── FIXES & IMPROVEMENTS ──────────────────────────────────────
-				'[fix] UI — trimmed overly long module tooltips across every game down to the essential info so they fit on screen, and cut redundant caveats (e.g. Chat Reveal no longer explains which chats it can\'t show).',
-				'[fix] BedWars — Killaura\'s "Attackable check" now also stops attacking while you\'re invincible from Grim Reaper, and more reliably while frozen by Sophia (turn it on to avoid swinging when you can\'t actually deal damage).',
-				'[fix] BedWars — removed GrandKillaura; the normal Killaura module covers everything it did.',
-				'[fix] BedWars — Nuker: when a bed had an air gap sealed inside its protection, it would uselessly mine the bed through the sealed gap. It now detects that the pocket is enclosed and breaks the outer protection first to open a real path, then the bed.',
+				'[BedWars][feature] Bed Protector: added a Place Speed slider',
+				'[BedWars][feature] Block-In: added Place Speed, Duration, Priority Block, No Switch and Legit options',
+				'[BedWars][fix] Killaura\'s Attackable check now also stops while frozen by Sophia or invincible from Grim Reaper',
+				'[BedWars][fix] Removed GrandKillaura (normal Killaura covers it)',
+				'[BedWars][fix] Fixed Nuker mining the bed instead of breaking through the bed protection first',
+				'[Commands][feature] Added ;invert to reverse a target\'s WASD movement (run it again to undo)',
+				'[Commands][feature] Added ;scramblekeys to shuffle a target\'s BedWars keybinds until they reset them',
+				'[Interface][fix] Trimmed overly long module tooltips across every game',
 			},
 		},
 		{
@@ -3009,12 +3007,20 @@ function mainapi:CreateGUI()
 		div.ZIndex = 2
 		div.Parent = card
 
-		-- split changes into feature / fix buckets, preserving order
-		local feats, fixes = {}, {}
+		-- group changes by game, each with feature/fix buckets, preserving order.
+		-- Line format: "[Game][fix|feature] text". Old single-tag/plain lines fall
+		-- back to a "General" group so historic versions still render.
+		local groups, groupOrder = {}, {}
 		for _, line in ipairs(entry.Changes) do
-			local tag, rest = line:match('^%[(%w+)%]%s*(.*)$')
-			if tag == 'fix' then fixes[#fixes + 1] = rest or line
-			else feats[#feats + 1] = rest or line end
+			local game, tag, rest = line:match('^%[([^%]]+)%]%s*%[(%w+)%]%s*(.*)$')
+			if not game then
+				tag, rest = line:match('^%[(%w+)%]%s*(.*)$')
+				game = 'General'
+			end
+			rest = rest or line
+			if not groups[game] then groups[game] = {feats = {}, fixes = {}} groupOrder[#groupOrder + 1] = game end
+			if tag == 'fix' then groups[game].fixes[#groups[game].fixes + 1] = rest
+			else groups[game].feats[#groups[game].feats + 1] = rest end
 		end
 
 		local function addSection(caption, items)
@@ -3064,8 +3070,24 @@ function mainapi:CreateGUI()
 				lbl.Parent = row
 			end
 		end
-		addSection('FEATURES', feats)
-		addSection('BUGS', fixes)
+		local function addGameHeader(name)
+			local h = Instance.new('TextLabel')
+			h.Size = UDim2.new(1, 0, 0, 16)
+			h.BackgroundTransparency = 1
+			h.Text = name
+			h.TextXAlignment = Enum.TextXAlignment.Left
+			h.TextColor3 = accentCol
+			h.TextSize = 13
+			h.FontFace = uipallet.FontSemiBold
+			h.LayoutOrder = nextOrder()
+			h.ZIndex = 2
+			h.Parent = card
+		end
+		for _, game in ipairs(groupOrder) do
+			addGameHeader(game)
+			addSection('FEATURES', groups[game].feats)
+			addSection('FIXES', groups[game].fixes)
+		end
 	end
 	patchlist:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
 		patchscroll.CanvasSize = UDim2.fromOffset(0, patchlist.AbsoluteContentSize.Y + 12)
@@ -6615,12 +6637,20 @@ local function showPatchNotes(force)
 	bodypad.PaddingTop = UDim.new(0, 4) bodypad.PaddingBottom = UDim.new(0, 8)
 	bodypad.Parent = body
 
-	-- split changes into feature / fix buckets, preserving order
-	local feats, fixes = {}, {}
+	-- group changes by game, each with feature/fix buckets, preserving order.
+	-- Line format: "[Game][fix|feature] text". Old single-tag/plain lines fall
+	-- back to a "General" group so historic versions still render.
+	local groups, groupOrder = {}, {}
 	for _, line in ipairs(newest.Changes or {}) do
-		local tag, rest = line:match('^%[(%w+)%]%s*(.*)$')
-		if tag == 'fix' then fixes[#fixes + 1] = rest or line
-		else feats[#feats + 1] = rest or line end
+		local game, tag, rest = line:match('^%[([^%]]+)%]%s*%[(%w+)%]%s*(.*)$')
+		if not game then
+			tag, rest = line:match('^%[(%w+)%]%s*(.*)$')
+			game = 'General'
+		end
+		rest = rest or line
+		if not groups[game] then groups[game] = {feats = {}, fixes = {}} groupOrder[#groupOrder + 1] = game end
+		if tag == 'fix' then groups[game].fixes[#groups[game].fixes + 1] = rest
+		else groups[game].feats[#groups[game].feats + 1] = rest end
 	end
 
 	local order = 0
@@ -6672,8 +6702,25 @@ local function showPatchNotes(force)
 			rows[#rows + 1] = { obj = row, kind = 'row', lbl = lbl, dot = dot }
 		end
 	end
-	addSection('FEATURES', feats)
-	addSection('BUGS', fixes)
+	local function addGameHeader(name)
+		order += 1
+		local h = Instance.new('TextLabel')
+		h.Size = UDim2.new(1, 0, 0, 18)
+		h.BackgroundTransparency = 1
+		h.Text = name
+		h.TextXAlignment = Enum.TextXAlignment.Left
+		h.TextColor3 = textColor
+		h.TextSize = 15
+		h.FontFace = uipallet.FontSemiBold
+		h.LayoutOrder = order
+		h.Parent = body
+		rows[#rows + 1] = { obj = h, kind = 'cap' }
+	end
+	for _, game in ipairs(groupOrder) do
+		addGameHeader(game)
+		addSection('FEATURES', groups[game].feats)
+		addSection('FIXES', groups[game].fixes)
+	end
 
 	bodylist:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(function()
 		body.CanvasSize = UDim2.fromOffset(0, bodylist.AbsoluteContentSize.Y + 8)
