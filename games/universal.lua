@@ -2293,22 +2293,22 @@ run(function()
 				table.clear(blocking)
 			end
 		end,
-		Tooltip = 'Logs every remote the game fires (FireServer / InvokeServer) to the console (and remotespy.txt) so you can see what it calls. Now hooks the FireServer/InvokeServer functions directly, so it catches obfuscated games (Jailbreak) that bypass __namecall. Turn on Log Arguments for full detail. Block Spam drops remote events firing faster than the threshold.'
+		Tooltip = 'Logs every remote the game fires to the console (and remotespy.txt). Hooks FireServer/InvokeServer directly, so it catches obfuscated games. Log Arguments for detail; Block Spam drops fast-firing events.'
 	})
 
 	Verbose = RemoteSpy:CreateToggle({
 		Name = 'Verbose',
 		Default = false,
-		Tooltip = 'Log EVERY call. Off (default) logs each distinct remote only once with its args -- a clean list, ideal for finding a specific remote.'
+		Tooltip = 'Log every call. Off (default) logs each remote once with its args -- a clean list for finding one.'
 	})
 	IgnoreList = RemoteSpy:CreateTextList({
 		Name = 'Ignore',
-		Tooltip = 'Remote names to never log (one per line). Add the spammy ones (e.g. CyborgInput, VocaloidMicUpdate) so the useful remotes stand out.',
+		Tooltip = 'Remote names to never log (one per line). Add spammy ones so the useful remotes stand out.',
 	})
 	BlockSpam = RemoteSpy:CreateToggle({
 		Name = 'Block Spam',
 		Default = false,
-		Tooltip = 'Drop remote events (FireServer) that fire more than the threshold per second. Does NOT block RemoteFunctions (would hang the game).'
+		Tooltip = 'Drop FireServer events firing faster than the threshold per second. Never blocks RemoteFunctions (would hang the game).'
 	})
 	SpamThreshold = RemoteSpy:CreateSlider({
 		Name = 'Spam Threshold',
@@ -5541,7 +5541,7 @@ run(function()
 
     FPSBoost = vain.Categories.Utility:CreateModule({
         Name = 'FPS Boost',
-        Tooltip = 'Strips expensive rendering (particles, textures, shadows, post-processing, quality) to boost FPS. Client-visual only. Tune what to sacrifice below.',
+        Tooltip = 'Strips expensive rendering (particles, textures, shadows, post-fx) to boost FPS. Client-visual only. Tune below.',
         Function = function(callback)
             if callback then
                 terrain = workspace:FindFirstChildWhichIsA('Terrain')
@@ -5717,7 +5717,7 @@ run(function()
 
     Shader = vain.Categories.Render:CreateModule({
         Name = 'Shader',
-        Tooltip = 'Applies a cinematic lighting/post-processing stack (Atmosphere, Bloom, Color Correction, Sun Rays, Depth of Field) for a much better-looking game. Pick a preset below.',
+        Tooltip = 'Cinematic lighting/post-processing (Atmosphere, Bloom, Color Correction, Sun Rays, DoF) for a better look. Pick a preset below.',
         Function = function(callback)
             if callback then
                 build()
@@ -7528,7 +7528,7 @@ run(function()
 
     ChatReveal = vain.Categories.Utility:CreateModule({
         Name = 'Chat Reveal',
-        Tooltip = 'Reveals hidden chat (muted/blocked or filtered messages). Cannot show enemy team chat or others\' whispers -- the server never sends those to you.',
+        Tooltip = 'Reveals hidden chat -- muted, blocked or filtered messages.',
         Function = function(callback)
             if callback then
                 table.clear(restoreLegacy)
@@ -10357,6 +10357,6 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Notifies you once when another Vain user ranked below you is currently injected in your server (someone you can run commands on).'
+		Tooltip = 'Notifies you once when a Vain user ranked below you is injected in your server (someone you can command).'
 	})
 end)

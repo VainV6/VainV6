@@ -846,17 +846,17 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Teleports from enemy to enemy, attacking each until it dies -- sweeps the whole map. WARNING: teleporting is detectable; this is for games/servers where that is acceptable.'
+		Tooltip = 'Teleports enemy to enemy, attacking each until it dies. WARNING: teleporting is detectable.'
 	})
 	Offset = AutoFarm:CreateSlider({Name = 'TP Distance', Min = 0, Max = 20, Default = 4, Suffix = 'studs', Tooltip = 'How far in front of the enemy to land.'})
 	Height = AutoFarm:CreateSlider({Name = 'TP Height', Min = -10, Max = 20, Default = 0, Suffix = 'studs', Tooltip = 'Vertical offset so you do not clip into the enemy.'})
-	CollectDrops = AutoFarm:CreateToggle({Name = 'Collect Drops', Default = true, Tooltip = 'After each kill, teleport onto nearby loot / Tix / Mana Stars (EnemiesDrops) and force-touch them so they collect. On by default so you do not need the separate Auto Collect (which would fight AutoFarm for teleports).'})
+	CollectDrops = AutoFarm:CreateToggle({Name = 'Collect Drops', Default = true, Tooltip = 'After each kill, teleport onto nearby loot/Tix/Mana and collect it. On by default (replaces the separate Auto Collect).'})
 	CollectHearts = AutoFarm:CreateToggle({Name = 'Collect Hearts', Default = true, Tooltip = 'Also grab nearby heart / health pickups (works even if Collect Drops is off).'})
 	CollectShields = AutoFarm:CreateToggle({Name = 'Collect Shields', Default = true, Tooltip = 'Also grab nearby shield pickups (works even if Collect Drops is off).'})
 	CollectMana = AutoFarm:CreateToggle({Name = 'Collect Mana', Default = true, Tooltip = 'Also grab nearby Mana Star pickups (works even if Collect Drops is off).'})
 	DropRange = AutoFarm:CreateSlider({Name = 'Drop Range', Min = 20, Max = 500, Default = 200, Suffix = 'studs', Tooltip = 'Only collect drops within this range of you.'})
 	ReturnHome = AutoFarm:CreateToggle({Name = 'Return On Disable', Tooltip = 'Teleport back to your start position when AutoFarm is turned off.'})
-	AutoEquip = AutoFarm:CreateToggle({Name = 'Auto Equip', Default = true, Tooltip = 'If your hands are empty when about to attack, equip the best sword (or slot 1) first so the swing lands.'})
+	AutoEquip = AutoFarm:CreateToggle({Name = 'Auto Equip', Default = true, Tooltip = 'If your hands are empty when attacking, equip the best sword (or slot 1) first so the swing lands.'})
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -928,7 +928,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Collects drops (Tix / Hearts / Mana / Shields / loot) by briefly teleporting onto each and firing its pickup touch, then snapping back. Pickups are proximity-validated, so collecting from a distance without moving is not possible here. WARNING: teleporting is detectable.'
+		Tooltip = 'Collects drops by briefly teleporting onto each and firing its pickup, then snapping back. Pickups are proximity-checked. WARNING: teleporting is detectable.'
 	})
 	Tix = AutoCollect:CreateToggle({Name = 'Tix', Default = true, Tooltip = 'Collect Tix.'})
 	Hearts = AutoCollect:CreateToggle({Name = 'Hearts', Default = true, Tooltip = 'Collect Heart / health drops.'})
@@ -1033,11 +1033,11 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Auto-digs for buried treasure (Pirate class only). Replays the exact in-game shovel dig, respecting the server cooldown -- equips the Shovel and fires its dig remote whenever the cooldown is up.'
+		Tooltip = 'Auto-digs buried treasure (Pirate only). Replays the real shovel dig, respecting the server cooldown.'
 	})
 	Interval = AutoShovel:CreateSlider({Name = 'Check Rate', Min = 0.1, Max = 2, Default = 0.3, Decimal = 100, Suffix = 'sec', Tooltip = 'How often to check if the dig cooldown is up. Lower = digs the instant it is ready.'})
 	AutoEquip = AutoShovel:CreateToggle({Name = 'Auto Equip', Default = true, Tooltip = 'Equip the Shovel before digging (matches the game). Turn off only if you keep it equipped yourself.'})
-	ReEquip = AutoShovel:CreateToggle({Name = 'Unequip After', Default = false, Tooltip = 'Unequip the Shovel right after each dig so you can keep using your weapon between digs (e.g. alongside AutoFarm).'})
+	ReEquip = AutoShovel:CreateToggle({Name = 'Unequip After', Default = false, Tooltip = 'Unequip the Shovel right after each dig so you can keep using your weapon between digs.'})
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -1139,7 +1139,7 @@ run(function()
 				installHook()
 			end
 		end,
-		Tooltip = 'Silently redirects your bow/projectile shots to a lead point computed by the ballistic solver -- hooks the weapon ServerControl and rewrites the aim, no camera/cursor movement.'
+		Tooltip = 'Silently redirects your bow/projectile shots to the solver\'s lead point -- hooks weapon ServerControl, no camera movement.'
 	})
 	Range = BowAimbot:CreateSlider({Name = 'Range', Min = 20, Max = 600, Default = 250, Suffix = 'studs'})
 	ProjectileSpeed = BowAimbot:CreateSlider({Name = 'Projectile Speed', Min = 50, Max = 500, Default = 150})
@@ -1195,7 +1195,7 @@ run(function()
 				table.clear(originals)
 			end
 		end,
-		Tooltip = 'Zeroes your equipped weapon cooldown values locally for faster attacks. Server may still rate-limit; client-side only.'
+		Tooltip = 'Zeroes your equipped weapon\'s cooldown locally for faster attacks. Server may still rate-limit.'
 	})
 end)
 
@@ -1233,7 +1233,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Repeatedly triggers your equipped weapon ability key (fires the gear KeyPress action). Pick the key your class ability is bound to.'
+		Tooltip = 'Repeatedly triggers your weapon ability key. Pick the key your class ability is bound to.'
 	})
 	AbilityKey = AutoAbility:CreateDropdown({Name = 'Ability Key', List = {'Q', 'E', 'R', 'F', 'Z', 'X', 'C', 'V'}, Default = 'Q'})
 	Delay = AutoAbility:CreateSlider({Name = 'Delay', Min = 0.1, Max = 10, Default = 1, Decimal = 10, Suffix = 's'})
@@ -1378,7 +1378,7 @@ run(function()
 				setActive(false)
 			end
 		end,
-		Tooltip = 'Desyncs your replicated position so enemies cannot reach/hit you, while you keep playing and attacking normally. Only active during a round (auto-pauses in the shop). If you get rubber-banded or flagged, lower the distance.'
+		Tooltip = 'Desyncs your position so enemies can\'t hit you while you keep playing. Active only in-round (pauses in shop). Lower the distance if rubber-banded.'
 	})
 
 	Distance = AntiHit:CreateSlider({
@@ -1476,7 +1476,7 @@ run(function()
 				thawAll()
 			end
 		end,
-		Tooltip = 'Pins nearby enemies in place by anchoring the ones your client owns. They stop chasing and attacking, so you can farm them freely.'
+		Tooltip = 'Pins nearby enemies by anchoring the ones your client owns -- they stop chasing and attacking so you can farm freely.'
 	})
 
 	Range = FreezeEnemies:CreateSlider({
@@ -1491,7 +1491,7 @@ run(function()
 		Name = 'Mode',
 		List = {'Anchor', 'Velocity Lock'},
 		Default = 'Anchor',
-		Tooltip = 'Anchor = fully pinned (most reliable). Velocity Lock = keeps them unanchored but stationary, in case a hitbox needs unanchored parts.'
+		Tooltip = 'Anchor = fully pinned (most reliable). Velocity Lock = keeps them unanchored but stationary, for hitboxes that need it.'
 	})
 	BossOnly = FreezeEnemies:CreateToggle({
 		Name = 'Bosses Only',
@@ -1718,10 +1718,10 @@ run(function()
 				end))
 			end
 		end,
-		Tooltip = 'Buys whitelisted/enabled-category items whenever they appear in the shop. The Item Picker lists every item in the game - tick the ones you want and Auto Buy grabs them as soon as they are stocked and affordable.'
+		Tooltip = 'Buys your whitelisted / enabled-category items as soon as they are stocked and affordable. Use the Item Picker to choose.'
 	})
 
-	BuyEverything = AutoBuy:CreateToggle({Name = 'Buy Everything', Tooltip = 'Buy every item in the shop, ignoring the category toggles and whitelist. Still respects Max Price and Keep Reserve.'})
+	BuyEverything = AutoBuy:CreateToggle({Name = 'Buy Everything', Tooltip = 'Buy every shop item, ignoring category toggles and whitelist. Still respects Max Price and Keep Reserve.'})
 	BuyGears = AutoBuy:CreateToggle({Name = 'Buy Gears', Default = true, Tooltip = 'Buy items from the Gears shelf.'})
 	BuyAccessories = AutoBuy:CreateToggle({Name = 'Buy Accessories', Tooltip = 'Buy items from the Accessories shelf.'})
 	BuySacrifices = AutoBuy:CreateToggle({Name = 'Buy Sacrifices', Tooltip = 'Buy items from the Sacrifices shelf.'})
@@ -1730,7 +1730,7 @@ run(function()
 	Whitelist = AutoBuy:CreateTextList({
 		Name = 'Name Whitelist',
 		Placeholder = 'item name',
-		Tooltip = 'Item names to buy (one per entry, partial match, case-insensitive). Leave empty to buy everything in the enabled categories. Use the Item Picker below to fill this without typing.'
+		Tooltip = 'Item names to buy (one per line, partial, case-insensitive). Empty = buy all enabled categories. Use the Item Picker below.'
 	})
 	ItemPicker = AutoBuy:CreateDropdown({
 		Name = 'Item Picker',
@@ -1744,7 +1744,7 @@ run(function()
 				notif('Auto Buy', (present and 'Added "%s" to whitelist.' or 'Removed "%s" from whitelist.'):format(name))
 			end
 		end,
-		Tooltip = 'Every item in the game, with its icon. Click one to toggle it in the whitelist - Auto Buy will grab it whenever it shows up in the shop. No need to be in the shop.'
+		Tooltip = 'Every item with its icon. Click to toggle it in the Auto Buy whitelist. No need to be in the shop.'
 	})
 	AutoBuy:CreateButton({
 		Name = 'Refresh Items',
@@ -1801,7 +1801,7 @@ run(function()
 				notif('Auto Buy', table.concat(found, '\n'), 12)
 			end
 		end,
-		Tooltip = 'While in the shop, list the exact name/category/price of each stocked item, so you can match the whitelist to what the shop really calls them.'
+		Tooltip = 'Lists each stocked item\'s exact name/category/price so you can match the whitelist to the real names.'
 	})
 end)
 
@@ -1908,7 +1908,7 @@ run(function()
 				end))
 			end
 		end,
-		Tooltip = 'Automatically readies up when you enter the shop to start the next round (TPs to and clicks the Ready button). Retries until it registers, every shop visit. Pairs with Auto Buy - raise the delay to let buys finish first.'
+		Tooltip = 'Readies up when you enter the shop to start the next round (TPs to and clicks Ready). Retries until it registers. Pair with Auto Buy.'
 	})
 
 	ReadyDelay = AutoReady:CreateSlider({
@@ -1917,7 +1917,7 @@ run(function()
 		Max = 30,
 		Default = 0,
 		Suffix = 's',
-		Tooltip = 'Seconds to wait in the shop before readying up. Raise this if you want Auto Buy / manual shopping to finish first.'
+		Tooltip = 'Seconds to wait in the shop before readying up. Raise to let Auto Buy / manual shopping finish.'
 	})
 end)
 
@@ -2085,7 +2085,7 @@ run(function()
 				gui, holder = nil, nil
 			end
 		end,
-		Tooltip = 'Shows an on-screen feed each time you kill an NPC. Toggle "Only My Kills" to filter out enemies that died to allies or environment.'
+		Tooltip = 'On-screen feed each time you kill an NPC. "Only My Kills" hides ones killed by allies or environment.'
 	})
 
 	OnlyMine = KillFeed:CreateToggle({

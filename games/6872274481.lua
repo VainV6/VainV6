@@ -1853,7 +1853,7 @@ local AimAssist
 		end
 		SigridCharge = vain.Categories.Kits:CreateModule({
 			Name = 'Sigrid Charge',
-			Tooltip = 'Press to fire the Elk/Sigrid Antler Uppercut charge at the player chosen in the Target dropdown. You must be mounted on your Elk first. Premium only.',
+			Tooltip = 'Fire the Elk/Sigrid Antler Uppercut charge at your Target. Must be mounted on your Elk first. Premium only.',
 			Function = function(callback)
 				if not callback then return end
 				-- act like a one-shot button: do the work, then toggle straight back off
@@ -1906,11 +1906,11 @@ local AimAssist
 			Function = function() end,
 			Tooltip = 'Player to send the charge to (updates as players join/leave).' })
 		WaitEnergy = SigridCharge:CreateToggle({ Name = 'Wait For Energy', Default = true,
-			Tooltip = 'Only fire when the Elk charge energy is up (waits up to 3s), so the charge is always a full one instead of stopping early on low energy.' })
+			Tooltip = 'Only fire when Elk charge energy is up (waits up to 3s) so it\'s always a full charge, not a weak early one.' })
 		AutoMount = SigridCharge:CreateToggle({ Name = 'Auto Mount', Default = false,
-			Tooltip = 'If you are not on your Elk when you press, summon it first (uses the ELK_SUMMON ability) and wait for the mount before charging. Requires the Sigrid kit.' })
+			Tooltip = 'If not on your Elk when you press, summon it first and wait for the mount before charging. Requires the Sigrid kit.' })
 		SkipMount = SigridCharge:CreateToggle({ Name = 'Skip Mount Check', Default = false,
-			Tooltip = 'Fire the charge even when not mounted (e.g. as a SPECTATOR). Only works if the server trusts the request without checking the sender is a mounted Sigrid -- test it and see.' })
+			Tooltip = 'Fire the charge even when not mounted (e.g. as a spectator). Only works if the server doesn\'t verify you\'re a mounted Sigrid.' })
 		Notify = SigridCharge:CreateToggle({ Name = 'Notify', Default = true,
 			Tooltip = 'Notify when a charge is fired.' })
 		if SigridCharge.MarkPremium then SigridCharge:MarkPremium() end
@@ -2017,7 +2017,7 @@ local AimAssist
 
 		AdvancedSpectate = vain.Categories.Utility:CreateModule({
 			Name = 'Better Spectating',
-			Tooltip = 'Spectate ANYONE, not just your team (forces the spectate mode to ALL). Enable Fixed Spectate + pick a player to lock the view to them.',
+			Tooltip = 'Spectate anyone, not just your team (forces spectate to ALL). Enable Fixed Spectate + pick a player to lock the view.',
 			Function = function(callback)
 				local ctrl = getSpec()
 				if callback then
@@ -2081,7 +2081,7 @@ local AimAssist
 		})
 		FixedSpectate = AdvancedSpectate:CreateToggle({
 			Name = 'Fixed Spectate',
-			Tooltip = 'Lock spectating to the selected player. If they die, the game auto-switches — this snaps the view straight back to them.',
+			Tooltip = 'Lock spectating to the selected player. If they die, this snaps the view straight back to them.',
 			Default = false,
 			Function = function(callback)
 				local ctrl = getSpec()
@@ -2121,7 +2121,7 @@ local AimAssist
 			Name = 'Spectate Team',
 			List = { 'All Teams' },
 			Default = 'All Teams',
-			Tooltip = 'Spectate every team ("All Teams") or restrict the spectate cycle to one specific team. Ignored while Fixed Spectate is on.',
+			Tooltip = 'Spectate every team ("All Teams") or lock the cycle to one team. Ignored while Fixed Spectate is on.',
 			Function = function()
 				-- advance to a valid target within the newly-chosen team right away
 				local ctrl = getSpec()
@@ -2443,7 +2443,7 @@ local AimAssist
 
 		PrepPreview = vain.Categories.Render:CreateModule({
 			Name = 'Preparation Preview',
-			Tooltip = 'While spectating a match still in the kit-ban / selection phase, shows each team, its players (avatar + name) and their chosen kit — which the game normally hides from spectators.',
+			Tooltip = 'While spectating the kit-ban/selection phase, shows each team, its players and their chosen kit -- normally hidden from spectators.',
 			Function = function(callback)
 				if callback then
 					task.spawn(function()
@@ -2694,7 +2694,7 @@ local AimAssist
 
 		TablistWinstreak = vain.Categories.Render:CreateModule({
 			Name = 'Show Advanced Stats',
-			Tooltip = "Shows each player's current-gamemode winstreak, winrate, K/D and total matches next to their name in the tab-list (Tab key). Private profiles show nothing. Fetches once per player and caches.",
+			Tooltip = "Shows each player's current-mode winstreak, winrate, K/D and matches by their name in the tab-list. Private profiles show nothing.",
 			Function = function(callback)
 				if callback then
 					table.clear(fetched)
@@ -2713,7 +2713,7 @@ local AimAssist
 		})
 		Global = TablistWinstreak:CreateToggle({
 			Name = 'Global Stats',
-			Tooltip = 'Show GLOBAL stats across ALL gamemodes (highest win streak of any mode, and total winrate / K-D over every match) instead of just the current mode.',
+			Tooltip = 'Show global stats across all gamemodes (highest streak, total winrate/K-D) instead of just the current mode.',
 			Default = false,
 			Function = function()
 				-- Global vs current-mode changes the RAW numbers, so wipe the fetch
@@ -3057,7 +3057,7 @@ local AimAssist
 
 		PartyList = vain.Categories.Render:CreateModule({
 			Name = 'Party List',
-			Tooltip = "Shows party / team groupings -- both as a coloured \u{25CF} P# tag in the tab-list AND (optionally) a floating overlay. Uses real party data when the server sends it, otherwise falls back to team membership (always available, incl. the ranked kit-ban draft). Players in the same group share a colour.",
+			Tooltip = "Shows party/team groups as a coloured P# tag in the tab-list and an optional overlay. Uses real party data, else team membership. Same group = same colour.",
 			Function = function(callback)
 				if callback then
 					local _, shown = buildMap()
@@ -3434,7 +3434,7 @@ local AimAssist
 	LimitToItem = AimAssist:CreateToggle({
 		Name = 'Limit to item',
 		Default = false,
-		Tooltip = 'Only assist while holding a weapon (sword, or bow/crossbow with Work With Projectiles). Off = works with any held item.'
+		Tooltip = 'Only assist while holding a weapon (sword, or bow/crossbow with Work With Projectiles). Off = any held item.'
 	})
 
 	HealthCheck = AimAssist:CreateToggle({
@@ -6097,7 +6097,7 @@ run(function()
         Name = 'Reach Tolerance',
         Min = 0, Max = 6, Default = 2, Decimal = 10,
         Suffix = function() return 'studs' end,
-        Tooltip = 'Extra studs allowed on top of the exact 14.4 legit reach before a hit is flagged (accounts for body size / interpolation). Lower = stricter/more precise.'
+        Tooltip = 'Extra studs allowed over the 14.4 legit reach before flagging (accounts for body size/interpolation). Lower = stricter.'
     })
     FlagThreshold = CheatDetector:CreateSlider({
         Name = 'Flag Threshold',
@@ -8665,7 +8665,7 @@ run(function()
 		Max = 100,
 		Default = 100,
 		Suffix = '%',
-		Tooltip = 'Chance for each shot to actually hit. Failed shots are deflected by a small angle that scales with distance, so they look like natural misses.'
+		Tooltip = 'Chance for each shot to hit. Failed shots deflect by a small distance-scaled angle so they look like natural misses.'
 	})
 
 	PAFOVCircle = ProjectileAimbot:CreateToggle({
@@ -11407,7 +11407,7 @@ run(function()
     LootShow.tesla = LootDisplay:CreateToggle({ Name = 'Show Teslas', Default = false, Function = rebuild })
     Highlight = LootDisplay:CreateToggle({
         Name = 'Highlight On Threshold',
-        Tooltip = 'Glows a player red (character Highlight) once they carry at least the threshold amount of any resource below.',
+        Tooltip = 'Glows a player red once they carry at least the threshold of any resource below.',
         Default = false,
         Function = function(callback)
             for _, r in LOOT_RES do

@@ -192,7 +192,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Upgrades the tax tier and defence of every tile you own, cheapest first, only when you can afford it -- and always keeps your money/manpower reserve untouched. New tiles from captured countries are included automatically.'
+		Tooltip = 'Upgrades tax tier and defence of every owned tile, cheapest first, only when affordable -- always keeping your reserve. New tiles included automatically.'
 	})
 
 	UpTier = AutoUpgrade:CreateToggle({
@@ -227,7 +227,7 @@ run(function()
 		Max = 30,
 		Default = 5,
 		Suffix = 'sec',
-		Tooltip = 'How often to re-sweep -- catches newly captured tiles and continues upgrading once income tops you back up.'
+		Tooltip = 'How often to re-sweep -- catches newly captured tiles and resumes upgrading once income recovers.'
 	})
 	Notify = AutoUpgrade:CreateToggle({
 		Name = 'Notify',
@@ -309,7 +309,7 @@ run(function()
 				toggleAll(false)
 			end
 		end,
-		Tooltip = 'Enables auto-capture on all your soldiers so they keep expanding into adjacent tiles automatically. Re-applies every 10s to catch new units.'
+		Tooltip = 'Enables auto-capture on all your soldiers so they keep expanding into adjacent tiles. Re-applies every 10s to catch new units.'
 	})
 	Mode = AutoCapture:CreateDropdown({
 		Name = 'Mode',
@@ -405,7 +405,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Live strategic intel from CountryRegistry: the strongest powers (money / population / tiles) and your own standing & rank. Refreshes on an interval.'
+		Tooltip = 'Live intel from CountryRegistry: strongest powers (money/pop/tiles) and your own rank. Refreshes on an interval.'
 	})
 	ShowTop = Intel:CreateToggle({ Name = 'Top Powers', Default = true, Tooltip = 'Show the 5 strongest countries by money.' })
 	ShowMine = Intel:CreateToggle({ Name = 'My Stats', Default = true, Tooltip = 'Show your country: money / manpower / population / tiles and global money rank.' })
@@ -656,7 +656,7 @@ run(function()
 
 	AutoWar = vain.Categories.Utility:CreateModule({
 		Name = 'Auto War',
-		Tooltip = "Automatically justifies and then declares wars for you. It NEVER targets your allies or anyone in your alliance, and skips countries you're already at war with. Use Filter Mode + the country list to whitelist (only these) or blacklist (everyone but these), or set a single Target. Justifies one war at a time (political power is limited) and declares each as soon as its justification finishes.",
+		Tooltip = "Auto-justifies and declares wars. Never targets allies/alliance-mates or existing wars. Use Filter Mode + list to white/blacklist, or set one Target.",
 		Function = function(callback)
 			if callback then
 				local mine = lplr:GetAttribute('MyCountry')
@@ -686,17 +686,17 @@ run(function()
 
 	FilterMode = AutoWar:CreateDropdown({ Name = 'Filter Mode',
 		List = { 'Off', 'Whitelist', 'Blacklist' }, Default = 'Off',
-		Tooltip = "Off = war any valid country. Whitelist = ONLY war countries in the list below. Blacklist = war everyone valid EXCEPT the ones in the list. (Allies / alliance-mates are always protected regardless.)" })
+		Tooltip = "Off = war any valid country. Whitelist = only those listed. Blacklist = all valid except those listed. Allies/alliance-mates always protected." })
 	CountryList = AutoWar:CreateTextBox({ Name = 'Countries',
 		Default = '',
-		Tooltip = 'Comma-separated country names for the whitelist / blacklist, e.g. "France, Spain, Poland". Case-insensitive. Ignored when Filter Mode is Off.' })
+		Tooltip = 'Comma-separated country names for the white/blacklist, e.g. "France, Spain". Case-insensitive. Ignored when Filter Mode is Off.' })
 	Target = AutoWar:CreateTextBox({ Name = 'Single Target',
 		Default = '',
-		Tooltip = 'Optional. Type ONE country name to war only that country (overrides the filter and target-picking). Leave empty to auto-pick targets.' })
+		Tooltip = 'Optional. One country name to war only that country (overrides filter/targeting). Empty = auto-pick.' })
 	OnlyWeaker = AutoWar:CreateToggle({ Name = 'Only Weaker', Default = true,
-		Tooltip = 'Only auto-pick countries with no more tiles than you, so you punch down instead of starting wars you will lose.' })
+		Tooltip = 'Only auto-pick countries no bigger than you, so you punch down instead of starting wars you will lose.' })
 	AvoidAllies = AutoWar:CreateToggle({ Name = 'Avoid Allies', Default = true,
-		Tooltip = "Also skip your declared allies (FormAlly). The game itself only blocks war on your ALLIANCE, not allies, so turn this off if you actually want to be able to war an ally. Alliance-mates are always protected regardless." })
+		Tooltip = "Also skip declared allies. The game only blocks war on your alliance, not allies -- off lets you war one. Alliance-mates stay protected." })
 	MinTiles = AutoWar:CreateSlider({ Name = 'Min Tiles', Min = 0, Max = 200, Default = 0,
 		Tooltip = 'Ignore auto-picked countries smaller than this many tiles (skip tiny irrelevant states).' })
 	Interval = AutoWar:CreateSlider({ Name = 'Interval', Min = 2, Max = 60, Default = 8, Suffix = 'sec',
@@ -857,7 +857,7 @@ run(function()
 
 	AutoTrain = vain.Categories.Utility:CreateModule({
 		Name = 'Auto Train',
-		Tooltip = "Continuously recruits a chosen unit (Soldier / Tank / Artillery / Plane / Battleship / AntiAircraft) across your tiles via the game's CreateArmyOnTile. Uses the real ArmyData costs, respects your money/manpower reserves and a per-sweep spend cap, and only recruits on tiles you own that aren't occupied or already spawning. Battleships/Planes need a shipyard/airport and some units a tech level -- the server enforces that.",
+		Tooltip = "Non-stop recruits your chosen unit on owned, free tiles within your reserves and spend cap. Ships/planes need a shipyard/airport or tech (server-enforced).",
 		Function = function(callback)
 			if callback then
 				local mine = lplr:GetAttribute('MyCountry')
@@ -994,7 +994,7 @@ run(function()
 
 	AutoAllianceBank = vain.Categories.Utility:CreateModule({
 		Name = 'Auto Alliance Bank',
-		Tooltip = "Once your country's manpower stops growing it's wasted -- this deposits the overflow into your alliance bank automatically (via the game's AddToGuildBank call). Detects 'full' by manpower plateauing, or exactly against a Manual Cap if you set one, and always keeps your reserve. You must actually be in an alliance.",
+		Tooltip = "Deposits overflow manpower into your alliance bank once it plateaus (or hits a Manual Cap), always keeping your reserve. Must be in an alliance.",
 		Function = function(callback)
 			if callback then
 				lastManpower, plateaus = nil, 0
@@ -1020,9 +1020,9 @@ run(function()
 	KeepReserve = AutoAllianceBank:CreateSlider({ Name = 'Keep Reserve', Min = 0, Max = 1000, Default = 50, Suffix = 'K',
 		Tooltip = 'Always keep at least this much manpower for yourself -- only the amount above it is deposited.' })
 	Threshold = AutoAllianceBank:CreateSlider({ Name = 'Deposit At', Min = 50, Max = 100, Default = 98, Suffix = '%',
-		Tooltip = 'Only used with a Manual Cap: deposit once manpower reaches this percent of that cap (100% = only when completely full).' })
+		Tooltip = 'With a Manual Cap: deposit once manpower reaches this % of the cap (100% = only when full).' })
 	ManualCap = AutoAllianceBank:CreateSlider({ Name = 'Manual Cap', Min = 0, Max = 5000, Default = 0, Suffix = 'K',
-		Tooltip = "Optional. The game has no client-side manpower cap, so by default 'full' is detected when manpower stops rising. Set your known max here (in thousands) for an exact percentage trigger instead. Leave at 0 for auto plateau-detection." })
+		Tooltip = "Optional. Set your known max manpower (in thousands) for an exact % trigger. Leave 0 to auto-detect the plateau." })
 	Interval = AutoAllianceBank:CreateSlider({ Name = 'Interval', Min = 1, Max = 60, Default = 5, Suffix = 'sec',
 		Tooltip = 'How often to check whether manpower has hit the cap.' })
 	Notify = AutoAllianceBank:CreateToggle({ Name = 'Notify', Default = true,
@@ -1185,7 +1185,7 @@ run(function()
 
 	HighlightFormables = vain.Categories.Utility:CreateModule({
 		Name = 'Highlight Formables',
-		Tooltip = "In the transformation menu: a green check on every formable you can transform into RIGHT NOW (computed from the game's Formables data + your regions) and a blue star on your current transform. The game keeps no 'formed in the past' flag, so past transforms can't be marked. Open the menu so the entries exist.",
+		Tooltip = "Green check on every formable you can transform into now, blue star on your current one. Open the transform menu so the entries exist.",
 		Function = function(callback)
 			if callback then
 				HighlightFormables:Clean(task.spawn(function()
@@ -1337,7 +1337,7 @@ run(function()
 
 	AutoTransform = vain.Categories.Utility:CreateModule({
 		Name = 'Auto Transform',
-		Tooltip = "Automatically transforms your country into any formable the instant its requirements are met -- it reads the game's own Formables / CountryData modules and region ownership (no need to open the menu) and fires the real TransformInto call. Skips your current transform and formables locked to other countries or behind SPECIAL unlocks.",
+		Tooltip = "Transforms into any formable the moment you qualify, from the game's own data (no menu needed). Skips your current transform and ones locked to other countries.",
 		Function = function(callback)
 			if callback then
 				table.clear(attempted)

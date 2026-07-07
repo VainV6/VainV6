@@ -566,7 +566,7 @@ run(function()
 				jb.GunController.TransformLocalMousePosition = Hooked
 			end
 		end,
-		Tooltip = 'Silent aim - silently redirects your bullets to the nearest target. Never moves your mouse or camera. Use the Aimbot module for a camera/hit lock.'
+		Tooltip = 'Silently redirects your bullets to the nearest target -- never moves mouse/camera. Use the Aimbot module for a camera/hit lock.'
 
 	})
 	Target = SilentAim:CreateTargets({Players = true})
@@ -651,7 +651,7 @@ run(function()
 		Darker = true, 
 		Visible = false
 	})
-	Instant = SilentAim:CreateToggle({Name = 'Hitscan Bullets', Tooltip = 'Bullets skip their travel time and arrive instantly at the target (no lead needed). Best paired with a target Mode above.'})
+	Instant = SilentAim:CreateToggle({Name = 'Hitscan Bullets', Tooltip = 'Bullets skip travel time and hit instantly (no lead needed). Best paired with a target Mode above.'})
 end)
 
 -- Dedicated Aimbot: every bullet you fire is silently redirected onto the nearest
@@ -885,7 +885,7 @@ run(function()
 				table.clear(inflatedRoots)
 			end
 		end,
-		Tooltip = 'Silently redirects every shot onto the highest-priority target -- no mouse or camera movement. Hitscan + inflated hitboxes make it land through car bodies and at any range.'
+		Tooltip = 'Silently redirects every shot onto the highest-priority target -- no mouse/camera movement. Hitscan + inflated hitboxes land through cars at any range.'
 
 	})
 	Target = Aimbot:CreateTargets({Players = true})
@@ -910,7 +910,7 @@ run(function()
 	})
 	AutoShoot = Aimbot:CreateToggle({
 		Name = 'Auto Shoot',
-		Tooltip = 'Automatically holds the trigger whenever a valid target is within Range -- you never have to click. Uses the same Target / Aim Part / Priority settings, forces full-auto so semi-autos keep firing, and pairs with the aimbot so every shot lands. Friends and dead targets are skipped.'
+		Tooltip = 'Holds the trigger whenever a target is in Range -- no clicking. Uses your Target/Aim Part/Priority, forces full-auto, skips friends and dead targets.'
 	})
 end)
 
@@ -936,7 +936,7 @@ run(function()
 				end))
 			end
 		end,
-		Tooltip = 'Your bullets hit instantly with zero travel time -- no leading or waiting for the projectile. Works with any gun, with or without aimbot.'
+		Tooltip = 'Your bullets hit instantly with zero travel time -- no leading. Works with any gun, aimbot or not.'
 	})
 end)
 
@@ -991,14 +991,14 @@ run(function()
 				table.clear(plasmaOriginals)
 			end
 		end,
-		Tooltip = 'Plasma weapons only. Multiplies the pellets-per-shot so one trigger pull lands many damage packets on the same target -- enough to one-shot. Aim at the target (use Aimbot) and fire once.'
+		Tooltip = 'Plasma only. Multiplies pellets-per-shot so one trigger lands many damage packets -- enough to one-shot. Aim and fire once.'
 	})
 	Pellets = PlasmaOneShot:CreateSlider({
 		Name = 'Pellets',
 		Min = 4,
 		Max = 80,
 		Default = 40,
-		Tooltip = 'How many damage packets per shot. Higher = more total damage (more reliable one-shot) but more remote spam; too high may be flagged. 40 is plenty.'
+		Tooltip = 'Damage packets per shot. Higher = more damage but more remote spam; too high may flag. 40 is plenty.'
 	})
 end)
 
@@ -1085,7 +1085,7 @@ run(function()
 				table.clear(wbInflated)
 			end
 		end,
-		Tooltip = 'Shoot through most walls + always headshot damage. Inflates target hitboxes so through-wall shots actually land (default aim has to be near-perfect otherwise).'
+		Tooltip = 'Shoot through most walls with headshot damage. Inflates target hitboxes so through-wall shots land.'
 	})
 end)
 
@@ -1146,7 +1146,7 @@ run(function()
 				table.clear(originals)
 			end
 		end,
-		Tooltip = 'Removes bullet spread, camera shake AND recoil on your equipped gun for pinpoint, jolt-free shots. Client-side gun config + recoil spring only (no movement), so the anticheat does not flag it.'
+		Tooltip = 'Removes spread, camera shake and recoil on your gun for pinpoint shots. Client-side config only -- anticheat-safe.'
 	})
 end)
 
@@ -1289,7 +1289,7 @@ run(function()
 				clearAll()
 			end
 		end,
-		Tooltip = 'Highlights Most Wanted players and shows their bounty. Client-side render only -- undetectable by the anticheat.'
+		Tooltip = 'Highlights Most Wanted players and their bounty. Client-side render -- undetectable.'
 	})
 	MinBounty = BountyESP:CreateSlider({
 		Name = 'Min Bounty',
@@ -1420,7 +1420,7 @@ run(function()
 				table.clear(arrestDebounce)
 			end
 		end,
-		Tooltip = 'While you have Handcuffs equipped, instantly arrests any criminal that comes within range. Ejects criminals from vehicles first. Does not auto-equip -- you decide when by holding the cuffs.'
+		Tooltip = 'While holding Handcuffs, instantly arrests any criminal in range (ejects them from vehicles first). You decide when by holding the cuffs.'
 	})
 	InstaArrest = AutoArrest:CreateToggle({
 		Name = 'Insta Arrest',
@@ -1435,7 +1435,7 @@ run(function()
 		Suffix = function(val)
 			return val == 1 and 'stud' or 'studs'
 		end,
-		Tooltip = 'How close a criminal must be to arrest. The server enforces ~18 studs; higher values just try sooner.'
+		Tooltip = 'How close a criminal must be to arrest. Server enforces ~18 studs; higher just tries sooner.'
 	})
 end)
 	
@@ -1570,7 +1570,7 @@ run(function()
 				until not AutoRob.Enabled
 			end
 		end,
-		Tooltip = 'Automatically starts the robbery you are standing in (fires the same StartRob the game does). Pair with InstantAction. Anticheat-safe -- no movement.'
+		Tooltip = 'Starts the robbery you\'re standing in (fires the game\'s StartRob). Pair with InstantAction. No movement -- anticheat-safe.'
 	})
 end)
 
@@ -1859,7 +1859,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Permanent speed/acceleration boost for your car by pinning the chassis LaunchSpeedMult. With Sync Turning on, the same multiplier sharpens your steering so a fast car still swerves. Client physics only -- keep it modest, the server checks POSITION so extreme values can get you rolled back.'
+		Tooltip = 'Permanent car speed boost via the chassis LaunchSpeedMult. Sync Turning sharpens steering to match. Client physics -- keep it modest, the server checks position.'
 	})
 	SpeedMult = VehicleSpeed:CreateSlider({
 		Name = 'Multiplier',
@@ -1868,7 +1868,7 @@ run(function()
 		Default = 2,
 		Decimal = 10,
 		Suffix = 'x',
-		Tooltip = 'Drive-force multiplier (also scales turning when Sync Turning is on). 2-3x is usually safe; higher may trip the position anticheat.'
+		Tooltip = 'Drive-force multiplier (also scales turning with Sync Turning). 2-3x is usually safe; higher may trip the anticheat.'
 	})
 	SyncTurning = VehicleSpeed:CreateToggle({
 		Name = 'Sync Turning',
@@ -1877,7 +1877,7 @@ run(function()
 	})
 	VelocityBoost = VehicleSpeed:CreateToggle({
 		Name = 'Velocity Boost',
-		Tooltip = 'Fixes a car that only bounces up and down instead of going fast: pushes you along your HORIZONTAL heading at the Boost Speed and cancels upward launch, so all the power goes into forward speed. Holds the set speed while on (toggle off to brake normally). Direction follows your steering.'
+		Tooltip = 'Fixes a car that only bounces: pushes you forward at Boost Speed and cancels upward launch. Holds the speed while on; direction follows steering.'
 	})
 	BoostSpeed = VehicleSpeed:CreateSlider({
 		Name = 'Boost Speed',
@@ -1885,7 +1885,7 @@ run(function()
 		Max = 1000,
 		Default = 200,
 		Suffix = 'studs/s',
-		Tooltip = 'Target horizontal speed while Velocity Boost is on. Higher = faster, but the server validates POSITION -- very high values can get you rolled back.'
+		Tooltip = 'Target horizontal speed for Velocity Boost. Higher = faster, but the server checks position -- very high can rollback.'
 	})
 end)
 
@@ -1918,7 +1918,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Drive normally even with popped tires -- forces the chassis AreTiresPopped flag off each frame so you never spin out or slow down. Client physics only.'
+		Tooltip = 'Drive normally on popped tires -- forces the AreTiresPopped flag off each frame. Client physics only.'
 	})
 end)
 
@@ -1949,7 +1949,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Maximum grip (no skidding/drifting away) and prevents your car from flipping. Pins the chassis Traction and clears its upside-down timer. Client physics only.'
+		Tooltip = 'Max grip (no skidding) and prevents flipping. Pins chassis Traction and clears the upside-down timer. Client physics only.'
 	})
 end)
 
@@ -1983,7 +1983,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Keeps your tires repaired to full health so they can never stay popped (refills the VehicleTireHealth attribute). Pair with Ignore Popped Tires.'
+		Tooltip = 'Keeps tires at full health so they never stay popped. Pair with Ignore Popped Tires.'
 	})
 end)
 
@@ -2166,7 +2166,7 @@ run(function()
 				stopFly()
 			end
 		end,
-		Tooltip = 'Fly your car with WASD + E (up) / Q (down), camera-relative. (Space is the car jump/exit, so E/Q are used instead.) Velocity mode is smooth and lower-risk; CFrame is snappier but jumps position so the anticheat may roll you back. Use lower speeds.'
+		Tooltip = 'Fly your car with WASD + E/Q (up/down), camera-relative. Velocity is smooth/low-risk; CFrame is snappier but can rollback. Use low speeds.'
 	})
 	FlyMode = VehicleFly:CreateDropdown({
 		Name = 'Mode',
@@ -2179,7 +2179,7 @@ run(function()
 		Max = 2000,
 		Default = 250,
 		Suffix = function(val) return val == 1 and 'stud/s' or 'studs/s' end,
-		Tooltip = 'How fast the car flies. Lower is less likely to trip the position anticheat; very high values will likely get rolled back.'
+		Tooltip = 'How fast the car flies. Lower trips the position anticheat less; very high will likely rollback.'
 	})
 end)
 
@@ -2210,7 +2210,7 @@ run(function()
 				until not InfiniteJetpack.Enabled
 			end
 		end,
-		Tooltip = 'Keeps your jetpack fuel topped up so it never runs out. Local fuel state only (no remote), so the anticheat does not flag it.'
+		Tooltip = 'Keeps jetpack fuel topped up so it never runs out. Local state only -- anticheat-safe.'
 	})
 end)
 
@@ -2713,7 +2713,7 @@ run(function()
 				detach()
 			end
 		end,
-		Tooltip = 'Police bounty-hunter: flies your car to the highest-bounty criminal, gets out, auto-equips Handcuffs, and arrests them -- build-proof (no obfuscated remotes). Set up once: join Police, spawn a car, get in. Server-hop on empty servers + auto-join/spawn come next.'
+		Tooltip = 'Flies your car to the highest-bounty criminal, gets out, equips Handcuffs and arrests them. Setup: join Police, spawn a car, get in.'
 	})
 
 	Bot:Lock('Auto Arrest Bot is currently being reworked and is not functional.')
@@ -2722,13 +2722,13 @@ run(function()
 		Tooltip = 'Only chase criminals with at least this much bounty.' })
 	FlySpeed = Bot:CreateSlider({ Name = 'Fly Speed', Min = 50, Max = 5000, Default = 2000,
 		Suffix = function(v) return v == 1 and 'stud/s' or 'studs/s' end,
-		Tooltip = 'How fast the car flies to the target -- crank it for faster cycles. It auto-slows as it nears the target so it does not overshoot.' })
+		Tooltip = 'How fast the car flies to the target -- higher = faster cycles. Auto-slows near the target so it won\'t overshoot.' })
 	ExitDist = Bot:CreateSlider({ Name = 'Exit Distance', Min = 8, Max = 80, Default = 25, Suffix = 'studs',
 		Tooltip = 'How close (horizontally) the car gets above the target before you bail out and drop on foot.' })
 	CruiseHeight = Bot:CreateSlider({ Name = 'Cruise Height', Min = 50, Max = 600, Default = 150, Suffix = 'studs',
-		Tooltip = 'How high the car climbs to clear buildings. LOWER it if climbing gets reset by the anti-cheat; raise it if you clip tall towers.' })
+		Tooltip = 'How high the car climbs to clear buildings. Lower if the anticheat resets climbing; raise if you clip tall towers.' })
 	HoldTime = Bot:CreateSlider({ Name = 'Hold Time', Min = 1, Max = 15, Default = 5, Suffix = 's',
-		Tooltip = 'Stay committed to one criminal for at least this long before giving up and moving to another (the skipped one is parked briefly so it does not instantly re-lock).' })
+		Tooltip = 'Stay on one criminal at least this long before switching (the skipped one is parked briefly to avoid instant re-lock).' })
 	Notify = Bot:CreateToggle({ Name = 'Notify', Default = true,
 		Tooltip = 'Status messages (join police / equip cuffs / no targets).' })
 end)

@@ -304,7 +304,7 @@ run(function()
 				clearAll()
 			end
 		end,
-		Tooltip = 'Highlights players by role -- Murderer red, Sheriff blue, Innocent green (from the knife/gun tool). Client-side render only.'
+		Tooltip = 'Highlights players by role -- Murderer red, Sheriff blue, Innocent green. Client-side render only.'
 	})
 	ShowName = RoleESP:CreateToggle({ Name = 'Show Name', Default = true })
 	ShowInnocents = RoleESP:CreateToggle({ Name = 'Show Innocents', Default = false,
@@ -366,7 +366,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Collects every coin on the map automatically (touch-collect via firetouchinterest, no teleport when available). Coin/XP farm.'
+		Tooltip = 'Collects every coin on the map (touch-collect, no teleport when possible). Coin/XP farm.'
 	})
 	Range = AutoCollect:CreateSlider({ Name = 'Range', Min = 50, Max = 2000, Default = 2000, Suffix = 'studs',
 		Tooltip = 'Only collect coins within this range of you.' })
@@ -410,7 +410,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'While you are the Sheriff, auto-aims and fires at the known murderer through the real mouse input. Pair with Silent Aim for guaranteed hits.'
+		Tooltip = 'As Sheriff, auto-aims and fires at the known murderer via real mouse input. Pair with Silent Aim for guaranteed hits.'
 	})
 	FireRate = AutoShoot:CreateSlider({ Name = 'Fire Rate', Min = 1, Max = 10, Default = 3, Suffix = '/s',
 		Tooltip = 'Max shots per second.' })
@@ -465,7 +465,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'While you are the Murderer, auto-stabs the nearest player in range through the real mouse input. Set Range to your knife reach.'
+		Tooltip = 'As Murderer, auto-stabs the nearest player in range via real mouse input. Set Range to your knife reach.'
 	})
 	Range = KillAura:CreateSlider({ Name = 'Range', Min = 6, Max = 30, Default = 14, Suffix = 'studs',
 		Tooltip = 'Knife reach -- how close a victim must be before it strikes.' })

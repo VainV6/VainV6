@@ -192,7 +192,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Upgrades the tax tier and defence of every tile you own, cheapest first, only when you can afford it -- and always keeps your money/manpower reserve untouched. New tiles from captured countries are included automatically.'
+		Tooltip = 'Upgrades tax tier and defence of every owned tile, cheapest first, only when affordable -- always keeping your reserve. New tiles included automatically.'
 	})
 
 	UpTier = AutoUpgrade:CreateToggle({
@@ -227,7 +227,7 @@ run(function()
 		Max = 30,
 		Default = 5,
 		Suffix = 'sec',
-		Tooltip = 'How often to re-sweep -- catches newly captured tiles and continues upgrading once income tops you back up.'
+		Tooltip = 'How often to re-sweep -- catches newly captured tiles and resumes upgrading once income recovers.'
 	})
 	Notify = AutoUpgrade:CreateToggle({
 		Name = 'Notify',
@@ -309,7 +309,7 @@ run(function()
 				toggleAll(false)
 			end
 		end,
-		Tooltip = 'Enables auto-capture on all your soldiers so they keep expanding into adjacent tiles automatically. Re-applies every 10s to catch new units.'
+		Tooltip = 'Enables auto-capture on all your soldiers so they keep expanding into adjacent tiles. Re-applies every 10s to catch new units.'
 	})
 	Mode = AutoCapture:CreateDropdown({
 		Name = 'Mode',
@@ -405,7 +405,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Live strategic intel from CountryRegistry: the strongest powers (money / population / tiles) and your own standing & rank. Refreshes on an interval.'
+		Tooltip = 'Live intel from CountryRegistry: strongest powers (money/pop/tiles) and your own rank. Refreshes on an interval.'
 	})
 	ShowTop = Intel:CreateToggle({ Name = 'Top Powers', Default = true, Tooltip = 'Show the 5 strongest countries by money.' })
 	ShowMine = Intel:CreateToggle({ Name = 'My Stats', Default = true, Tooltip = 'Show your country: money / manpower / population / tiles and global money rank.' })
@@ -516,7 +516,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Justifies and declares war on every country in your target list (or everyone on the server with Target All). Keeps retrying on the interval until all targets are at war.'
+		Tooltip = 'Justifies and declares war on every country in your target list (or everyone, with Target All). Retries each interval until all are at war.'
 	})
 	TargetAll = AutoWar:CreateToggle({ Name = 'Target All', Default = false,
 		Tooltip = 'Ignore the target list and justify+declare on EVERY other country currently in the server.' })
@@ -727,7 +727,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Stations troops on your border tiles and emergency-reinforces any owned tile under attack. Only spawns on tiles you actually own (skips occupied territory) and never moves onto enemy land.'
+		Tooltip = 'Stations troops on your border tiles and reinforces any owned tile under attack. Only spawns on owned, unoccupied tiles -- never enemy land.'
 	})
 	UnitType = AutoDefense:CreateDropdown({ Name = 'Unit',
 		List = { 'Soldier', 'Tank', 'Artillery', 'AntiAircraft' }, Default = 'Soldier' })
@@ -821,7 +821,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Automatically trains your chosen unit on your capital (or any owned tile) every interval, as long as you can afford it and stay above your reserves.'
+		Tooltip = 'Trains your chosen unit on your capital (or any owned tile) each interval, while affordable and above reserves.'
 	})
 	UnitType = AutoTrain:CreateDropdown({
 		Name = 'Unit Type',
@@ -835,7 +835,7 @@ run(function()
 	ManpowerReserve = AutoTrain:CreateSlider({ Name = 'Manpower Reserve', Min = 0, Max = 1000, Default = 20, Suffix = 'K',
 		Tooltip = 'Never spend manpower below this.' })
 	Interval = AutoTrain:CreateSlider({ Name = 'Interval', Min = 1, Max = 60, Default = 1, Suffix = 'sec',
-		Tooltip = 'How often to check if the tile is free and queue the next batch. Keep at 1s to re-queue instantly after the previous spawn finishes.' })
+		Tooltip = 'How often to check the tile is free and queue the next batch. 1s re-queues instantly after a spawn finishes.' })
 	Notify = AutoTrain:CreateToggle({ Name = 'Notify', Default = false,
 		Tooltip = 'Show a notification each time a batch is trained.' })
 end)

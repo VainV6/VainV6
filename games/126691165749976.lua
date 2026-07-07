@@ -322,7 +322,7 @@ run(function()
 				if Hooked then Hooked = nil end
 			end
 		end,
-		Tooltip = 'Aims at the highest-priority ENEMY (skips teammates, friends, and anyone not in combat with you). Because this game hides its gun controller, aim is applied via the camera -- use Smoothness > 1 to make it ease rather than snap. Tune FOV, priority and prediction below.'
+		Tooltip = 'Aims at the highest-priority enemy (skips teammates/friends/non-combatants). Aim is camera-based (this game hides its gun controller) -- use Smoothness > 1 to ease.'
 	})
 	Target = Aimbot:CreateTargets({Players = true})
 	AimPart = Aimbot:CreateDropdown({
@@ -357,7 +357,7 @@ run(function()
 		Default = 0,
 		Decimal = 100,
 		Suffix = function(val) return val == 0 and 'off' or 'x' end,
-		Tooltip = 'Lead a moving target by their velocity (helps land projectiles on strafing enemies). 0 = aim straight.'
+		Tooltip = 'Lead a moving target by their velocity (helps land projectiles on strafers). 0 = aim straight.'
 	})
 	Smoothness = Aimbot:CreateSlider({
 		Name = 'Smoothness',
@@ -369,12 +369,12 @@ run(function()
 	OnlyInCombat = Aimbot:CreateToggle({
 		Name = 'Only In-Combat',
 		Default = true,
-		Tooltip = 'Only target players who are actually in combat with you (the red chest icon). This is what stops the aimbot from tracking your teammate / bystanders. Turn off for free-for-all.'
+		Tooltip = 'Only target players in combat with you (red chest icon). Stops the aimbot tracking teammates/bystanders. Off for free-for-all.'
 	})
 	Walls = Aimbot:CreateToggle({
 		Name = 'Target Through Walls',
 		Default = false,
-		Tooltip = 'OFF (default) = only lock targets you have line-of-sight to (no aiming through walls). ON = lock targets even behind cover.'
+		Tooltip = 'Off (default) = only lock targets you can see (no wallbang). On = lock through cover.'
 	})
 end)
 
@@ -465,7 +465,7 @@ run(function()
 				end))
 			end
 		end,
-		Tooltip = 'Auto-presses F to block/parry the instant a projectile is about to hit you. Detects incoming shots physically, so it survives game updates.'
+		Tooltip = 'Auto-presses F to block/parry the instant a projectile is about to hit. Detects shots physically, so it survives updates.'
 	})
 	BlockWindow = AutoBlock:CreateSlider({
 		Name = 'React Window',
@@ -473,7 +473,7 @@ run(function()
 		Max = 500,
 		Default = 200,
 		Suffix = function(val) return 'ms' end,
-		Tooltip = 'How early before impact to block. Higher = blocks sooner (safer but may block too early); lower = last-instant parry timing.'
+		Tooltip = 'How early before impact to block. Higher = sooner (safer, may block early); lower = last-instant parry.'
 	})
 	MinSpeed = AutoBlock:CreateSlider({
 		Name = 'Min Shot Speed',
@@ -481,7 +481,7 @@ run(function()
 		Max = 300,
 		Default = 60,
 		Suffix = function(val) return 'st/s' end,
-		Tooltip = 'Ignore slow-moving parts below this speed (prevents false blocks on debris). Lower if fast shots are getting missed.'
+		Tooltip = 'Ignore parts slower than this (prevents false blocks on debris). Lower if fast shots get missed.'
 	})
 end)
 
@@ -549,7 +549,7 @@ run(function()
 				end))
 			end
 		end,
-		Tooltip = 'Sidesteps perpendicular to an incoming shot at the last moment so it misses, then lets you keep fighting. Subtle nudge, no teleport.'
+		Tooltip = 'Sidesteps perpendicular to an incoming shot at the last moment so it misses, then lets you keep fighting. No teleport.'
 	})
 	DodgePower = AutoDodge:CreateSlider({
 		Name = 'Dodge Power',
@@ -652,7 +652,7 @@ run(function()
 				end))
 			end
 		end,
-		Tooltip = 'Taps F on the tightest timing to parry incoming bullets -- and optionally enemy melee lunges. The precise version of Auto Block. (Assumes Parry is bound to F.)'
+		Tooltip = 'Taps F on the tightest timing to parry bullets (and optionally melee lunges). The precise Auto Block. Assumes Parry is on F.'
 	})
 	ParryRange = AutoParry:CreateSlider({
 		Name = 'Timing Window',
@@ -698,7 +698,7 @@ run(function()
 				end))
 			end
 		end,
-		Tooltip = 'Snaps your facing onto the nearest enemy in melee range so swings land. Optionally auto-swings (LMB) when an enemy is close.'
+		Tooltip = 'Snaps your facing onto the nearest enemy in melee range so swings land. Optionally auto-swings (LMB) when close.'
 	})
 	MeleeRange = MeleeAimbot:CreateSlider({
 		Name = 'Melee Range',
@@ -745,7 +745,7 @@ run(function()
 				end))
 			end
 		end,
-		Tooltip = 'Auto-aims your grapple (RMB) at the nearest enemy and fires it to yank you into melee range. Only fires when there is distance to close.'
+		Tooltip = 'Auto-aims your grapple (RMB) at the nearest enemy and fires to pull you into melee. Only when there\'s distance to close.'
 	})
 	GrappleRange = AutoGrapple:CreateSlider({
 		Name = 'Grapple Range',
@@ -798,7 +798,7 @@ run(function()
 				end))
 			end
 		end,
-		Tooltip = 'Auto-fires your gun (Q) the moment an ENEMY is under your crosshair. Skips teammates/friends via the same enemy filter as the aimbot.'
+		Tooltip = 'Auto-fires (Q) the moment an enemy is under your crosshair. Skips teammates/friends via the aimbot\'s enemy filter.'
 	})
 	TrigDelay = Triggerbot:CreateSlider({
 		Name = 'Fire Delay',
@@ -851,7 +851,7 @@ run(function()
 				holdKey(Enum.KeyCode.Space, false)
 			end
 		end,
-		Tooltip = 'Movement exploits (this game has NO speed limit): infinite wallrun, dash spam, and a camera-relative speed boost. Pure client velocity/input.'
+		Tooltip = 'Movement exploits (no speed limit here): infinite wallrun, dash spam, camera-relative speed boost. Pure client input.'
 	})
 	WallrunHold = Movement:CreateToggle({
 		Name = 'Infinite Wallrun',
@@ -872,7 +872,7 @@ run(function()
 	SpeedBoost = Movement:CreateToggle({
 		Name = 'Speed Boost',
 		Default = false,
-		Tooltip = 'Adds velocity in your movement direction. No speed limit in this game, but big values may still desync -- keep it sane.'
+		Tooltip = 'Adds velocity in your movement direction. No speed limit here, but big values may desync -- keep it sane.'
 	})
 	SpeedValue = Movement:CreateSlider({
 		Name = 'Speed',
@@ -938,7 +938,7 @@ run(function()
 				clearAll()
 			end
 		end,
-		Tooltip = 'Chams (highlight) on ENEMIES only -- alive players in combat with you. Teammates, friends and bystanders are never shown. Follows the live in-combat state.'
+		Tooltip = 'Chams on enemies only -- alive players in combat with you. Follows live in-combat state; never teammates/friends.'
 	})
 	FillColor = EnemyChams:CreateColorSlider({
 		Name = 'Fill Color',

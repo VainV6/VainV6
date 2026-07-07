@@ -39,6 +39,7 @@ local mainapi = {
 				'[feature] BedWars — Bed Protector: added a "Place Speed" slider (blocks per second) to control how fast it places blocks around your bed.',
 
 				-- ── FIXES & IMPROVEMENTS ──────────────────────────────────────
+				'[fix] UI — trimmed overly long module tooltips across every game down to the essential info so they fit on screen, and cut redundant caveats (e.g. Chat Reveal no longer explains which chats it can\'t show).',
 			},
 		},
 		{
@@ -7779,7 +7780,7 @@ guipane:CreateToggle({
 guipane:CreateToggle({
 	Name = 'Favourites category',
 	Default = false,
-	Tooltip = 'Moves favourited modules into a separate Favourites category instead of pinning them to the top of their own category',
+	Tooltip = 'Puts favourited modules in a separate Favourites category instead of pinning them to the top.',
 	Function = function(callback)
 		mainapi:SetFavouritesCategory(callback)
 	end

@@ -313,7 +313,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Continuously recruits the chosen unit whenever you can afford it and have space. Never breaks the cost/space rules (so the server accepts it) -- it just produces non-stop.'
+		Tooltip = 'Continuously recruits the chosen unit whenever you can afford it and have space. Never breaks cost/space rules, so the server accepts it.'
 	})
 	UnitChoice = AutoSpawn:CreateDropdown({
 		Name = 'Unit',
@@ -349,7 +349,7 @@ run(function()
 				end)
 			end
 		end,
-		Tooltip = 'Keeps firing Upgrade on all your buildings; the server applies it whenever it is affordable/valid. Snowballs your base automatically.'
+		Tooltip = 'Keeps firing Upgrade on all your buildings; the server applies it when affordable. Snowballs your base automatically.'
 	})
 end)
 
