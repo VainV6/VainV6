@@ -15318,14 +15318,54 @@ run(function()
     
     local BreakSpeed
     local PlaceMode
-    local PlaceDelay
+    local PlaceSpeed
+    local Duration
+    local Priority
+    local NoSwitch
+    local Legit
     local Bedfinder
     local LimitItem
     local UseBlacklist
     local Blacklist
     
+    -- Face-adjacency support for the "Legit" toggle: a valid placement must
+    -- touch an existing block (placed this run or already in the world) or the
+    -- ground on a full face -- never diagonally or floating.
+    local FACE_OFFSETS = {
+    	Vector3.new(3, 0, 0), Vector3.new(-3, 0, 0),
+    	Vector3.new(0, 3, 0), Vector3.new(0, -3, 0),
+    	Vector3.new(0, 0, 3), Vector3.new(0, 0, -3),
+    }
+    local placedThisRun = {}
+    local function posKey(p)
+    	local r = roundPos(p)
+    	return r.X .. '_' .. r.Y .. '_' .. r.Z
+    end
+    local function hasFaceSupport(pos)
+    	for _, off in FACE_OFFSETS do
+    		local n = pos + off
+    		if placedThisRun[posKey(n)] or getPlacedBlock(n) then
+    			return true
+    		end
+    	end
+    	local down = workspace:Raycast(pos + Vector3.new(0, 1.4, 0), Vector3.new(0, -3.2, 0), rayCheck)
+    	return down ~= nil and down.Instance ~= nil
+    end
+
     local function isBlacklisted(itemType)
     	return UseBlacklist and UseBlacklist.Enabled and Blacklist and table.find(Blacklist.ListEnabled, itemType)
+    end
+
+    local function matchesPriority(itemType)
+    	local p = Priority and Priority.Value
+    	if not p or p == 'None' or not itemType then return false end
+    	local t = tostring(itemType):lower()
+    	if p == 'Wool' then return t:find('wool') ~= nil end
+    	if p == 'Wood' then return t:find('wood') ~= nil or t:find('plank') ~= nil end
+    	if p == 'Stone' then return t:find('stone') ~= nil or t == 'andesite' end
+    	if p == 'Obsidian' then return t:find('obsidian') ~= nil end
+    	if p == 'Ceramic' then return t:find('ceramic') ~= nil end
+    	return false
     end
     
     local function getBlocks()
@@ -15350,8 +15390,20 @@ run(function()
     		end
     	end
     	table.sort(blocks, function(a, b)
+    		local pa, pb = matchesPriority(a[1]), matchesPriority(b[1])
+    		if pa ~= pb then return pa end
     		return a[2] > b[2]
     	end)
+    	if NoSwitch and NoSwitch.Enabled then
+    		-- lock to a single block type; if a Priority is set but you have none,
+    		-- leave the list empty so block-in stops rather than switching.
+    		if Priority and Priority.Value and Priority.Value ~= 'None' then
+    			local first = blocks[1]
+    			blocks = (first and matchesPriority(first[1])) and { first } or {}
+    		elseif #blocks > 1 then
+    			blocks = { blocks[1] }
+    		end
+    	end
     	return blocks
     end
     
@@ -15467,41 +15519,52 @@ run(function()
     						end
     					end
     
-    					local blocks = getBlocks()
-    					for i, block in blocks do
+    					table.clear(placedThisRun)
+    					local endTime = tick() + (Duration and Duration.Value or 0)
+    					repeat
     						if not BlockIn.Enabled or not entitylib.isAlive then
     							break
     						end
-    						if (block[4] or 0) <= 0 then
-    							continue
+    						selfpos = entitylib.character.RootPart.Position
+    						local blocks = getBlocks()
+    						if #blocks < 1 then
+    							notif('BlockIn', 'Missing blocks', 4, 'warning')
+    							break
     						end
-    						for index, v in store.inventory.hotbar do
-    							if v.item and v.item.tool == block[3] and index ~= (store.inventory.hotbarSlot + 1) then
-    								hotbarSwitch(index - 1)
-    								break
-    							end
-    						end
-    						local pattern = getPyramid()
-    
-    						for i2, pos in pattern do
+    						for i, block in blocks do
     							if not BlockIn.Enabled or not entitylib.isAlive then
     								break
     							end
-    							if getPlacedBlock(selfpos + pos) and i2 ~= 10 then
+    							if (block[4] or 0) <= 0 then
     								continue
     							end
-    							task.wait()
-    							task.spawn(bedwars.placeBlock, selfpos + pos, block[1], true)
-    							local delay = PlaceDelay:GetRandomValue()
-    							if delay > 0 then
-    								task.wait(delay)
+    							for index, v in store.inventory.hotbar do
+    								if v.item and v.item.tool == block[3] and index ~= (store.inventory.hotbarSlot + 1) then
+    									hotbarSwitch(index - 1)
+    									break
+    								end
+    							end
+    							local pattern = getPyramid()
+    							for i2, pos in pattern do
+    								if not BlockIn.Enabled or not entitylib.isAlive then
+    									break
+    								end
+    								local placePos = selfpos + pos
+    								if getPlacedBlock(placePos) and i2 ~= 10 then
+    									continue
+    								end
+    								if Legit and Legit.Enabled and not hasFaceSupport(placePos) then
+    									continue
+    								end
+    								task.spawn(bedwars.placeBlock, placePos, block[1], true)
+    								placedThisRun[posKey(placePos)] = true
+    								task.wait(1 / (PlaceSpeed and PlaceSpeed.Value or 10))
     							end
     						end
-    					end
-    
-    					if #blocks < 1 then
-    						notif('BlockIn', 'Missing blocks', 4, 'warning')
-    					end
+    						if tick() < endTime then
+    							task.wait(0.1)
+    						end
+    					until tick() >= endTime or not BlockIn.Enabled or not entitylib.isAlive
     					bedwars.SharedConstants.BLOCK_PLACE_CPS = oldPlaceCPS or 12
     				end
     			end
@@ -15532,13 +15595,35 @@ run(function()
     		Smart = 'Adjusts placement timing based on server response to reduce rejections',
     	},
     })
-    PlaceDelay = BlockIn:CreateTwoSlider({
-    	Name = 'Place Delay',
+    PlaceSpeed = BlockIn:CreateSlider({
+    	Name = 'Place Speed',
+    	Tooltip = 'How many blocks to place per second (higher = faster). Placing too fast can trip server rate limits.',
+    	Min = 1,
+    	Max = 20,
+    	Default = 10,
+    	Suffix = ' blocks/s',
+    })
+    Duration = BlockIn:CreateSlider({
+    	Name = 'Duration',
+    	Tooltip = 'Keep the box up for this long, re-placing any blocks that get broken. 0 = place once and stop.',
     	Min = 0,
-    	Max = 5,
-    	DefaultMin = 0.07,
-    	DefaultMax = 0.1,
-    	Decimal = 5,
+    	Max = 30,
+    	Default = 0,
+    	Suffix = 's',
+    })
+    Priority = BlockIn:CreateDropdown({
+    	Name = 'Priority Block',
+    	Tooltip = 'Preferred block placed first (wool is always your team colour). Others are still used as fallback by strength, unless No Switch is on.',
+    	List = { 'None', 'Wool', 'Wood', 'Stone', 'Obsidian', 'Ceramic' },
+    	Default = 'None',
+    })
+    NoSwitch = BlockIn:CreateToggle({
+    	Name = 'No Switch',
+    	Tooltip = 'Use only one block type (your Priority Block, or the strongest if none). If it runs out mid block-in, stop instead of switching.',
+    })
+    Legit = BlockIn:CreateToggle({
+    	Name = 'Legit',
+    	Tooltip = 'Only valid placements: each block must sit flush against an existing block or the ground -- no diagonal or floating blocks.',
     })
     Bedfinder = BlockIn:CreateToggle({ Name = 'Bed finder' , Tooltip = 'Automatically detects and targets the nearest enemy bed as the block-in destination'})
     LimitItem = BlockIn:CreateToggle({

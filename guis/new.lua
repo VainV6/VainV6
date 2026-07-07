@@ -25,6 +25,7 @@ local mainapi = {
 		['Storage ESP'] = 'UPD',
 		['Name Tags'] = 'UPD',
 		['Bed Protector'] = 'UPD',
+		['Block-In'] = 'UPD',
 	},
 	-- Patch notes shown in the changelog popup (newest first). Each entry is
 	-- { Version = '...', Date = '...', Changes = { 'line', ... } }.
@@ -37,6 +38,7 @@ local mainapi = {
 				-- ── FEATURES ──────────────────────────────────────────────────
 				'[feature] Commands — new ;invert command reverses a target\'s WASD movement (W↔S, A↔D); run ;invert on them again to restore normal controls. Works with a name, "me", or "all".',
 				'[feature] BedWars — Bed Protector: added a "Place Speed" slider (blocks per second) to control how fast it places blocks around your bed.',
+				'[feature] BedWars — Block-In: added a Place Speed slider (blocks/sec), a Duration slider (keep the box up and re-place broken blocks for N seconds; 0 = place once), a Priority Block dropdown (wool/wood/stone/obsidian/ceramic — wool is your team colour), a No Switch toggle (use only one block type and stop instead of switching when it runs out), and a Legit toggle (only valid face-adjacent placements — no diagonal or floating blocks).',
 
 				-- ── FIXES & IMPROVEMENTS ──────────────────────────────────────
 				'[fix] UI — trimmed overly long module tooltips across every game down to the essential info so they fit on screen, and cut redundant caveats (e.g. Chat Reveal no longer explains which chats it can\'t show).',
