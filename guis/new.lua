@@ -45,6 +45,7 @@ local mainapi = {
 				'[BedWars][fix] Removed GrandKillaura (normal Killaura covers it)',
 				'[BedWars][fix] Fixed Nuker mining the bed instead of breaking through the bed protection first',
 				'[BedWars][fix] Renamed Loot Display to Inventory ESP',
+				'[BedWars][fix] Fixed target/friend "in the server" notifications firing twice in BedWars',
 				'[Commands][feature] Added ;invert to reverse a target\'s WASD movement (run it again to undo)',
 				'[Commands][feature] Added ;scramblekeys to shuffle a target\'s BedWars keybinds until they reset them',
 				'[Interface][fix] Trimmed overly long module tooltips across every game',

@@ -478,47 +478,14 @@ end
 
 local function notif(...) return vain:CreateNotification(...) end
 
--- ── Target / Friend presence + persistent target highlight ────────────────────
--- Notifies when a listed target or friend is in the server (on load, on join, and
--- when a name is added to a list while that player is already present), and keeps a
--- non-through-walls Highlight on every target the whole time they're a target.
+-- ── Persistent target highlight ──────────────────────────────────
+-- Keeps a non-through-walls Highlight on every target the whole time they're a
+-- target. Presence toasts ("X is in the server" / joined / left) are owned by the
+-- universal script, so they fire once and respect the notification toggles.
 run(function()
-	local notifiedTargets, notifiedFriends = {}, {}
 	local highlights = {} -- [entity] = Highlight
-
 	local TARGET_COLOR = Color3.fromRGB(255, 60, 60)
 
-	local function targetsCat() return vain.Categories.Targets end
-	local function friendsCat() return vain.Categories.Friends end
-
-	-- presence notifications -------------------------------------------------
-	local function checkPresence(plr)
-		if not plr or plr == lplr then return end
-		if isTarget(plr) then
-			if not notifiedTargets[plr.Name] then
-				notifiedTargets[plr.Name] = true
-				notif('Targets', string.format('Target %s is in the server', plr.DisplayName ~= plr.Name and string.format('%s (%s)', plr.DisplayName, plr.Name) or plr.Name), 8, 'warning')
-			end
-		else
-			notifiedTargets[plr.Name] = nil
-		end
-		if isFriend(plr) then
-			if not notifiedFriends[plr.Name] then
-				notifiedFriends[plr.Name] = true
-				notif('Friends', string.format('Friend %s is in the server', plr.DisplayName ~= plr.Name and string.format('%s (%s)', plr.DisplayName, plr.Name) or plr.Name), 8, 'success')
-			end
-		else
-			notifiedFriends[plr.Name] = nil
-		end
-	end
-
-	local function scanPresence()
-		for _, plr in playersService:GetPlayers() do
-			checkPresence(plr)
-		end
-	end
-
-	-- persistent target highlight (NOT through walls) ------------------------
 	local function clearHighlight(ent)
 		local hl = highlights[ent]
 		if hl then
@@ -562,29 +529,12 @@ run(function()
 	vain:Clean(entitylib.Events.EntityAdded:Connect(refreshHighlight))
 	vain:Clean(entitylib.Events.EntityRemoved:Connect(clearHighlight))
 
-	-- react to list edits: re-scan presence + re-sync highlights
-	local function onListChanged()
-		scanPresence()
-		refreshAll()
-	end
-	if targetsCat() and targetsCat().Update then
-		vain:Clean(targetsCat().Update.Event:Connect(onListChanged))
-	end
-	if friendsCat() and friendsCat().Update then
-		vain:Clean(friendsCat().Update.Event:Connect(onListChanged))
+	-- re-sync highlights when the Targets list changes
+	if vain.Categories.Targets and vain.Categories.Targets.Update then
+		vain:Clean(vain.Categories.Targets.Update.Event:Connect(refreshAll))
 	end
 
-	-- presence on join / leave
-	vain:Clean(playersService.PlayerAdded:Connect(function(plr)
-		task.defer(checkPresence, plr)
-	end))
-	vain:Clean(playersService.PlayerRemoving:Connect(function(plr)
-		notifiedTargets[plr.Name] = nil
-		notifiedFriends[plr.Name] = nil
-	end))
-
-	-- initial sweep for players already in the server at load
-	scanPresence()
+	-- initial sweep for entities already present at load
 	refreshAll()
 end)
 
