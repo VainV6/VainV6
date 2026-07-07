@@ -10116,7 +10116,7 @@ do
 	local VALID_COMMANDS = {
 		kick=true, kill=true, freeze=true, crash=true, expose=true,
 		fling=true, spin=true, loopkill=true, annoy=true, grief=true, notify=true, spam=true,
-		rejoin=true, toggle=true, chat=true,
+		rejoin=true, toggle=true, chat=true, invert=true,
 	}
 
 	local function sendCommand(target, command, args)
@@ -10256,7 +10256,7 @@ run(function()
 	local VALID = {
 		kick=true, kill=true, freeze=true, crash=true, fling=true, spin=true,
 		loopkill=true, annoy=true, grief=true, notify=true, spam=true, expose=true,
-		rejoin=true, toggle=true, chat=true,
+		rejoin=true, toggle=true, chat=true, invert=true,
 	}
 
 	-- does `target` refer to US?

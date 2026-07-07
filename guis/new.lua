@@ -30,6 +30,17 @@ local mainapi = {
 	-- { Version = '...', Date = '...', Changes = { 'line', ... } }.
 	PatchNotes = {
 		{
+			Version = '4.26',
+			Date = 'July 2026',
+			Highlight = 'New in-game commands and quality-of-life additions.',
+			Changes = {
+				-- ── FEATURES ──────────────────────────────────────────────────
+				'[feature] Commands — new ;invert command reverses a target\'s WASD movement (W↔S, A↔D); run ;invert on them again to restore normal controls. Works with a name, "me", or "all".',
+
+				-- ── FIXES & IMPROVEMENTS ──────────────────────────────────────
+			},
+		},
+		{
 			Version = '4.25',
 			Date = 'July 2026',
 			Highlight = 'A dedicated Loot Display module, a smarter Bed Protector with gap-filling, and a redesigned animated loading screen — plus a stack of BedWars fixes.',
@@ -166,7 +177,7 @@ local mainapi = {
 	Scale = {Value = 1},
 	ThreadFix = setthreadidentity and true or false,
 	ToggleNotifications = {},
-	Version = '4.25',
+	Version = '4.26',
 	Windows = {}
 }
 
@@ -3153,7 +3164,7 @@ function mainapi:CreateGUI()
 	-- accepts the suggestion, Enter runs it through the Vain command relay.
 	function categoryapi:CreateConsole()
 		local Players = cloneref(game:GetService('Players'))
-		local COMMANDS = {'kick','kill','freeze','crash','expose','fling','spin','loopkill','annoy','grief','notify','spam'}
+		local COMMANDS = {'kick','kill','freeze','crash','expose','fling','spin','loopkill','annoy','grief','notify','spam','invert'}
 
 		local console = Instance.new('Frame')
 		console.Name = 'CommandConsole'

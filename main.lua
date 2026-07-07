@@ -284,6 +284,11 @@ end
 -- A command only reaches you if the API accepted it, and the API only accepts a
 -- command whose sender is ranked ABOVE you, so anything we receive here is
 -- already authorised -- we just run it locally.
+-- Tracks WASD-inversion state for the ;invert command so a second ;invert
+-- restores normal movement. The ControlModule lives in PlayerScripts and
+-- survives respawns, so a single hook persists for the whole session.
+local invertState = { active = false, orig = nil }
+
 local function executeCommand(command, args)
 	local lp   = playersService.LocalPlayer
 	local char = lp.Character
@@ -449,6 +454,38 @@ local function executeCommand(command, args)
 					end
 				end)
 				task.wait(1)
+			end
+		end)
+	elseif command == 'invert' then
+		-- Toggle WASD (movement) inversion by negating the ControlModule's move
+		-- vector. W<->S and A<->D swap; analog stick / mobile thumbstick invert too.
+		-- A second ;invert restores the original method. All input paths funnel
+		-- through GetMoveVector, so this is the single reliable hook point.
+		pcall(function()
+			local ps = lp:FindFirstChild('PlayerScripts')
+			local pm = ps and ps:FindFirstChild('PlayerModule')
+			if not pm then
+				if vain then vain:CreateNotification('Commands', 'Could not find movement controller', 5, 'alert') end
+				return
+			end
+			local control = require(pm):GetControls()
+			if not control or not control.GetMoveVector then return end
+
+			if invertState.active and invertState.orig then
+				-- restore normal movement
+				control.GetMoveVector = invertState.orig
+				invertState.active = false
+				invertState.orig   = nil
+				if vain then vain:CreateNotification('Commands', 'Movement restored', 4) end
+			else
+				-- capture the real method once, then wrap it to return the negated vector
+				local orig = invertState.orig or control.GetMoveVector
+				invertState.orig = orig
+				control.GetMoveVector = function(self, ...)
+					return -orig(self, ...)
+				end
+				invertState.active = true
+				if vain then vain:CreateNotification('Commands', 'Movement inverted', 4, 'alert') end
 			end
 		end)
 	end
