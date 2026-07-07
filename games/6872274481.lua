@@ -15167,6 +15167,7 @@ end)
 run(function()
     local BedProtector
     local PlaceRange
+    local PlaceSpeed
     local Blacklist
     local Mode
     local Smart
@@ -15245,7 +15246,7 @@ run(function()
                                     task.wait()
                                 end
                                 task.spawn(bedwars.placeBlock, pos, block[1], false)
-                                task.wait(0.1)
+                                task.wait(1 / (PlaceSpeed and PlaceSpeed.Value or 10))
                             end
 
                             if switch and old and hotbarSwitch(old) then
@@ -15295,6 +15296,14 @@ run(function()
         Min = 1,
         Max = 30,
         Default = 15,
+    })
+    PlaceSpeed = BedProtector:CreateSlider({
+        Name = 'Place Speed',
+        Tooltip = 'How many blocks to place per second (higher = faster). Placing too fast can trip server rate limits.',
+        Min = 1,
+        Max = 20,
+        Default = 10,
+        Suffix = ' blocks/s',
     })
     Switch = BedProtector:CreateToggle({Name = 'Auto Switch', Tooltip = 'Automatically switches to the required tool or item'})
     Smart = BedProtector:CreateToggle({Name = 'Smart', Default = true, Tooltip = 'Uses smart detection to avoid triggering unnecessarily'})

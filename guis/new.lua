@@ -36,6 +36,7 @@ local mainapi = {
 			Changes = {
 				-- ── FEATURES ──────────────────────────────────────────────────
 				'[feature] Commands — new ;invert command reverses a target\'s WASD movement (W↔S, A↔D); run ;invert on them again to restore normal controls. Works with a name, "me", or "all".',
+				'[feature] BedWars — Bed Protector: added a "Place Speed" slider (blocks per second) to control how fast it places blocks around your bed.',
 
 				-- ── FIXES & IMPROVEMENTS ──────────────────────────────────────
 			},
