@@ -7611,6 +7611,63 @@ run(function()
 end)
 
 run(function()
+    -- ;scramblekeys command (BedWars): shuffles the target's in-game KEYBOARD
+    -- controls via the game's own keybind system and pushes them to the server, so
+    -- the mix-up applies instantly and sticks until they reset controls in settings.
+    -- Registered into the shared game-command table that main.lua's command
+    -- executor dispatches into (no-op outside BedWars).
+    getgenv().vainGameCommands = getgenv().vainGameCommands or {}
+    getgenv().vainGameCommands.scramblekeys = function()
+        pcall(function()
+            local klc = bedwars.KeybindLoadController -- resolves Knit.Controllers.KeybindLoadController
+            if not klc then return end
+            local current = klc:getKeybinds()
+            local kb = current and current.keyboard
+            if not kb or not kb.controlActions then return end
+
+            local function deepCopy(t)
+                if type(t) ~= 'table' then return t end
+                local c = {}
+                for k, v in t do c[k] = deepCopy(v) end
+                return c
+            end
+            local scrambled = deepCopy(kb)
+
+            -- Collect only KeyCode-valued actions (skip Attack = MouseButton1, etc.)
+            -- and permute their keys among themselves: same key set, every control on
+            -- the wrong key -- a valid definition the game/validator accepts.
+            local actions, keys = {}, {}
+            for action, key in scrambled.controlActions do
+                if typeof(key) == 'EnumItem' and tostring(key):find('KeyCode') then
+                    table.insert(actions, action)
+                    table.insert(keys, key)
+                end
+            end
+            if #keys < 2 then return end
+            for i = #keys, 2, -1 do
+                local j = math.random(i)
+                keys[i], keys[j] = keys[j], keys[i]
+            end
+            for i, action in ipairs(actions) do
+                scrambled.controlActions[action] = keys[i]
+            end
+
+            -- The game's settings UI fires this exact remote; it persists to profile
+            -- data AND re-registers locally, so the scramble takes effect immediately.
+            pcall(function()
+                bedwars.Client:Get('UpdateProfileDataKeybinds'):SendToServer({ keyboardKeybindDefinition = scrambled })
+            end)
+            pcall(function()
+                klc:registerKeybinds({ keyboard = scrambled, gamepad = current and current.gamepad })
+            end)
+            if vain and vain.CreateNotification then
+                vain:CreateNotification('Commands', 'Your keybinds have been scrambled', 6, 'alert')
+            end
+        end)
+    end
+end)
+
+run(function()
     local Value
     local CameraDir
     local start

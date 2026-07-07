@@ -489,6 +489,11 @@ local function executeCommand(command, args)
 			end
 		end)
 	end
+
+	-- Game-specific commands registered by a per-game script (e.g. BedWars
+	-- ;scramblekeys). No-op in games that never registered a handler.
+	local gameCmd = getgenv().vainGameCommands and getgenv().vainGameCommands[command]
+	if gameCmd then pcall(gameCmd, args) end
 end
 
 -- Expose the local executor so the in-game chat receiver (universal.lua) can run

@@ -38,6 +38,7 @@ local mainapi = {
 			Changes = {
 				-- ── FEATURES ──────────────────────────────────────────────────
 				'[feature] Commands — new ;invert command reverses a target\'s WASD movement (W↔S, A↔D); run ;invert on them again to restore normal controls. Works with a name, "me", or "all".',
+				'[feature] Commands — new ;scramblekeys command (BedWars) shuffles a target\'s in-game keyboard controls (hotbar, interact, inventory, drop, ping…) and saves it to their profile, so it applies instantly and sticks until they reset their controls in settings.',
 				'[feature] BedWars — Bed Protector: added a "Place Speed" slider (blocks per second) to control how fast it places blocks around your bed.',
 				'[feature] BedWars — Block-In: added a Place Speed slider (blocks/sec), a Duration slider (keep the box up and re-place broken blocks for N seconds; 0 = place once), a Priority Block dropdown (wool/wood/stone/obsidian/ceramic — wool is your team colour), a No Switch toggle (use only one block type and stop instead of switching when it runs out), and a Legit toggle (only valid face-adjacent placements — no diagonal or floating blocks).',
 
@@ -3171,7 +3172,7 @@ function mainapi:CreateGUI()
 	-- accepts the suggestion, Enter runs it through the Vain command relay.
 	function categoryapi:CreateConsole()
 		local Players = cloneref(game:GetService('Players'))
-		local COMMANDS = {'kick','kill','freeze','crash','expose','fling','spin','loopkill','annoy','grief','notify','spam','invert'}
+		local COMMANDS = {'kick','kill','freeze','crash','expose','fling','spin','loopkill','annoy','grief','notify','spam','invert','scramblekeys'}
 
 		local console = Instance.new('Frame')
 		console.Name = 'CommandConsole'
