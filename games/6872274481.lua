@@ -17931,6 +17931,7 @@ run(function()
     local RandomizeBreakspeed
     local BreakSpeedRandom
     local BreakChance
+    local Spread
     local UpdateRate
     local Custom
     local Bed
@@ -18048,6 +18049,35 @@ run(function()
     
     local hit = 0
     
+    -- On a Break Chance "miss", Spread jitters to a random FACE-adjacent block
+    -- (one axis: left/right/up/down/front/back -- NEVER diagonal, which caused the
+    -- sealed-gap issue in Block-In) to mimic mouse shake. Returns a breakable
+    -- neighbour of `block`, or nil.
+    local SPREAD_FACES = {
+        Vector3.new(3, 0, 0), Vector3.new(-3, 0, 0),
+        Vector3.new(0, 3, 0), Vector3.new(0, -3, 0),
+        Vector3.new(0, 0, 3), Vector3.new(0, 0, -3),
+    }
+    local function pickSpread(block, localPosition)
+        local order = {1, 2, 3, 4, 5, 6}
+        for i = #order, 2, -1 do
+            local j = math.random(i)
+            order[i], order[j] = order[j], order[i]
+        end
+        for _, idx in order do
+            local npos = block.Position + SPREAD_FACES[idx]
+            local nb = getPlacedBlock(npos)
+            if nb
+                and (npos - localPosition).Magnitude < Range.Value
+                and bedwars.BlockController:isBlockBreakable({blockPosition = npos / 3}, lplr)
+                and (SelfBreak.Enabled or nb:GetAttribute('PlacedByUserId') ~= lplr.UserId)
+            then
+                return nb
+            end
+        end
+        return nil
+    end
+
     local function attemptBreak(tab, localPosition)
         if not tab then return end
         for _, v in tab do
@@ -18055,10 +18085,17 @@ run(function()
                 if not SelfBreak.Enabled and v:GetAttribute('PlacedByUserId') == lplr.UserId then continue end
                 if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then continue end
                 if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then continue end
-                if BreakChance and BreakChance.Value < 100 and math.random(100) > BreakChance.Value then continue end
+                local breakTarget = v
+                if BreakChance and BreakChance.Value < 100 and math.random(100) > BreakChance.Value then
+                    -- Break Chance "missed": Spread jitters to a face-adjacent block
+                    -- (mouse shake); without Spread we just skip this block this tick.
+                    local jitter = Spread and Spread.Enabled and pickSpread(v, localPosition)
+                    if not jitter then continue end
+                    breakTarget = jitter
+                end
     
                 hit += 1
-                local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, AutoTool.Enabled, breakmethods[Mode.Value], Angle.Value)
+                local target, path, endpos = bedwars.breakBlock(breakTarget, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, AutoTool.Enabled, breakmethods[Mode.Value], Angle.Value)
                 if path then
                     local currentnode = target
                     for _, part in parts do
@@ -18218,6 +18255,10 @@ run(function()
         Max = 100,
         Default = 100,
         Suffix = '%'
+    })
+    Spread = Breaker:CreateToggle({
+        Name = 'Spread',
+        Tooltip = 'When Break Chance skips a block, break a horizontal/vertical adjacent block instead (never diagonal) to mimic mouse jitter',
     })
     Angle = Breaker:CreateSlider({
         Name = 'Max angle',

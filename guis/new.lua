@@ -40,7 +40,7 @@ local mainapi = {
 			Changes = {
 				'[BedWars][feature] Bed Protector: added a Place Speed slider',
 				'[BedWars][feature] Block-In: added Place Speed, Duration, Priority Block, No Switch and Legit options',
-				'[BedWars][feature] Nuker: added Crosshair and Shortest break priorities, plus Randomize Breakspeed (min/max) and Break Chance options',
+				'[BedWars][feature] Nuker: added Crosshair and Shortest break priorities, plus Randomize Breakspeed (min/max), Break Chance and Spread (jitter to an adjacent block on a miss) options',
 				'[BedWars][fix] Killaura\'s Attackable check now also stops while frozen by Sophia or invincible from Grim Reaper',
 				'[BedWars][fix] Removed GrandKillaura (normal Killaura covers it)',
 				'[BedWars][fix] Fixed Nuker mining the bed instead of breaking through the bed protection first',
