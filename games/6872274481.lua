@@ -724,6 +724,16 @@ local sortmethods, breakmethods = {
 		local pos = (entitylib.isAlive and (entitylib.character.RootPart.Position - Vector3.new(0, 1, 0)) or Vector3.zero)
 		return (pos - Vector3.new(a.Position.X, pos.Y, a.Position.Z)).Magnitude
 	end,
+	Crosshair = function(a)
+		-- prefer blocks nearest your crosshair (least angular deviation from the
+		-- camera look) so you tunnel toward what you're aiming at -- looks legit.
+		local dir = a.Position - gameCamera.CFrame.Position
+		if dir.Magnitude < 0.001 then return 0 end
+		return math.acos(math.clamp(gameCamera.CFrame.LookVector:Dot(dir.Unit), -1, 1))
+	end,
+	Shortest = function()
+		return 1 -- flat cost per block -> fewest blocks to break (most direct)
+	end,
 }
 
 run(function()
@@ -17918,6 +17928,9 @@ run(function()
     local Angle
     local AutoTool
     local BreakSpeed
+    local RandomizeBreakspeed
+    local BreakSpeedRandom
+    local BreakChance
     local UpdateRate
     local Custom
     local Bed
@@ -18042,6 +18055,7 @@ run(function()
                 if not SelfBreak.Enabled and v:GetAttribute('PlacedByUserId') == lplr.UserId then continue end
                 if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then continue end
                 if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then continue end
+                if BreakChance and BreakChance.Value < 100 and math.random(100) > BreakChance.Value then continue end
     
                 hit += 1
                 local target, path, endpos = bedwars.breakBlock(v, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, AutoTool.Enabled, breakmethods[Mode.Value], Angle.Value)
@@ -18056,7 +18070,15 @@ run(function()
                     end
                 end
     
-                task.wait(InstantBreak.Enabled and (store.damageBlockFail > tick() and 4.5 or 0) or BreakSpeed.Value)
+                local breakdelay
+                if InstantBreak.Enabled then
+                    breakdelay = store.damageBlockFail > tick() and 4.5 or 0
+                elseif RandomizeBreakspeed and RandomizeBreakspeed.Enabled then
+                    breakdelay = BreakSpeedRandom:GetRandomValue()
+                else
+                    breakdelay = BreakSpeed.Value
+                end
+                task.wait(breakdelay)
     
                 return true
             end
@@ -18145,11 +18167,12 @@ run(function()
     for i in breakmethods do
         table.insert(methods, i)
     end
+    table.sort(methods)
     Mode = Breaker:CreateDropdown({
         Name = 'Break mode',
-        Tooltip = 'Selects the block-breaking strategy',
+        Tooltip = 'How the Nuker prioritises which block to break (Crosshair = toward your aim, Shortest = fewest blocks)',
         List = methods,
-        Default = methods[1]
+        Default = 'Distance'
     })
     Range = Breaker:CreateSlider({
         Name = 'Break range',
@@ -18169,6 +18192,32 @@ run(function()
         Default = 0.25,
         Decimal = 100,
         Suffix = 'seconds'
+    })
+    RandomizeBreakspeed = Breaker:CreateToggle({
+        Name = 'Randomize Breakspeed',
+        Tooltip = 'Vary the delay between breaks randomly instead of a constant rate, so the timing looks human',
+        Function = function(call)
+            if BreakSpeedRandom and BreakSpeedRandom.Object then BreakSpeedRandom.Object.Visible = call end
+            if BreakSpeed and BreakSpeed.Object then BreakSpeed.Object.Visible = not call end
+        end
+    })
+    BreakSpeedRandom = Breaker:CreateTwoSlider({
+        Name = 'Random Range',
+        Tooltip = 'Random break delay range in seconds (used when Randomize Breakspeed is on)',
+        Min = 0,
+        Max = 0.5,
+        DefaultMin = 0.1,
+        DefaultMax = 0.3,
+        Decimal = 100,
+        Visible = false
+    })
+    BreakChance = Breaker:CreateSlider({
+        Name = 'Break Chance',
+        Tooltip = 'Chance to actually break each eligible block; lower = occasionally skips one, mimicking human misclicks',
+        Min = 1,
+        Max = 100,
+        Default = 100,
+        Suffix = '%'
     })
     Angle = Breaker:CreateSlider({
         Name = 'Max angle',
