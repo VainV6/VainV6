@@ -27,6 +27,7 @@ local mainapi = {
 		['Bed Protector'] = 'UPD',
 		['Block-In'] = 'UPD',
 		['Killaura'] = 'UPD',
+		['Nuker'] = 'UPD',
 	},
 	-- Patch notes shown in the changelog popup (newest first). Each entry is
 	-- { Version = '...', Date = '...', Changes = { 'line', ... } }.
@@ -46,6 +47,7 @@ local mainapi = {
 				'[fix] UI — trimmed overly long module tooltips across every game down to the essential info so they fit on screen, and cut redundant caveats (e.g. Chat Reveal no longer explains which chats it can\'t show).',
 				'[fix] BedWars — Killaura\'s "Attackable check" now also stops attacking while you\'re invincible from Grim Reaper, and more reliably while frozen by Sophia (turn it on to avoid swinging when you can\'t actually deal damage).',
 				'[fix] BedWars — removed GrandKillaura; the normal Killaura module covers everything it did.',
+				'[fix] BedWars — Nuker: when a bed had an air gap sealed inside its protection, it would uselessly mine the bed through the sealed gap. It now detects that the pocket is enclosed and breaks the outer protection first to open a real path, then the bed.',
 			},
 		},
 		{

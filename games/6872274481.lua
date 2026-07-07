@@ -1299,6 +1299,37 @@ run(function()
 			return unpack(cache[blockpos])
 		end
 		local visited, unvisited, distances, air, path = {}, {{0, blockpos}}, {[blockpos] = 0}, {}, {}
+		-- Bed-only: an air cell counts as a real exit only if it's connected to the
+		-- OPEN outside. An enclosed pocket sealed between the bed and its protection
+		-- shell isn't reachable, so we must tunnel the shell instead of "breaking"
+		-- the bed through a sealed gap. Pure block geometry -- no line of sight.
+		local isBedTarget = target and target.Name == 'bed'
+		local airOpenCache = {}
+		local function airIsOpen(startCell)
+			local cached = airOpenCache[startCell]
+			if cached ~= nil then return cached end
+			local seen = {[startCell] = true}
+			local queue, head = {startCell}, 1
+			local open = false
+			while head <= #queue do
+				if head > 300 then open = true break end -- too large to be a sealed pocket
+				local cell = queue[head]
+				head += 1
+				if (cell - blockpos).Magnitude > 18 then -- escaped the shell -> open air
+					open = true
+					break
+				end
+				for _, off in sides do
+					local n = cell + off
+					if not seen[n] and not getPlacedBlock(n) then -- flood through air only
+						seen[n] = true
+						queue[#queue + 1] = n
+					end
+				end
+			end
+			airOpenCache[startCell] = open
+			return open
+		end
 
 		for _ = 1, 10000 do
 			local _, node = next(unvisited)
@@ -1313,7 +1344,9 @@ run(function()
 				local block = getPlacedBlock(side)
 				if not block or block:GetAttribute('NoBreak') or block == target then
 					if not block then
-						air[node[2]] = true
+						if not isBedTarget or airIsOpen(side) then
+							air[node[2]] = true
+						end
 					end
 					continue
 				end
