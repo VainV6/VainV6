@@ -49,6 +49,7 @@ local mainapi = {
 				'[Commands][feature] Added ;invert to reverse a target\'s WASD movement (run it again to undo)',
 				'[Commands][feature] Added ;scramblekeys to shuffle a target\'s BedWars keybinds until they reset them',
 				'[Interface][fix] Trimmed overly long module tooltips across every game',
+				'[Interface][fix] Target and friend "in the server" notifications are always on now (removed the toggles)',
 			},
 		},
 		{
@@ -7796,16 +7797,6 @@ modules:CreateToggle({
 			mainapi.Libraries.entity.refresh()
 		end
 	end
-})
-modules:CreateToggle({
-	Name = 'Friend notifications',
-	Tooltip = 'Notify when someone on your Friends list is in the server (joins/leaves)',
-	Default = true
-})
-modules:CreateToggle({
-	Name = 'Target notifications',
-	Tooltip = 'Notify when someone on your Targets list is in the server (joins/leaves)',
-	Default = true
 })
 
 --[[

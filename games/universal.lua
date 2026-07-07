@@ -547,28 +547,19 @@ run(function()
 		return tostring(ent.TeamColor) ~= 'White' and ent.TeamColor.Color or nil
 	end
 
-	-- Notify when a friend or target joins/leaves. Gated by the System Settings ->
-	-- Modules toggles 'Friend notifications' / 'Target notifications' (default on).
-	local function friendNotifsOn()
-		local opt = vain.Categories.Main.Options['Friend notifications']
-		return opt == nil or opt.Enabled
-	end
-	local function targetNotifsOn()
-		local opt = vain.Categories.Main.Options['Target notifications']
-		return opt == nil or opt.Enabled
-	end
+	-- Notify when a friend or target joins/leaves or is already present. Always on.
 	local function onPlayerAdded(plr)
 		if isFriend(plr) then
-			if friendNotifsOn() then vain:CreateNotification('Friends', plr.Name .. ' joined the server', 8, 'success') end
+			vain:CreateNotification('Friends', plr.Name .. ' joined the server', 8, 'success')
 		elseif isTarget(plr) then
-			if targetNotifsOn() then vain:CreateNotification('Targets', plr.Name .. ' joined the server', 8, 'alert') end
+			vain:CreateNotification('Targets', plr.Name .. ' joined the server', 8, 'alert')
 		end
 	end
 	local function onPlayerRemoving(plr)
 		if isFriend(plr) then
-			if friendNotifsOn() then vain:CreateNotification('Friends', plr.Name .. ' left the server', 8, 'success') end
+			vain:CreateNotification('Friends', plr.Name .. ' left the server', 8, 'success')
 		elseif isTarget(plr) then
-			if targetNotifsOn() then vain:CreateNotification('Targets', plr.Name .. ' left the server', 8, 'alert') end
+			vain:CreateNotification('Targets', plr.Name .. ' left the server', 8, 'alert')
 		end
 	end
 	-- Initial "is in the server" scan. This run() block executes while universal.lua
@@ -581,10 +572,10 @@ run(function()
 			if plr ~= lplr and not announced[plr] then
 				if isFriend(plr) then
 					announced[plr] = true
-					if friendNotifsOn() then vain:CreateNotification('Friends', plr.Name .. ' is in the server', 8, 'success') end
+					vain:CreateNotification('Friends', plr.Name .. ' is in the server', 8, 'success')
 				elseif isTarget(plr) then
 					announced[plr] = true
-					if targetNotifsOn() then vain:CreateNotification('Targets', plr.Name .. ' is in the server', 8, 'alert') end
+					vain:CreateNotification('Targets', plr.Name .. ' is in the server', 8, 'alert')
 				end
 			end
 		end
