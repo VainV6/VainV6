@@ -16,7 +16,7 @@ local mainapi = {
 	-- until the next release edits this list. Set per update by hand (no GitHub
 	-- auto-diff). Keys are exact module names; value is 'NEW' or 'UPD'.
 	ModuleBadges = {
-		['Loot Display'] = 'NEW',
+		['Inventory ESP'] = 'NEW',
 		['Chat Reveal'] = 'NEW',
 		['Cheat Detector'] = 'NEW',
 		['Better Spectating'] = 'NEW',
@@ -44,6 +44,7 @@ local mainapi = {
 				'[BedWars][fix] Killaura\'s Attackable check now also stops while frozen by Sophia or invincible from Grim Reaper',
 				'[BedWars][fix] Removed GrandKillaura (normal Killaura covers it)',
 				'[BedWars][fix] Fixed Nuker mining the bed instead of breaking through the bed protection first',
+				'[BedWars][fix] Renamed Loot Display to Inventory ESP',
 				'[Commands][feature] Added ;invert to reverse a target\'s WASD movement (run it again to undo)',
 				'[Commands][feature] Added ;scramblekeys to shuffle a target\'s BedWars keybinds until they reset them',
 				'[Interface][fix] Trimmed overly long module tooltips across every game',

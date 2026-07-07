@@ -11459,7 +11459,7 @@ run(function()
     end
 
     LootDisplay = vain.Categories.Render:CreateModule({
-        Name = 'Loot Display',
+        Name = 'Inventory ESP',
         Tooltip = 'Shows each player\'s carried resources on a large plate under their name (visible from a distance). Toggle which resources appear + highlight when a threshold is crossed.',
         Function = function(callback)
             if callback then
