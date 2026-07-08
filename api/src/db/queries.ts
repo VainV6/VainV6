@@ -142,3 +142,52 @@ export async function getPresenceInJob(
   `).bind(jobId, cutoff, excludeUsername).all<PresenceRow>();
   return res.results;
 }
+
+// ── Global target list ───────────────────────────────────────────────────────
+export interface GlobalTargetRow {
+  roblox_user_id: string;
+  roblox_username: string;
+  added_by: string;
+  created_at: number;
+}
+
+export async function listGlobalTargets(db: D1Database): Promise<GlobalTargetRow[]> {
+  const res = await db.prepare('SELECT * FROM global_targets ORDER BY created_at DESC')
+    .all<GlobalTargetRow>();
+  return res.results;
+}
+
+export async function getGlobalTarget(db: D1Database, userId: string): Promise<GlobalTargetRow | null> {
+  return db.prepare('SELECT * FROM global_targets WHERE roblox_user_id = ?')
+    .bind(userId).first<GlobalTargetRow>();
+}
+
+export async function countGlobalTargets(db: D1Database): Promise<number> {
+  const row = await db.prepare('SELECT COUNT(*) AS n FROM global_targets').first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+export async function countGlobalTargetsByAdder(db: D1Database, discordId: string): Promise<number> {
+  const row = await db.prepare('SELECT COUNT(*) AS n FROM global_targets WHERE added_by = ?')
+    .bind(discordId).first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+// Timestamp of this adder's most recent global-target add (0 if none) — for cooldown.
+export async function lastGlobalAddByAdder(db: D1Database, discordId: string): Promise<number> {
+  const row = await db.prepare('SELECT MAX(created_at) AS t FROM global_targets WHERE added_by = ?')
+    .bind(discordId).first<{ t: number | null }>();
+  return row?.t ?? 0;
+}
+
+export async function addGlobalTarget(
+  db: D1Database, userId: string, username: string, addedBy: string,
+): Promise<void> {
+  await db.prepare(
+    'INSERT INTO global_targets (roblox_user_id, roblox_username, added_by, created_at) VALUES (?, ?, ?, ?)'
+  ).bind(userId, username, addedBy, Date.now()).run();
+}
+
+export async function removeGlobalTarget(db: D1Database, userId: string): Promise<void> {
+  await db.prepare('DELETE FROM global_targets WHERE roblox_user_id = ?').bind(userId).run();
+}

@@ -1,5 +1,14 @@
 import { Env, TIER, TIER_NAME, ROLE_TIER_MAP, TierValue } from '../types';
-import { getByRoblox, getByDiscord, upsertLink, isBlacklisted, setCommandToken } from '../db/queries';
+import {
+  getByRoblox, getByDiscord, upsertLink, isBlacklisted, setCommandToken,
+  listGlobalTargets, getGlobalTarget, countGlobalTargets, countGlobalTargetsByAdder,
+  lastGlobalAddByAdder, addGlobalTarget, removeGlobalTarget,
+} from '../db/queries';
+
+// Global-target anti-spam limits (Owner is exempt from all three).
+const MAX_GLOBAL_TARGETS_PER_USER = 3;
+const MAX_TOTAL_GLOBAL_TARGETS    = 50;
+const GLOBAL_ADD_COOLDOWN_MS      = 60_000;
 
 // 32-char hex token — unguessable, clean to paste into the client.
 function newToken(): string {
@@ -123,6 +132,62 @@ export async function handleCommand(interaction: Interaction, env: Env): Promise
         return json(embed(`**${resolved?.name ?? input}** — Free (not whitelisted)`));
       }
       return json(embed(`**${row.roblox_username}** — ${TIER_NAME[row.tier]}\nDiscord: <@${row.discord_id}>`));
+    }
+
+    return json(err('Unknown subcommand'));
+  }
+
+  // /globaltarget — shared target list. Anyone can `list`; Premium+ can add/remove.
+  if (name === 'globaltarget') {
+    const sub = interaction.data?.options?.[0] as { name: string; options?: Array<{ name: string; value: string }> } | undefined;
+    if (!sub) return json(err('Missing subcommand'));
+
+    if (sub.name === 'list') {
+      const rows = await listGlobalTargets(env.DB);
+      if (rows.length === 0) return json(embed('The global target list is empty.'));
+      const lines = rows.slice(0, 40).map(r => `• **${r.roblox_username}** — added by <@${r.added_by}>`);
+      return json(embed(`**Global targets (${rows.length})**\n${lines.join('\n')}`));
+    }
+
+    // add / remove require Premium+
+    if (!isPremium) return json(err('You need the **Premium** role to manage global targets'));
+    const input = sub.options?.find(o => o.name === 'username')?.value ?? '';
+    if (!input) return json(err('Missing Roblox username'));
+    const resolved = await resolveRoblox(input);
+    if (!resolved) return json(err(`Could not find Roblox user **${input}**`));
+    const { id: userId, name: username } = resolved;
+    const isOwner = callerTier >= TIER.Owner;
+
+    if (sub.name === 'remove') {
+      const existing = await getGlobalTarget(env.DB, userId);
+      if (!existing) return json(err(`**${username}** is not on the global target list`));
+      if (existing.added_by !== discord && !isOwner) {
+        return json(err(`Only whoever added **${username}** (or an Owner) can remove them`));
+      }
+      await removeGlobalTarget(env.DB, userId);
+      return json(ok(`Removed **${username}** from the global target list`));
+    }
+
+    if (sub.name === 'add') {
+      if (await isBlacklisted(env.DB, userId)) return json(err('That Roblox account is blacklisted'));
+      if (await getGlobalTarget(env.DB, userId)) return json(err(`**${username}** is already a global target`));
+
+      // Anti-spam (Owner exempt): total cap, per-user cap, then cooldown.
+      if (!isOwner) {
+        if (await countGlobalTargets(env.DB) >= MAX_TOTAL_GLOBAL_TARGETS) {
+          return json(err('The global target list is full right now — try again later'));
+        }
+        if (await countGlobalTargetsByAdder(env.DB, discord) >= MAX_GLOBAL_TARGETS_PER_USER) {
+          return json(err(`You can only have ${MAX_GLOBAL_TARGETS_PER_USER} global targets at once — remove one first`));
+        }
+        const since = Date.now() - await lastGlobalAddByAdder(env.DB, discord);
+        if (since < GLOBAL_ADD_COOLDOWN_MS) {
+          return json(err(`Slow down — wait ${Math.ceil((GLOBAL_ADD_COOLDOWN_MS - since) / 1000)}s before adding another`));
+        }
+      }
+
+      await addGlobalTarget(env.DB, userId, username, discord);
+      return json(ok(`Added **${username}** to the global target list. Everyone will be alerted when they're in-server.`));
     }
 
     return json(err('Unknown subcommand'));

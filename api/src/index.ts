@@ -4,6 +4,7 @@ import { handleCommand } from './discord/commands';
 import { handleCheck, handleTiers } from './routes/check';
 import { handleLongPoll, handleQueue } from './routes/commands';
 import { handlePresence } from './routes/presence';
+import { handleGlobalTargets } from './routes/globalTargets';
 import { resyncAllTiers } from './tierSync';
 import {
   handleListProfiles, handleGetProfile, handleCreateProfile, handleUpdateProfile,
@@ -33,6 +34,7 @@ export default {
     if (method === 'GET'  && path === '/commands/poll')   return withCors(await handleLongPoll(request, env));
     if (method === 'POST' && path === '/commands/queue')  return withCors(await handleQueue(request, env));
     if (method === 'POST' && path === '/presence')        return withCors(await handlePresence(request, env));
+    if (method === 'GET'  && path === '/globaltargets')   return withCors(await handleGlobalTargets(request, env));
 
     if (path === '/profiles') {
       if (method === 'GET')  return withCors(await handleListProfiles(request, env));

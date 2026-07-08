@@ -66,3 +66,14 @@ CREATE TABLE IF NOT EXISTS presence (
 );
 
 CREATE INDEX IF NOT EXISTS idx_presence_job ON presence(job_id, last_seen);
+
+-- Global target list: Premium+ users add Roblox accounts here; every client
+-- fetches the list and is notified when one of them is in their server.
+CREATE TABLE IF NOT EXISTS global_targets (
+    roblox_user_id  TEXT    PRIMARY KEY,
+    roblox_username TEXT    NOT NULL,
+    added_by        TEXT    NOT NULL,  -- discord_id of the Premium+ adder
+    created_at      INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_gtargets_addedby ON global_targets(added_by);

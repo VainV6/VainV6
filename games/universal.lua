@@ -547,12 +547,24 @@ run(function()
 		return tostring(ent.TeamColor) ~= 'White' and ent.TeamColor.Color or nil
 	end
 
-	-- Notify when a friend or target joins/leaves or is already present. Always on.
+	-- Notify when a friend/target/global-target joins, leaves, or is already here. Always on.
+	-- Global targets = a shared Premium-curated list, gated by the 'Global Target List'
+	-- toggle. getgenv().vainGlobalTargets is a name-set populated by main.lua.
+	local function globalTargetsOn()
+		local opt = vain.Categories.Main.Options['Global Target List']
+		return opt == nil or opt.Enabled
+	end
+	local function isGlobalTarget(plr)
+		local gt = getgenv().vainGlobalTargets
+		return type(gt) == 'table' and gt[plr.Name:lower()] ~= nil
+	end
 	local function onPlayerAdded(plr)
 		if isFriend(plr) then
 			vain:CreateNotification('Friends', plr.Name .. ' joined the server', 8, 'success')
 		elseif isTarget(plr) then
 			vain:CreateNotification('Targets', plr.Name .. ' joined the server', 8, 'alert')
+		elseif globalTargetsOn() and isGlobalTarget(plr) then
+			vain:CreateNotification('Global Target', plr.Name .. ' joined the server', 8, 'alert')
 		end
 	end
 	local function onPlayerRemoving(plr)
@@ -560,6 +572,8 @@ run(function()
 			vain:CreateNotification('Friends', plr.Name .. ' left the server', 8, 'success')
 		elseif isTarget(plr) then
 			vain:CreateNotification('Targets', plr.Name .. ' left the server', 8, 'alert')
+		elseif globalTargetsOn() and isGlobalTarget(plr) then
+			vain:CreateNotification('Global Target', plr.Name .. ' left the server', 8, 'alert')
 		end
 	end
 	-- Initial "is in the server" scan. This run() block executes while universal.lua
@@ -576,6 +590,9 @@ run(function()
 				elseif isTarget(plr) then
 					announced[plr] = true
 					vain:CreateNotification('Targets', plr.Name .. ' is in the server', 8, 'alert')
+				elseif globalTargetsOn() and isGlobalTarget(plr) then
+					announced[plr] = true
+					vain:CreateNotification('Global Target', plr.Name .. ' is in the server', 8, 'alert')
 				end
 			end
 		end

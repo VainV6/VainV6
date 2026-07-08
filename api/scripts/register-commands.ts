@@ -24,6 +24,26 @@ async function main() {
         },
       ],
     },
+    {
+      name: 'globaltarget',
+      description: 'Manage the shared global target list',
+      options: [
+        {
+          type: 1, name: 'add',
+          description: 'Add a Roblox user to the global target list (Premium+)',
+          options: [{ type: 3, name: 'username', description: 'Roblox username', required: true }],
+        },
+        {
+          type: 1, name: 'remove',
+          description: 'Remove a Roblox user from the global target list (adder or Owner)',
+          options: [{ type: 3, name: 'username', description: 'Roblox username', required: true }],
+        },
+        {
+          type: 1, name: 'list',
+          description: 'Show the current global target list',
+        },
+      ],
+    },
   ];
 
   const headers = { 'Authorization': `Bot ${BOT_TOKEN}`, 'Content-Type': 'application/json' };

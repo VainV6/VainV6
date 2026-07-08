@@ -58,6 +58,9 @@ local mainapi = {
 				'[Commands][feature] Added ;scramblekeys to shuffle a target\'s BedWars keybinds until they reset them',
 				'[Interface][fix] Trimmed overly long module tooltips across every game',
 				'[Interface][fix] Target and friend "in the server" notifications are always on now (removed the toggles)',
+				'[Universal][feature] Added a shared Global Target List: get alerted when a flagged player is in your server',
+				'[Universal][feature] Premium can add/remove global targets with the /globaltarget Discord command',
+				'[Universal][feature] Added a Global Target List toggle in System Settings to turn the alerts off',
 				'[Misc][fix] Renamed Loot Display to Inventory ESP',
 			},
 		},
@@ -7796,6 +7799,11 @@ modules:CreateToggle({
 			mainapi.Libraries.entity.refresh()
 		end
 	end
+})
+modules:CreateToggle({
+	Name = 'Global Target List',
+	Tooltip = 'Get notified when someone on the shared global target list is in your server',
+	Default = true
 })
 modules:CreateToggle({
 	Name = 'Use team color',

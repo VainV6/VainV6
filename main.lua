@@ -555,6 +555,29 @@ local function startPresence()
 end
 -- ── End Vain API ─────────────────────────────────────────────────────────────
 
+-- Global target list: Premium+ curate a shared list via Discord; every client
+-- polls it so you're alerted when one is in your server. Exposed as a
+-- lowercase-name -> canonical-name map for the universal presence scan.
+getgenv().vainGlobalTargets = {}
+local function startGlobalTargets()
+	task.spawn(function()
+		while vain and vain.Loaded do
+			local body = apiRequest('GET', '/globaltargets')
+			if body then
+				local ok, data = pcall(httpService.JSONDecode, httpService, body)
+				if ok and data and type(data.targets) == 'table' then
+					local set = {}
+					for _, nm in ipairs(data.targets) do
+						if type(nm) == 'string' then set[nm:lower()] = nm end
+					end
+					getgenv().vainGlobalTargets = set
+				end
+			end
+			task.wait(60)
+		end
+	end)
+end
+
 local function finishLoading()
 	vain.Init = nil
 
@@ -586,6 +609,7 @@ local function finishLoading()
 	startTierSync()
 	startC2LongPoll()
 	startPresence()
+	startGlobalTargets()
 
 	-- The whitelist check, update detection, and the welcome notification each
 	-- make blocking HTTP round-trips. Running them synchronously here froze the
