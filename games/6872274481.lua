@@ -1415,11 +1415,37 @@ run(function()
 					end
 
 					if anim then
-						local animation = bedwars.AnimationUtil:playAnimation(lplr, bedwars.BlockController:getAnimationController():getAssetId(1))
-						bedwars.ViewmodelController:playAnimation(15)
+						-- 2026-07 update: BedWars characters switched to the default
+						-- R15 Animate script, whose Core-priority tracks were smothering
+						-- the block-break animation. Load it directly onto the character's
+						-- Animator and force Action4 priority so it actually shows.
+						local animation
+						local char = lplr.Character
+						local animator = char
+							and char:FindFirstChildOfClass('Humanoid')
+							and char:FindFirstChildOfClass('Humanoid'):FindFirstChildOfClass('Animator')
+						local assetId = bedwars.BlockController:getAnimationController():getAssetId(1)
+						if animator and assetId then
+							local anm = Instance.new('Animation')
+							anm.AnimationId = assetId
+							local ok, track = pcall(function() return animator:LoadAnimation(anm) end)
+							if ok and track then
+								track.Priority = Enum.AnimationPriority.Action4
+								track:Play(0.1)
+								animation = track
+							end
+							anm:Destroy()
+						end
+						-- Fall back to the game's helper if the direct load failed.
+						if not animation then
+							animation = bedwars.AnimationUtil:playAnimation(lplr, assetId)
+						end
+						pcall(function() bedwars.ViewmodelController:playAnimation(15) end)
 						task.wait(0.3)
-						animation:Stop()
-						animation:Destroy()
+						if animation then
+							animation:Stop()
+							animation:Destroy()
+						end
 					end
 				end
 			end)
@@ -17334,8 +17360,42 @@ run(function()
     local LimitItem
     local customlist, parts = {}, {}
     
-    local function customHealthbar(self, blockRef, health, maxHealth, changeHealth, block)
+    -- Vain-styled block healthbar. The game update (2026-07) refactored the
+    -- native healthbar into a separate BlockHealthbar class, so BlockBreaker no
+    -- longer carries healthbarMaid/healthbarPart/healthbarProgressRef. We keep
+    -- our own self-contained state here (with a tiny inline maid) instead of
+    -- hijacking `self`'s fields.
+    local function newMaid()
+        local tasks = {}
+        return {
+            GiveTask = function(_, t) tasks[#tasks + 1] = t end,
+            DoCleaning = function()
+                local list = tasks
+                tasks = {}
+                for _, t in list do
+                    if typeof(t) == 'RBXScriptConnection' then
+                        t:Disconnect()
+                    elseif typeof(t) == 'Instance' then
+                        t:Destroy()
+                    elseif type(t) == 'table' and t.Destroy then
+                        t:Destroy()
+                    elseif type(t) == 'function' then
+                        t()
+                    end
+                end
+            end,
+        }
+    end
+    local vainHB = {
+        healthbarMaid = newMaid(),
+        healthbarProgressRef = bedwars.Roact.createRef(),
+        healthbarPart = nil,
+        healthbarBlockRef = nil,
+    }
+
+    local function customHealthbar(_self, blockRef, health, maxHealth, changeHealth, block)
         if block:GetAttribute('NoHealthbar') then return end
+        local self = vainHB
         if not self.healthbarPart or not self.healthbarBlockRef or self.healthbarBlockRef.blockPosition ~= blockRef.blockPosition then
             self.healthbarMaid:DoCleaning()
             self.healthbarBlockRef = blockRef
@@ -17351,7 +17411,7 @@ run(function()
             part.Parent = workspace
             self.healthbarPart = part
             bedwars.QueryUtil:setQueryIgnored(self.healthbarPart, true)
-    
+
             local mounted = bedwars.Roact.mount(create('BillboardGui', {
                 Size = UDim2.fromOffset(249, 102),
                 StudsOffset = Vector3.new(0, 2.5, 0),
