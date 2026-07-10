@@ -1235,6 +1235,50 @@ run(function()
 	end
 
 	local cache, blockhealthbar = {}, {blockHealth = -1, breakingBlockPosition = Vector3.zero}
+
+	-- Persistent break-animation track. The 2026-07 update moved characters to the
+	-- default R15 Animate script; creating + stopping a fresh track every swing made
+	-- the mining animation only play a fraction before being cut off. Instead we keep
+	-- ONE looped Action-priority track alive and just refresh its idle timeout each
+	-- swing, so it plays continuously while nuking and stops shortly after we stop.
+	local breakAnim = {track = nil, animator = nil, lastPlay = 0}
+	local function playBreakAnim()
+		local char = lplr.Character
+		local animator = char
+			and char:FindFirstChildOfClass('Humanoid')
+			and char:FindFirstChildOfClass('Humanoid'):FindFirstChildOfClass('Animator')
+		if not animator then return end
+		-- Rebuild the track if the character/animator changed (respawn) or it's gone.
+		if breakAnim.animator ~= animator or not breakAnim.track then
+			if breakAnim.track then pcall(function() breakAnim.track:Stop() end) end
+			local assetId = bedwars.BlockController:getAnimationController():getAssetId(1)
+			if not assetId then return end
+			local anm = Instance.new('Animation')
+			anm.AnimationId = assetId
+			local ok, track = pcall(function() return animator:LoadAnimation(anm) end)
+			anm:Destroy()
+			if not ok or not track then return end
+			track.Priority = Enum.AnimationPriority.Action4
+			track.Looped = true
+			breakAnim.track = track
+			breakAnim.animator = animator
+		end
+		breakAnim.lastPlay = tick()
+		if not breakAnim.track.IsPlaying then
+			pcall(function() breakAnim.track:Play(0.1) end)
+		end
+		-- One watchdog stops the loop shortly after the last swing.
+		if not breakAnim.watching then
+			breakAnim.watching = true
+			task.spawn(function()
+				while tick() - breakAnim.lastPlay < 0.35 do
+					task.wait(0.1)
+				end
+				breakAnim.watching = false
+				if breakAnim.track then pcall(function() breakAnim.track:Stop(0.1) end) end
+			end)
+		end
+	end
 	store.blockPlacer = bedwars.BlockPlacer.new(bedwars.BlockEngine, 'wool_white')
 
 	local function getBlockHealth(block, blockpos)
@@ -1407,7 +1451,10 @@ run(function()
 
 						if blockhealthbar.blockHealth <= 0 then
 							bedwars.BlockBreaker.breakEffect:playBreak(dblock.Name, dpos, lplr)
-							bedwars.BlockBreaker.healthbarMaid:DoCleaning()
+							-- 2026-07 update: healthbar moved into the BlockHealthbar class.
+							-- Clear the game's default bar (our custom bar self-cleans when
+							-- the target block changes / after its idle timeout).
+							pcall(function() bedwars.BlockBreaker.blockHealthbar:destroy() end)
 							blockhealthbar.breakingBlockPosition = Vector3.zero
 						else
 							bedwars.BlockBreaker.breakEffect:playHit(dblock.Name, dpos, lplr)
@@ -1415,37 +1462,11 @@ run(function()
 					end
 
 					if anim then
-						-- 2026-07 update: BedWars characters switched to the default
-						-- R15 Animate script, whose Core-priority tracks were smothering
-						-- the block-break animation. Load it directly onto the character's
-						-- Animator and force Action4 priority so it actually shows.
-						local animation
-						local char = lplr.Character
-						local animator = char
-							and char:FindFirstChildOfClass('Humanoid')
-							and char:FindFirstChildOfClass('Humanoid'):FindFirstChildOfClass('Animator')
-						local assetId = bedwars.BlockController:getAnimationController():getAssetId(1)
-						if animator and assetId then
-							local anm = Instance.new('Animation')
-							anm.AnimationId = assetId
-							local ok, track = pcall(function() return animator:LoadAnimation(anm) end)
-							if ok and track then
-								track.Priority = Enum.AnimationPriority.Action4
-								track:Play(0.1)
-								animation = track
-							end
-							anm:Destroy()
-						end
-						-- Fall back to the game's helper if the direct load failed.
-						if not animation then
-							animation = bedwars.AnimationUtil:playAnimation(lplr, assetId)
-						end
+						-- Keep the persistent, looped break animation alive (see
+						-- playBreakAnim). Do NOT create/stop a per-swing track here —
+						-- that was cutting the mining animation off mid-play.
+						playBreakAnim()
 						pcall(function() bedwars.ViewmodelController:playAnimation(15) end)
-						task.wait(0.3)
-						if animation then
-							animation:Stop()
-							animation:Destroy()
-						end
 					end
 				end
 			end)
@@ -17525,49 +17546,74 @@ run(function()
         return nil
     end
 
-    local function attemptBreak(tab, localPosition)
-        if not tab then return end
-        for _, v in tab do
-            if (v.Position - localPosition).Magnitude < Range.Value and bedwars.BlockController:isBlockBreakable({blockPosition = v.Position / 3}, lplr) then
-                if not SelfBreak.Enabled and v:GetAttribute('PlacedByUserId') == lplr.UserId then continue end
-                if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then continue end
-                if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then continue end
-                local breakTarget = v
-                if BreakChance and BreakChance.Value < 100 and math.random(100) > BreakChance.Value then
-                    -- Break Chance "missed": Spread jitters to a face-adjacent block
-                    -- (mouse shake); without Spread we just skip this block this tick.
-                    local jitter = Spread and Spread.Enabled and pickSpread(v, localPosition)
-                    if not jitter then continue end
-                    breakTarget = jitter
+    -- Is block `v` a legal break target right now?
+    local function breakable(v, localPosition)
+        if (v.Position - localPosition).Magnitude >= Range.Value then return false end
+        if not bedwars.BlockController:isBlockBreakable({blockPosition = v.Position / 3}, lplr) then return false end
+        if not SelfBreak.Enabled and v:GetAttribute('PlacedByUserId') == lplr.UserId then return false end
+        if (v:GetAttribute('BedShieldEndTime') or 0) > workspace:GetServerTimeNow() then return false end
+        if LimitItem.Enabled and not (store.hand.tool and bedwars.ItemMeta[store.hand.tool.Name].breakBlock) then return false end
+        return true
+    end
+
+    -- Actually swing at block `v`. Returns true if a swing was issued.
+    local function doBreak(v, localPosition)
+        local breakTarget = v
+        if BreakChance and BreakChance.Value < 100 and math.random(100) > BreakChance.Value then
+            -- Break Chance "missed": Spread jitters to a face-adjacent block
+            -- (mouse shake); without Spread we just skip this block this tick.
+            local jitter = Spread and Spread.Enabled and pickSpread(v, localPosition)
+            if not jitter then return false end
+            breakTarget = jitter
+        end
+
+        hit += 1
+        local target, path, endpos = bedwars.breakBlock(breakTarget, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, AutoTool.Enabled, breakmethods[Mode.Value], Angle.Value)
+        if path then
+            local currentnode = target
+            for _, part in parts do
+                part.Position = currentnode or Vector3.zero
+                if currentnode then
+                    part.BoxHandleAdornment.Color3 = currentnode == endpos and Color3.new(1, 0.2, 0.2) or currentnode == target and Color3.new(0.2, 0.2, 1) or Color3.new(0.2, 1, 0.2)
                 end
-    
-                hit += 1
-                local target, path, endpos = bedwars.breakBlock(breakTarget, Effect.Enabled, Animation.Enabled, CustomHealth.Enabled and customHealthbar or nil, AutoTool.Enabled, breakmethods[Mode.Value], Angle.Value)
-                if path then
-                    local currentnode = target
-                    for _, part in parts do
-                        part.Position = currentnode or Vector3.zero
-                        if currentnode then
-                            part.BoxHandleAdornment.Color3 = currentnode == endpos and Color3.new(1, 0.2, 0.2) or currentnode == target and Color3.new(0.2, 0.2, 1) or Color3.new(0.2, 1, 0.2)
-                        end
-                        currentnode = path[currentnode]
-                    end
-                end
-    
-                local breakdelay
-                if InstantBreak.Enabled then
-                    breakdelay = store.damageBlockFail > tick() and 4.5 or 0
-                elseif RandomizeBreakspeed and RandomizeBreakspeed.Enabled then
-                    breakdelay = BreakSpeedRandom:GetRandomValue()
-                else
-                    breakdelay = BreakSpeed.Value
-                end
-                task.wait(breakdelay)
-    
-                return true
+                currentnode = path[currentnode]
             end
         end
-    
+
+        local breakdelay
+        if InstantBreak.Enabled then
+            breakdelay = store.damageBlockFail > tick() and 4.5 or 0
+        elseif RandomizeBreakspeed and RandomizeBreakspeed.Enabled then
+            breakdelay = BreakSpeedRandom:GetRandomValue()
+        else
+            breakdelay = BreakSpeed.Value
+        end
+        task.wait(breakdelay)
+
+        return true
+    end
+
+    local function attemptBreak(tab, localPosition)
+        if not tab then return end
+        -- Sticky target: if we're already mid-breaking a block, keep hitting THAT
+        -- one until it's destroyed (breakingBlockPosition resets to zero on break).
+        -- Prevents the nuker from hopping between blocks every swing.
+        local stick = blockhealthbar.breakingBlockPosition
+        if stick ~= Vector3.zero then
+            for _, v in tab do
+                -- breakingBlockPosition is a rounded BLOCK coord (see getPlacedBlock),
+                -- so compare against the block's grid position, not its world Position.
+                if bedwars.BlockController:getBlockPosition(v.Position) == stick and breakable(v, localPosition) then
+                    return doBreak(v, localPosition)
+                end
+            end
+        end
+        for _, v in tab do
+            if breakable(v, localPosition) then
+                return doBreak(v, localPosition)
+            end
+        end
+
         return false
     end
     
