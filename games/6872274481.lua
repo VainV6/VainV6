@@ -1235,9 +1235,6 @@ run(function()
 	end
 
 	local cache, blockhealthbar = {}, {blockHealth = -1, breakingBlockPosition = Vector3.zero}
-	-- Shared so the Nuker module (different scope) can read the current break target
-	-- for sticky targeting.
-	getgenv().vainBlockHealthbar = blockhealthbar
 
 	-- Persistent break-animation track. The 2026-07 update moved characters to the
 	-- default R15 Animate script; creating + stopping a fresh track every swing made
@@ -17598,20 +17595,8 @@ run(function()
 
     local function attemptBreak(tab, localPosition)
         if not tab then return end
-        -- Sticky target: if we're already mid-breaking a block, keep hitting THAT
-        -- one until it's destroyed (breakingBlockPosition resets to zero on break).
-        -- Prevents the nuker from hopping between blocks every swing.
-        local bhb = getgenv().vainBlockHealthbar
-        local stick = bhb and bhb.breakingBlockPosition
-        if stick and stick ~= Vector3.zero then
-            for _, v in tab do
-                -- breakingBlockPosition is a rounded BLOCK coord (see getPlacedBlock),
-                -- so compare against the block's grid position, not its world Position.
-                if bedwars.BlockController:getBlockPosition(v.Position) == stick and breakable(v, localPosition) then
-                    return doBreak(v, localPosition)
-                end
-            end
-        end
+        -- Break the first eligible block; breakBlock() then uses the selected Break
+        -- Mode (Distance/Crosshair/Shortest/...) to pick the best reachable node.
         for _, v in tab do
             if breakable(v, localPosition) then
                 return doBreak(v, localPosition)
