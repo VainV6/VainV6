@@ -4,6 +4,10 @@ node_modules/
 # Build artifacts
 dist/
 
+# Cloudflare Worker local cache / secrets
+.wrangler/
+server/.dev.vars
+
 # Claude session files
 .claude/
 
