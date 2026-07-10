@@ -44,7 +44,17 @@ local function downloadFile(path, func)
 	end
 	return (func or readfile)(path)
 end
+-- Yield a frame every few module blocks during the load phase so the ~85
+-- universal blocks (plus the game file's ~200) don't freeze the main thread
+-- into a crash on inject / teleport. Disabled once the GUI reports Loaded so
+-- runtime run() calls never yield.
+local __runCount = 0
 local run = function(func)
+	local vain = shared.vain
+	if not (vain and vain.Loaded) then
+		__runCount = __runCount + 1
+		if __runCount % 6 == 0 then task.wait() end
+	end
 	func()
 end
 local queue_on_teleport = queue_on_teleport or function() end
