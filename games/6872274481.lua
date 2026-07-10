@@ -1299,7 +1299,12 @@ run(function()
 		Source: https://stackoverflow.com/questions/39355587/speeding-up-dijkstras-algorithm-to-solve-a-3d-maze
 	]]
 	local function calculatePath(target, blockpos, method, angle)
-		if cache[blockpos] and cache[blockpos][4] > tick() then
+		-- Crosshair/Distance depend on the live camera/player position, so a cached
+		-- path (up to ~1s stale) makes them feel like they "do nothing" -- the ranking
+		-- freezes and stops tracking your aim/movement. Only reuse the cache for the
+		-- geometry-static modes (Shortest/Health).
+		local liveMode = method == breakmethods.Crosshair or method == breakmethods.Distance
+		if not liveMode and cache[blockpos] and cache[blockpos][4] > tick() then
 			return unpack(cache[blockpos])
 		end
 		local visited, unvisited, distances, air, path = {}, {{0, blockpos}}, {[blockpos] = 0}, {}, {}
@@ -1376,12 +1381,14 @@ run(function()
 		end
 
 		if pos then
-			cache[blockpos] = {
-				pos,
-				cost,
-				path,
-				tick() + (inputService.TouchEnabled and 9e9 or 1)
-			}
+			if not liveMode then
+				cache[blockpos] = {
+					pos,
+					cost,
+					path,
+					tick() + (inputService.TouchEnabled and 9e9 or 1)
+				}
+			end
 			return pos, cost, path
 		end
 		return nil
@@ -17546,6 +17553,20 @@ run(function()
         return nil
     end
 
+    -- Is there an enemy bed within break range? Used to lock the nuker onto bed
+    -- defense (so it won't flip-flop to nearby ores/lucky blocks). We only need
+    -- proximity here, not immediate breakability -- the bed defense may still be
+    -- in the way while we tunnel toward it.
+    local function bedInRange(beds, localPosition)
+        if not beds then return false end
+        for _, v in beds do
+            if v and v.Parent and (v.Position - localPosition).Magnitude < Range.Value then
+                return true
+            end
+        end
+        return false
+    end
+
     -- Is block `v` a legal break target right now?
     local function breakable(v, localPosition)
         if (v.Position - localPosition).Magnitude >= Range.Value then return false end
@@ -17664,8 +17685,14 @@ run(function()
                         if attemptBreak(Tesla.Enabled and teslas, localPosition) then continue end
                         if attemptBreak(Hive.Enabled and hives, localPosition) then continue end
                         if attemptBreak(customlist, localPosition) then continue end
-                        if attemptBreak(LuckyBlock.Enabled and luckyblock, localPosition) then continue end
-                        if attemptBreak(IronOre.Enabled and ironores, localPosition) then continue end
+
+                        -- If an enemy bed is in range we're tunneling its defense, so
+                        -- don't peel off to mine nearby ores/lucky blocks (that caused
+                        -- the ore<->bed flip-flopping). Ores only run when no bed is near.
+                        if not (Bed.Enabled and bedInRange(beds, localPosition)) then
+                            if attemptBreak(LuckyBlock.Enabled and luckyblock, localPosition) then continue end
+                            if attemptBreak(IronOre.Enabled and ironores, localPosition) then continue end
+                        end
     
                         for _, v in parts do
                             v.Position = Vector3.zero
