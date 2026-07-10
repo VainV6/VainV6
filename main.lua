@@ -230,13 +230,11 @@ local function finishLoading()
 		detectUpdates()
 		if not shared.vainreload then
 			if not vain.Categories then return end
-			if vain.Categories.Main.Options['GUI bind indicator'].Enabled then
-				vain:CreateNotification(
-					'[VAIN] Finished Loading',
-					'welcome '..playersService.LocalPlayer.Name..', press '..table.concat(vain.Keybind, ' + '):upper()..' to open GUI',
-					5
-				)
-			end
+			vain:CreateNotification(
+				'[VAIN] Discontinued',
+				'Vain has been discontinued.',
+				10
+			)
 		end
 	end)
 
