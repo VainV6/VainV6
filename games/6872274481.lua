@@ -1,19 +1,8 @@
 local canDebug = true
--- All ~200 module blocks in this file run through run() back-to-back at load.
--- Doing that in one uninterrupted burst freezes the main thread long enough to
--- crash the client on inject / teleport. So during the load phase (before the
--- GUI reports Loaded) we yield a frame every few blocks, letting Roblox render
--- and keeping the watchdog happy. Once loaded, run() is only hit by sparse
--- runtime callbacks, which must NOT yield -- so the throttle self-disables then.
-local __runCount = 0
 local run = function(func)
-	local vain = shared.vain
-	if not (vain and vain.Loaded) then
-		__runCount = __runCount + 1
-		if __runCount % 6 == 0 then task.wait() end
-	end
 	local suc, err = pcall(func)
 	if not suc then
+		local vain = shared.vain
 		if vain and vain.CreateNotification then
 			vain:CreateNotification('Vain 6872274481', 'Failure executing function: ' .. tostring(err), 3)
 		end
