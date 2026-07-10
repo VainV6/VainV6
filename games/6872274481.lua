@@ -1299,11 +1299,10 @@ run(function()
 		Source: https://stackoverflow.com/questions/39355587/speeding-up-dijkstras-algorithm-to-solve-a-3d-maze
 	]]
 	local function calculatePath(target, blockpos, method, angle)
-		-- Crosshair/Distance depend on the live camera/player position, so a cached
-		-- path (up to ~1s stale) makes them feel like they "do nothing" -- the ranking
-		-- freezes and stops tracking your aim/movement. Only reuse the cache for the
-		-- geometry-static modes (Shortest/Health).
-		local liveMode = method == breakmethods.Crosshair or method == breakmethods.Distance
+		-- Crosshair depends on the live camera, so a cached path (up to ~1s stale)
+		-- makes it feel like it "does nothing" -- the ranking freezes and stops
+		-- tracking your aim. Bypass the cache only for Crosshair; other modes cache.
+		local liveMode = method == breakmethods.Crosshair
 		if not liveMode and cache[blockpos] and cache[blockpos][4] > tick() then
 			return unpack(cache[blockpos])
 		end
