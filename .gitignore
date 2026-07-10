@@ -1,10 +1,7 @@
 # Dependencies
 node_modules/
-api/node_modules/
 
-# Wrangler / build artifacts
-.wrangler/
-api/.wrangler/
+# Build artifacts
 dist/
 
 # Claude session files
@@ -17,3 +14,9 @@ dist/
 # Old helper scripts (replaced by GitHub API detection)
 changed_modules.txt
 generate_changed.py
+
+# Local Roblox place dumps and scratch scripts (never commit these)
+Place_*.rbxlx
+Place_*.rbxl
+*.zip
+lb.py
