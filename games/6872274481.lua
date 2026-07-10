@@ -674,13 +674,6 @@ local sortmethods, breakmethods = {
 		local pos = (entitylib.isAlive and (entitylib.character.RootPart.Position - Vector3.new(0, 1, 0)) or Vector3.zero)
 		return (pos - Vector3.new(a.Position.X, pos.Y, a.Position.Z)).Magnitude
 	end,
-	Crosshair = function(a)
-		-- prefer blocks nearest your crosshair (least angular deviation from the
-		-- camera look) so you tunnel toward what you're aiming at -- looks legit.
-		local dir = a.Position - gameCamera.CFrame.Position
-		if dir.Magnitude < 0.001 then return 0 end
-		return math.acos(math.clamp(gameCamera.CFrame.LookVector:Dot(dir.Unit), -1, 1))
-	end,
 	Shortest = function()
 		return 1 -- flat cost per block -> fewest blocks to break (most direct)
 	end,
@@ -1299,11 +1292,7 @@ run(function()
 		Source: https://stackoverflow.com/questions/39355587/speeding-up-dijkstras-algorithm-to-solve-a-3d-maze
 	]]
 	local function calculatePath(target, blockpos, method, angle)
-		-- Crosshair depends on the live camera, so a cached path (up to ~1s stale)
-		-- makes it feel like it "does nothing" -- the ranking freezes and stops
-		-- tracking your aim. Bypass the cache only for Crosshair; other modes cache.
-		local liveMode = method == breakmethods.Crosshair
-		if not liveMode and cache[blockpos] and cache[blockpos][4] > tick() then
+		if cache[blockpos] and cache[blockpos][4] > tick() then
 			return unpack(cache[blockpos])
 		end
 		local visited, unvisited, distances, air, path = {}, {{0, blockpos}}, {[blockpos] = 0}, {}, {}
@@ -1380,14 +1369,12 @@ run(function()
 		end
 
 		if pos then
-			if not liveMode then
-				cache[blockpos] = {
-					pos,
-					cost,
-					path,
-					tick() + (inputService.TouchEnabled and 9e9 or 1)
-				}
-			end
+			cache[blockpos] = {
+				pos,
+				cost,
+				path,
+				tick() + (inputService.TouchEnabled and 9e9 or 1)
+			}
 			return pos, cost, path
 		end
 		return nil
@@ -17616,19 +17603,17 @@ run(function()
     local function attemptBreak(tab, localPosition)
         if not tab then return end
         -- Pick which eligible block to break using the selected Break Mode. Modes
-        -- score a block (Crosshair = smallest angle from your aim, Distance =
-        -- nearest, Health = fewest hits, Shortest = flat), and we break the
-        -- lowest-scoring one. breakBlock() then applies the mode again to choose
-        -- the tunnel path. Previously we always took the first eligible block, so
-        -- Crosshair/Distance had no effect on target selection.
+        -- score a block (Distance = nearest, Health = fewest hits, Shortest = flat),
+        -- and we break the lowest-scoring one. breakBlock() then applies the mode
+        -- again to choose the tunnel path.
         local method = breakmethods[Mode.Value]
         local best, bestScore
         for _, v in tab do
             if breakable(v, localPosition) then
                 local score
                 if method then
-                    -- Crosshair/Distance use v.Position; Health uses the 2nd arg as a
-                    -- WORLD position (getBlockHits -> getBlockPosition), so pass v.Position.
+                    -- Distance uses v.Position; Health uses the 2nd arg as a WORLD
+                    -- position (getBlockHits -> getBlockPosition), so pass v.Position.
                     local ok, s = pcall(method, v, v.Position)
                     score = ok and s or math.huge
                 else
@@ -17735,7 +17720,7 @@ run(function()
     table.sort(methods)
     Mode = Breaker:CreateDropdown({
         Name = 'Break mode',
-        Tooltip = 'How the Nuker prioritises which block to break (Crosshair = toward your aim, Shortest = fewest blocks)',
+        Tooltip = 'How the Nuker prioritises which block to break (Distance = nearest, Shortest = fewest blocks)',
         List = methods,
         Default = 'Distance'
     })
