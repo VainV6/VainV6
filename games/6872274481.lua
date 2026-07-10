@@ -17615,12 +17615,32 @@ run(function()
 
     local function attemptBreak(tab, localPosition)
         if not tab then return end
-        -- Break the first eligible block; breakBlock() then uses the selected Break
-        -- Mode (Distance/Crosshair/Shortest/...) to pick the best reachable node.
+        -- Pick which eligible block to break using the selected Break Mode. Modes
+        -- score a block (Crosshair = smallest angle from your aim, Distance =
+        -- nearest, Health = fewest hits, Shortest = flat), and we break the
+        -- lowest-scoring one. breakBlock() then applies the mode again to choose
+        -- the tunnel path. Previously we always took the first eligible block, so
+        -- Crosshair/Distance had no effect on target selection.
+        local method = breakmethods[Mode.Value]
+        local best, bestScore
         for _, v in tab do
             if breakable(v, localPosition) then
-                return doBreak(v, localPosition)
+                local score
+                if method then
+                    -- Crosshair/Distance use v.Position; Health uses the 2nd arg as a
+                    -- WORLD position (getBlockHits -> getBlockPosition), so pass v.Position.
+                    local ok, s = pcall(method, v, v.Position)
+                    score = ok and s or math.huge
+                else
+                    score = 0
+                end
+                if not best or score < bestScore then
+                    best, bestScore = v, score
+                end
             end
+        end
+        if best then
+            return doBreak(best, localPosition)
         end
 
         return false
