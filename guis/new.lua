@@ -16,7 +16,6 @@ local mainapi = {
 	-- until the next release edits this list. Set per update by hand (no GitHub
 	-- auto-diff). Keys are exact module names; value is 'NEW' or 'UPD'.
 	ModuleBadges = {
-		['Inventory ESP'] = 'NEW',
 		['Chat Reveal'] = 'NEW',
 		['Cheat Detector'] = 'NEW',
 		['Better Spectating'] = 'NEW',
@@ -29,13 +28,18 @@ local mainapi = {
 		['Killaura'] = 'UPD',
 		['Nuker'] = 'UPD',
 	},
+	-- Preset templates: hardcoded starter profiles users can browse + apply from the
+	-- Profiles window (each installs as a new, editable local profile). Populated by hand
+	-- from provided config files. Entry:
+	--   { Name = '...', Description = '...', Game = '<gameid>' (optional), Data = '<savedata JSON>' }
+	Presets = {},
 	-- Patch notes shown in the changelog popup (newest first). Each entry is
 	-- { Version = '...', Date = '...', Changes = { 'line', ... } }.
 	PatchNotes = {
 		{
 			Version = '4.26',
 			Date = 'July 2026',
-			Highlight = 'New in-game commands and quality-of-life additions.',
+			Highlight = 'Vain now runs fully offline & private -- the online account, command, and global systems are gone -- plus BedWars module upgrades and QoL.',
 			-- Line format: '[Game][feature|fix] short text'. ONE atomic change per line
 			-- (never bundle several changes into one line), grouped by game in the UI.
 			Changes = {
@@ -54,23 +58,18 @@ local mainapi = {
 				'[BedWars][fix] Removed GrandKillaura (normal Killaura covers it)',
 				'[BedWars][fix] Fixed Nuker mining the bed instead of breaking through the bed protection first',
 				'[BedWars][fix] Fixed target/friend "in the server" notifications firing twice in BedWars',
-				'[Commands][feature] Added ;invert to reverse a target\'s WASD movement (run it again to undo)',
-				'[Commands][feature] Added ;scramblekeys to shuffle a target\'s BedWars keybinds until they reset them',
 				'[Interface][fix] Trimmed overly long module tooltips across every game',
 				'[Interface][fix] Target and friend "in the server" notifications are always on now (removed the toggles)',
-				'[Universal][feature] Added a shared Global Target List: get alerted when a flagged player is in your server',
-				'[Universal][feature] Premium can add/remove global targets with the /globaltarget Discord command',
-				'[Universal][feature] Added a Global Target List toggle in System Settings to turn the alerts off',
-				'[Misc][fix] Renamed Loot Display to Inventory ESP',
+				'[Universal][feature] Vain now runs fully offline -- no accounts, ranks, or data ever leave your device',
+				'[Universal][fix] Removed the online systems (in-game commands, global target list, global profiles); Target/Friend lists and profiles are now fully local',
 			},
 		},
 		{
 			Version = '4.25',
 			Date = 'July 2026',
-			Highlight = 'A dedicated Loot Display module, a smarter Bed Protector with gap-filling, and a redesigned animated loading screen — plus a stack of BedWars fixes.',
+			Highlight = 'A smarter Bed Protector with gap-filling, a redesigned animated loading screen, and a stack of BedWars fixes.',
 			Changes = {
 				-- ── FEATURES ──────────────────────────────────────────────────
-				'[feature] BedWars — new "Loot Display" module: a large, distance-legible plate under each player showing exactly what they carry (iron, gold, emerald, diamond, telepearls, vitality & crit stars, bees, arrows, blocks, teslas). Every resource has its own toggle, there\'s a Size slider, a "Target Kit Class" filter, and a "Highlight On Threshold" that glows the player once they cross the amount you set.',
 				'[feature] BedWars — Storage ESP: new "Resource Alert" notifies you when a team chest holds at least your set number of emeralds or diamonds, with per-resource thresholds and a "Detect Own Team" toggle (off = only enemy chests).',
 				'[feature] BedWars — Better Spectating: new "Spectate Team" dropdown lets you spectate every team ("All Teams") or lock the spectate cycle to one specific team.',
 				'[feature] BedWars — Preparation Preview now shows the current draft phase (Kit Banning / Kit Selection) as a banner above the teams.',
@@ -80,7 +79,6 @@ local mainapi = {
 
 				-- ── FIXES & IMPROVEMENTS ──────────────────────────────────────
 				'[fix] BedWars — Preparation Preview now shows every team\'s kits (not just your own), with the kit renders displaying correctly.',
-				'[fix] BedWars — Loot Display highlight only counts the resources you have toggled on, works on custom-kit characters, and icons (incl. tesla / blocks) resolve from the real carried item.',
 				'[fix] FPS Boost — no longer errors on the removed Terrain.Decoration property.',
 				'[fix] Discord — /whitelist edit and /whitelist info are now case-insensitive and store the account\'s canonical Roblox name.',
 				'[fix] UI — the notification card no longer leaves a big empty gap under the message.',
@@ -127,7 +125,6 @@ local mainapi = {
 				'[fix] BedWars — merged the Breaker and Nuker modules into a single "Nuker" (kept the Breaker behaviour).',
 				'[fix] Target & Friend notifications now fire correctly.',
 				'[fix] Dex is now a clickable button instead of a toggle.',
-				'[fix] Sigrid Charge is no longer offset to the right.',
 				'[fix] The Vain user detector now only flags lower-ranked users, not players of the same or higher rank.',
 				'[fix] The patch-notes unread dot no longer stays visible in sections (like Settings) where the patch-notes icon is hidden.',
 			},
@@ -3207,150 +3204,6 @@ function mainapi:CreateGUI()
 		return optionapi
 	end
 
-	-- A little command console: type "<command> <player>" (e.g. kill bob) with
-	-- ghost-text autocomplete for both the command and the player name. Tab
-	-- accepts the suggestion, Enter runs it through the Vain command relay.
-	function categoryapi:CreateConsole()
-		local Players = cloneref(game:GetService('Players'))
-		local COMMANDS = {'kick','kill','freeze','crash','expose','fling','spin','loopkill','annoy','grief','notify','spam','invert','scramblekeys'}
-
-		local console = Instance.new('Frame')
-		console.Name = 'CommandConsole'
-		console.Size = UDim2.fromOffset(220, 40)
-		console.BackgroundColor3 = uipallet.Main
-		console.BorderSizePixel = 0
-		console.Parent = settingschildren
-		addTooltip(console, 'Run a command on a player ranked below you. Type "<command> <player>", e.g. kill bob. Tab = accept suggestion, Enter = run.')
-
-		local bkg = Instance.new('Frame')
-		bkg.Name = 'BKG'
-		bkg.Size = UDim2.new(1, -20, 0, 28)
-		bkg.Position = UDim2.fromOffset(10, 6)
-		bkg.BackgroundColor3 = color.Light(uipallet.Main, 0.02)
-		bkg.BorderSizePixel = 0
-		bkg.Parent = console
-		addCorner(bkg, UDim.new(0, 4))
-		local pad = Instance.new('UIPadding')
-		pad.PaddingLeft = UDim.new(0, 8)
-		pad.PaddingRight = UDim.new(0, 8)
-		pad.Parent = bkg
-
-		-- dim suggestion that renders right after whatever you've typed
-		local ghost = Instance.new('TextLabel')
-		ghost.Name = 'Ghost'
-		ghost.Size = UDim2.fromScale(1, 1)
-		ghost.BackgroundTransparency = 1
-		ghost.Text = ''
-		ghost.TextXAlignment = Enum.TextXAlignment.Left
-		ghost.TextColor3 = color.Dark(uipallet.Text, 0.42)
-		ghost.TextSize = 12
-		ghost.FontFace = uipallet.Font
-		ghost.TextTruncate = Enum.TextTruncate.AtEnd
-		ghost.Parent = bkg
-
-		local box = Instance.new('TextBox')
-		box.Name = 'Input'
-		box.Size = UDim2.fromScale(1, 1)
-		box.BackgroundTransparency = 1
-		box.Text = ''
-		box.PlaceholderText = 'command player...'
-		box.PlaceholderColor3 = color.Dark(uipallet.Text, 0.31)
-		box.TextXAlignment = Enum.TextXAlignment.Left
-		box.TextColor3 = color.Dark(uipallet.Text, 0.16)
-		box.TextSize = 12
-		box.FontFace = uipallet.Font
-		box.ClearTextOnFocus = false
-		box.Parent = bkg
-
-		-- first command/player whose name starts with `typed` (case-insensitive)
-		local function matchCommand(typed)
-			local low = typed:lower()
-			for _, c in ipairs(COMMANDS) do
-				if #c > #low and c:sub(1, #low) == low then return c end
-			end
-		end
-		local function matchPlayer(typed)
-			local low = typed:lower()
-			-- "all" targets everyone injected below you; suggest it for short prefixes
-			if #low >= 1 and #low <= 3 and ('all'):sub(1, #low) == low then return 'all' end
-			for _, plr in ipairs(Players:GetPlayers()) do
-				if plr ~= Players.LocalPlayer and #plr.Name >= #low and plr.Name:lower():sub(1, #low) == low then
-					return plr.Name
-				end
-			end
-		end
-
-		local suffix = ''  -- the ghost remainder currently shown
-		local function refresh()
-			suffix = ''
-			ghost.Text = ''
-			local text = box.Text
-			if text == '' then return end
-			local words = {}
-			for w in text:gmatch('%S+') do table.insert(words, w) end
-			local trailing = text:sub(-1) == ' '
-			local full
-			if #words == 1 and not trailing then
-				full = matchCommand(words[1])
-				if full then suffix = full:sub(#words[1] + 1) end
-			elseif #words == 2 and not trailing then
-				full = matchPlayer(words[2])
-				if full and #full > #words[2] then suffix = full:sub(#words[2] + 1) end
-			end
-			if suffix ~= '' then
-				ghost.Position = UDim2.fromOffset(getfontsize(text, box.TextSize, uipallet.Font).X, 0)
-				ghost.Text = suffix
-			end
-		end
-		box:GetPropertyChangedSignal('Text'):Connect(refresh)
-
-		local function accept()
-			if suffix ~= '' then
-				box.Text = box.Text .. suffix
-				box.CursorPosition = #box.Text + 1
-				refresh()
-			end
-		end
-		inputService.InputBegan:Connect(function(input)
-			if input.KeyCode == Enum.KeyCode.Tab and box:IsFocused() then
-				accept()
-			end
-		end)
-
-		box.FocusLost:Connect(function(enter)
-			if not enter then return end
-			local words = {}
-			for w in box.Text:gmatch('%S+') do table.insert(words, w) end
-			if #words < 2 then
-				mainapi:CreateNotification('Commands', 'Usage: <command> <player>  (e.g. kill bob)', 4, 'alert')
-				return
-			end
-			-- exact command wins, else expand a prefix (e.g. "ki" -> "kill")
-			local typedCmd = words[1]:lower()
-			local cmdFull
-			for _, c in ipairs(COMMANDS) do if c == typedCmd then cmdFull = c break end end
-			cmdFull = cmdFull or matchCommand(typedCmd)
-			if not cmdFull then
-				mainapi:CreateNotification('Commands', 'Unknown command: ' .. words[1], 4, 'alert')
-				return
-			end
-			local target = matchPlayer(words[2]) or words[2]
-			local args = #words > 2 and table.concat(words, ' ', 3) or nil
-			local runner = getgenv().vainRunCommand
-			if not runner then
-				mainapi:CreateNotification('Commands', 'Command system not loaded in this game.', 5, 'alert')
-				return
-			end
-			local ok, err = pcall(runner, cmdFull, target, args)
-			if not ok then
-				mainapi:CreateNotification('Commands', 'Failed: ' .. tostring(err), 5, 'alert')
-			end
-			box.Text = ''
-			ghost.Text = ''
-		end)
-
-		return {}
-	end
 
 	function categoryapi:CreateButton(categorysettings)
 		local optionapi = {
@@ -6308,6 +6161,27 @@ function mainapi:Save(newprofile)
 	writefile('vain/profiles/'..self.Profile..self.Place..'.txt', httpService:JSONEncode(savedata))
 end
 
+-- Apply a hardcoded preset (mainapi.Presets): write its config as a new local profile
+-- and switch to it, giving the user an editable copy. preset.Data is a savedata JSON string.
+function mainapi:ApplyPreset(preset)
+	if type(preset) ~= 'table' or not preset.Name or not preset.Data then return false end
+	local name = tostring(preset.Name)
+	local okw = pcall(function()
+		writefile('vain/profiles/'..name..self.Place..'.txt', preset.Data)
+	end)
+	if not okw then
+		if self.CreateNotification then self:CreateNotification('Presets', 'Could not write preset file', 4, 'alert') end
+		return false
+	end
+	local exists = false
+	for _, pr in self.Profiles do if pr.Name == name then exists = true break end end
+	if not exists then table.insert(self.Profiles, { Name = name, Bind = {} }) end
+	self:Save(name)
+	self:Load(true)
+	if self.CreateNotification then self:CreateNotification('Presets', 'Applied preset "'..name..'"', 4) end
+	return true
+end
+
 function mainapi:SaveOptions(object, savedoptions)
 	if not savedoptions then return end
 	savedoptions = {}
@@ -6950,774 +6824,46 @@ mainapi:CreateCategoryList({
 })
 
 do
-	-- ── Global Profile Browser ───────────────────────────────────────────────
-	local API_URL    = 'https://vain-api.baconcrafft.workers.dev'
-	local API_SECRET = 'bf5d6650662b48a72a979e7cea9b97edd5170401dd99a50b'
-	local lplr       = game:GetService('Players').LocalPlayer
-	local http_      = cloneref(game:GetService('HttpService'))
-
-	local function apiRequest(method, path, body)
-		local makeRequest = syn and syn.request or http and http.request or request
-		if not makeRequest then return nil end
-		local ok, res = pcall(makeRequest, {
-			Url     = API_URL .. path,
-			Method  = method,
-			Headers = { ['Content-Type'] = 'application/json', ['x-vain-secret'] = API_SECRET },
-			Body    = body and http_:JSONEncode(body) or nil,
-		})
-		if not ok or not res then return nil end
-		local parsed
-		pcall(function() parsed = http_:JSONDecode(res.Body) end)
-		return parsed, res.StatusCode
-	end
-
-	-- Collect ONLY enabled modules (with their settings) for upload — keeps payloads small
-	local function gatherProfileData()
-		local modules = {}
-		for name, mod in mainapi.Modules do
-			if not mod.Enabled then continue end
-			local opts = {}
-			if mod.Options then
-				for _, opt in mod.Options do
-					if opt.Save then opt:Save(opts) end
-				end
-			end
-			modules[name] = { Enabled = true, Options = opts }
-		end
-		return http_:JSONEncode({ Modules = modules })
-	end
-
-	-- Save a downloaded profile as a NEW local profile and switch to it (non-destructive)
-	local function applyProfileData(jsonStr, profileName)
-		local ok, data = pcall(http_.JSONDecode, http_, jsonStr)
-		if not ok or not data or not data.Modules then return false end
-
-		-- Pick a unique local profile name (avoid clobbering an existing one)
-		local baseName = (profileName and #profileName > 0) and profileName or 'downloaded'
-		local name = baseName
-		local function nameTaken(n)
-			for _, p in mainapi.Profiles do
-				if p.Name == n then return true end
-			end
-			return false
-		end
-		local suffix = 2
-		while nameTaken(name) do
-			name = baseName .. ' ' .. suffix
-			suffix += 1
-		end
-
-		-- Build a COMPLETE savedata blob so the profile persists correctly and can
-		-- be re-selected later: every local module gets an explicit entry (enabled
-		-- ones from the download, everything else off).
-		local savedata = { Modules = {}, Categories = {}, Legit = {} }
-		for modName, object in mainapi.Modules do
-			local saved = data.Modules[modName]
-			savedata.Modules[modName] = {
-				Enabled = (saved and saved.Enabled) and true or false,
-				Bind = {},
-				Options = (saved and saved.Options) or {},
-			}
-		end
-
-		-- Register the profile, make it the active one, and persist. Save(name)
-		-- writes the gui file with this profile active + in the list; we then
-		-- overwrite this profile's data file with the downloaded blob so a future
-		-- rejoin re-applies it.
-		table.insert(mainapi.Profiles, { Name = name, Bind = {} })
-		mainapi.Profile = name
-		mainapi:Save(name)
-		writefile('vain/profiles/' .. name .. mainapi.Place .. '.txt', http_:JSONEncode(savedata))
-
-		-- Apply to the LIVE session immediately. Done directly on the module
-		-- objects (NOT via mainapi:Load) so activation + settings are guaranteed
-		-- to take effect now: set each module's options first, then toggle it to
-		-- the downloaded enabled state.
-		for modName, object in mainapi.Modules do
-			local saved = data.Modules[modName]
-			local wantEnabled = (saved and saved.Enabled) and true or false
-			if saved and saved.Options and object.Options then
-				mainapi:LoadOptions(object, saved.Options)
-			end
-			if wantEnabled ~= object.Enabled then
-				object:Toggle(true)
-			end
-		end
-		mainapi:SortModules()
-		mainapi:UpdateTextGUI(true)
-		mainapi.Categories.Profiles:ChangeValue()
-		return true, name
-	end
-
-	-- ── Build browser window ──────────────────────────────────────────────────
-	local browserWindow = Instance.new('Frame')
-	browserWindow.Name = 'GlobalProfileBrowser'
-	browserWindow.Size = UDim2.fromOffset(340, 480)
-	browserWindow.Position = UDim2.fromOffset(480, 60)
-	browserWindow.BackgroundColor3 = uipallet.Main
-	browserWindow.BorderSizePixel = 0
-	browserWindow.Visible = false
-	browserWindow.ZIndex = 10
-	browserWindow.Parent = clickgui
-	addBlur(browserWindow)
-	addCorner(browserWindow)
-	makeDraggable(browserWindow)
-
-	-- The GUI uses Enum.ZIndexBehavior.Global, so render order is by absolute
-	-- ZIndex across the whole GUI, NOT parent-then-child. Because the window sits
-	-- at ZIndex 10, every child must be raised above it or the window background
-	-- draws over its own contents (the "blank black frame" bug). Bump the whole
-	-- subtree above the window after building / after adding profile cards.
-	local function raiseChildren()
-		for _, d in browserWindow:GetDescendants() do
-			if d:IsA('GuiObject') and d.ZIndex < 11 then
-				d.ZIndex = 11
-			end
-		end
-	end
-
-	-- Title bar
-	local titleBar = Instance.new('Frame')
-	titleBar.Size = UDim2.new(1, 0, 0, 36)
-	titleBar.BackgroundTransparency = 1
-	titleBar.Parent = browserWindow
-
-	local titleLabel = Instance.new('TextLabel')
-	titleLabel.Size = UDim2.new(1, -40, 1, 0)
-	titleLabel.Position = UDim2.fromOffset(12, 0)
-	titleLabel.BackgroundTransparency = 1
-	titleLabel.Text = 'Global Profiles'
-	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-	titleLabel.TextColor3 = uipallet.Text
-	titleLabel.TextSize = 13
-	titleLabel.FontFace = uipallet.FontSemiBold
-	titleLabel.Parent = titleBar
-
-	local closeBtn = Instance.new('TextButton')
-	closeBtn.Size = UDim2.fromOffset(28, 28)
-	closeBtn.Position = UDim2.new(1, -32, 0, 4)
-	closeBtn.BackgroundTransparency = 1
-	closeBtn.Text = '×'
-	closeBtn.TextColor3 = color.Dark(uipallet.Text, 0.3)
-	closeBtn.TextSize = 20
-	closeBtn.FontFace = uipallet.Font
-	closeBtn.Parent = titleBar
-	closeBtn.MouseButton1Click:Connect(function() browserWindow.Visible = false end)
-
-	local dividerLine = Instance.new('Frame')
-	dividerLine.Size = UDim2.new(1, 0, 0, 1)
-	dividerLine.Position = UDim2.fromOffset(0, 36)
-	dividerLine.BackgroundColor3 = color.Light(uipallet.Main, 0.08)
-	dividerLine.BorderSizePixel = 0
-	dividerLine.Parent = browserWindow
-
-	-- Search bar
-	local searchBg = Instance.new('Frame')
-	searchBg.Size = UDim2.new(1, -20, 0, 26)
-	searchBg.Position = UDim2.fromOffset(10, 44)
-	searchBg.BackgroundColor3 = color.Light(uipallet.Main, 0.04)
-	searchBg.BorderSizePixel = 0
-	searchBg.Parent = browserWindow
-	addCorner(searchBg)
-
-	local searchBox = Instance.new('TextBox')
-	searchBox.Size = UDim2.new(1, -10, 1, 0)
-	searchBox.Position = UDim2.fromOffset(8, 0)
-	searchBox.BackgroundTransparency = 1
-	searchBox.PlaceholderText = 'Search profiles...'
-	searchBox.PlaceholderColor3 = color.Dark(uipallet.Text, 0.5)
-	searchBox.Text = ''
-	searchBox.TextColor3 = uipallet.Text
-	searchBox.TextSize = 12
-	searchBox.TextXAlignment = Enum.TextXAlignment.Left
-	searchBox.FontFace = uipallet.Font
-	searchBox.ClearTextOnFocus = false
-	searchBox.Parent = searchBg
-
-	-- Sort tabs
-	local sortFrame = Instance.new('Frame')
-	sortFrame.Size = UDim2.new(1, -20, 0, 22)
-	sortFrame.Position = UDim2.fromOffset(10, 76)
-	sortFrame.BackgroundTransparency = 1
-	sortFrame.Parent = browserWindow
-
-	local sortLayout = Instance.new('UIListLayout')
-	sortLayout.FillDirection = Enum.FillDirection.Horizontal
-	sortLayout.Padding = UDim.new(0, 4)
-	sortLayout.Parent = sortFrame
-
-	local currentSort = 'installs'
-	local sortBtns = {}
-
-	local function makeSortBtn(label, key)
-		local btn = Instance.new('TextButton')
-		btn.Size = UDim2.fromOffset(key == 'installs' and 62 or key == 'newest' and 52 or 42, 22)
-		btn.BackgroundColor3 = key == currentSort and color.Light(uipallet.Main, 0.1) or color.Light(uipallet.Main, 0.04)
-		btn.AutoButtonColor = false
-		btn.Text = label
-		btn.TextColor3 = key == currentSort and uipallet.Text or color.Dark(uipallet.Text, 0.4)
-		btn.TextSize = 11
-		btn.FontFace = uipallet.Font
-		btn.Parent = sortFrame
-		addCorner(btn)
-		sortBtns[key] = btn
-		return btn
-	end
-
-	local popularBtn = makeSortBtn('Popular', 'installs')
-	local newestBtn  = makeSortBtn('Newest',  'newest')
-	local nameBtn    = makeSortBtn('Name',    'name')
-
-	-- Profile list
-	local listFrame = Instance.new('ScrollingFrame')
-	listFrame.Size = UDim2.new(1, -16, 1, -170)
-	listFrame.Position = UDim2.fromOffset(8, 106)
-	listFrame.BackgroundTransparency = 1
-	listFrame.BorderSizePixel = 0
-	listFrame.ScrollBarThickness = 2
-	listFrame.ScrollBarImageTransparency = 0.75
-	listFrame.CanvasSize = UDim2.new()
-	listFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	listFrame.Parent = browserWindow
-
-	local listLayout = Instance.new('UIListLayout')
-	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	listLayout.Padding = UDim.new(0, 4)
-	listLayout.Parent = listFrame
-
-	-- Status label (loading / empty)
-	local statusLabel = Instance.new('TextLabel')
-	statusLabel.Size = UDim2.new(1, 0, 0, 30)
-	statusLabel.BackgroundTransparency = 1
-	statusLabel.Text = ''
-	statusLabel.TextColor3 = color.Dark(uipallet.Text, 0.4)
-	statusLabel.TextSize = 12
-	statusLabel.FontFace = uipallet.Font
-	statusLabel.Parent = listFrame
-
-	-- Bottom bar: Upload + Load More
-	local bottomBar = Instance.new('Frame')
-	bottomBar.Size = UDim2.new(1, -20, 0, 28)
-	bottomBar.Position = UDim2.new(0, 10, 1, -36)
-	bottomBar.BackgroundTransparency = 1
-	bottomBar.Parent = browserWindow
-
-	local bottomLayout = Instance.new('UIListLayout')
-	bottomLayout.FillDirection = Enum.FillDirection.Horizontal
-	bottomLayout.Padding = UDim.new(0, 6)
-	bottomLayout.Parent = bottomBar
-
-	local function makeBottomBtn(label, w)
-		local btn = Instance.new('TextButton')
-		btn.Size = UDim2.fromOffset(w, 28)
-		btn.BackgroundColor3 = color.Light(uipallet.Main, 0.06)
-		btn.AutoButtonColor = false
-		btn.Text = label
-		btn.TextColor3 = uipallet.Text
-		btn.TextSize = 12
-		btn.FontFace = uipallet.Font
-		btn.Parent = bottomBar
-		addCorner(btn)
-		return btn
-	end
-
-	local uploadBtn  = makeBottomBtn('Upload Current', 124)
-	local loadMoreBtn = makeBottomBtn('Load More', 100)
-
-	uploadBtn.Visible = true
-
-	-- ── Data & state ──────────────────────────────────────────────────────────
-	local cachedProfiles = nil
-	local cacheExpiry    = 0
-	local currentPage    = 1
-	local totalPages     = 1
-	local isLoading      = false
-
-	local function clearList()
-		for _, ch in listFrame:GetChildren() do
-			if ch:IsA('Frame') then ch:Destroy() end
-		end
-		statusLabel.Text = ''
-	end
-
-	-- Inspect a profile: pull its data read-only (no install) and list the
-	-- modules it has enabled, in an overlay panel.
-	local function inspectProfile(profile)
-		local bg = Instance.new('Frame')
-		bg.Size = UDim2.new(1, 0, 1, 0)
-		bg.BackgroundColor3 = Color3.new(0, 0, 0)
-		bg.BackgroundTransparency = 0.5
-		bg.BorderSizePixel = 0
-		bg.ZIndex = 30
-		bg.Parent = browserWindow
-
-		local panel = Instance.new('Frame')
-		panel.Size = UDim2.fromOffset(280, 320)
-		panel.Position = UDim2.new(0.5, -140, 0.5, -160)
-		panel.BackgroundColor3 = color.Light(uipallet.Main, 0.06)
-		panel.BorderSizePixel = 0
-		panel.ZIndex = 31
-		panel.Parent = bg
-		addCorner(panel)
-
-		local pTitle = Instance.new('TextLabel')
-		pTitle.Size = UDim2.new(1, -40, 0, 22)
-		pTitle.Position = UDim2.fromOffset(12, 8)
-		pTitle.BackgroundTransparency = 1
-		pTitle.Text = profile.name
-		pTitle.TextXAlignment = Enum.TextXAlignment.Left
-		pTitle.TextColor3 = uipallet.Text
-		pTitle.TextSize = 13
-		pTitle.TextTruncate = Enum.TextTruncate.AtEnd
-		pTitle.FontFace = uipallet.FontSemiBold
-		pTitle.ZIndex = 32
-		pTitle.Parent = panel
-
-		local pSub = Instance.new('TextLabel')
-		pSub.Size = UDim2.new(1, -40, 0, 16)
-		pSub.Position = UDim2.fromOffset(12, 28)
-		pSub.BackgroundTransparency = 1
-		pSub.Text = 'by ' .. profile.author_roblox_username
-		pSub.TextXAlignment = Enum.TextXAlignment.Left
-		pSub.TextColor3 = color.Dark(uipallet.Text, 0.45)
-		pSub.TextSize = 11
-		pSub.FontFace = uipallet.Font
-		pSub.ZIndex = 32
-		pSub.Parent = panel
-
-		local pClose = Instance.new('TextButton')
-		pClose.Size = UDim2.fromOffset(24, 24)
-		pClose.Position = UDim2.new(1, -28, 0, 6)
-		pClose.BackgroundTransparency = 1
-		pClose.Text = '×'
-		pClose.TextColor3 = color.Dark(uipallet.Text, 0.3)
-		pClose.TextSize = 18
-		pClose.FontFace = uipallet.Font
-		pClose.ZIndex = 32
-		pClose.Parent = panel
-		pClose.MouseButton1Click:Connect(function() bg:Destroy() end)
-
-		local pList = Instance.new('ScrollingFrame')
-		pList.Size = UDim2.new(1, -16, 1, -56)
-		pList.Position = UDim2.fromOffset(8, 48)
-		pList.BackgroundTransparency = 1
-		pList.BorderSizePixel = 0
-		pList.ScrollBarThickness = 2
-		pList.ScrollBarImageTransparency = 0.75
-		pList.CanvasSize = UDim2.new()
-		pList.AutomaticCanvasSize = Enum.AutomaticSize.Y
-		pList.ZIndex = 32
-		pList.Parent = panel
-		local pLayout = Instance.new('UIListLayout')
-		pLayout.SortOrder = Enum.SortOrder.Name
-		pLayout.Padding = UDim.new(0, 2)
-		pLayout.Parent = pList
-
-		local pStatus = Instance.new('TextLabel')
-		pStatus.Size = UDim2.new(1, 0, 0, 20)
-		pStatus.BackgroundTransparency = 1
-		pStatus.Text = 'Loading...'
-		pStatus.TextColor3 = color.Dark(uipallet.Text, 0.4)
-		pStatus.TextSize = 12
-		pStatus.FontFace = uipallet.Font
-		pStatus.ZIndex = 32
-		pStatus.Parent = pList
-
-		task.spawn(function()
-			local res = apiRequest('GET', '/profiles/' .. profile.id, nil)
-			local enabled = {}
-			if res and res.data then
-				local ok, data = pcall(http_.JSONDecode, http_, res.data)
-				if ok and data and data.Modules then
-					for modName, m in data.Modules do
-						if m.Enabled then table.insert(enabled, modName) end
-					end
-				end
-			elseif not res then
-				pStatus.Text = 'Failed to load'
-				return
-			end
-			table.sort(enabled)
-			if #enabled == 0 then
-				pStatus.Text = 'No enabled modules'
-				return
-			end
-			pStatus.Text = #enabled .. ' enabled module' .. (#enabled == 1 and '' or 's')
-			pStatus.TextColor3 = color.Dark(uipallet.Text, 0.5)
-			for _, modName in enabled do
-				local row = Instance.new('TextLabel')
-				row.Size = UDim2.new(1, 0, 0, 18)
-				row.BackgroundTransparency = 1
-				row.Text = '• ' .. modName
-				row.TextXAlignment = Enum.TextXAlignment.Left
-				row.TextColor3 = color.Dark(uipallet.Text, 0.18)
-				row.TextSize = 12
-				row.FontFace = uipallet.Font
-				row.ZIndex = 32
-				row.Parent = pList
-			end
-		end)
-	end
-
-	local function addProfileCard(profile, myRoblox)
-		local card = Instance.new('Frame')
-		card.Size = UDim2.new(1, -4, 0, 58)
-		card.BackgroundColor3 = color.Light(uipallet.Main, 0.03)
-		card.BorderSizePixel = 0
-		card.Parent = listFrame
-		addCorner(card)
-
-		local cardStroke = Instance.new('UIStroke')
-		cardStroke.Color = color.Light(uipallet.Main, 0.08)
-		cardStroke.Thickness = 1
-		cardStroke.Parent = card
-
-		-- Clicking the card body (anywhere but the action buttons) inspects the
-		-- profile. Sits at ZIndex 11; the action buttons are raised to 13 so they
-		-- still receive their own clicks. The text labels are non-interactive so
-		-- clicks fall through to this button.
-		local clickBtn = Instance.new('TextButton')
-		clickBtn.Size = UDim2.new(1, 0, 1, 0)
-		clickBtn.BackgroundTransparency = 1
-		clickBtn.Text = ''
-		clickBtn.ZIndex = 11
-		clickBtn.Parent = card
-		clickBtn.MouseButton1Click:Connect(function()
-			inspectProfile(profile)
-		end)
-
-		local nameLabel = Instance.new('TextLabel')
-		nameLabel.Size = UDim2.new(1, -70, 0, 20)
-		nameLabel.Position = UDim2.fromOffset(8, 6)
-		nameLabel.BackgroundTransparency = 1
-		nameLabel.Text = profile.name
-		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-		nameLabel.TextColor3 = uipallet.Text
-		nameLabel.TextSize = 13
-		nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-		nameLabel.FontFace = uipallet.FontSemiBold
-		nameLabel.Parent = card
-
-		local metaLabel = Instance.new('TextLabel')
-		metaLabel.Size = UDim2.new(1, -12, 0, 16)
-		metaLabel.Position = UDim2.fromOffset(8, 26)
-		metaLabel.BackgroundTransparency = 1
-		metaLabel.Text = 'by ' .. profile.author_roblox_username
-		metaLabel.TextXAlignment = Enum.TextXAlignment.Left
-		metaLabel.TextColor3 = color.Dark(uipallet.Text, 0.45)
-		metaLabel.TextSize = 11
-		metaLabel.FontFace = uipallet.Font
-		metaLabel.Parent = card
-
-		local isOwn = profile.author_roblox_username:lower() == (myRoblox or ''):lower()
-		local canDel = isOwn or (mainapi.Tier or 0) >= 2
-
-		local installBtn = Instance.new('TextButton')
-		installBtn.Size = UDim2.fromOffset(56, 22)
-		installBtn.Position = UDim2.new(1, -64, 0, 6)
-		installBtn.BackgroundColor3 = Color3.fromHSV(mainapi.GUIColor.Hue, mainapi.GUIColor.Sat, mainapi.GUIColor.Value)
-		installBtn.AutoButtonColor = false
-		installBtn.Text = 'Install'
-		installBtn.TextColor3 = Color3.new(1, 1, 1)
-		installBtn.TextSize = 11
-		installBtn.FontFace = uipallet.FontSemiBold
-		installBtn.ZIndex = 13
-		installBtn.Parent = card
-		addCorner(installBtn)
-
-		installBtn.MouseButton1Click:Connect(function()
-			installBtn.Text = '...'
-			task.spawn(function()
-				local res = apiRequest('POST', '/profiles/' .. profile.id .. '/install', { from = lplr.Name })
-				if res and res.data then
-					local success, localName = applyProfileData(res.data, profile.name)
-					installBtn.Text = success and '✓' or '!'
-					mainapi:CreateNotification('Profiles', success and ('Installed as local profile: ' .. (localName or profile.name)) or 'Failed to apply profile', 4, success and nil or 'alert')
-				else
-					installBtn.Text = '!'
-					mainapi:CreateNotification('Profiles', 'Install failed', 4, 'alert')
-				end
-				task.wait(2)
-				installBtn.Text = 'Install'
-			end)
-		end)
-
-		if isOwn then
-			local updateBtn = Instance.new('TextButton')
-			updateBtn.Size = UDim2.fromOffset(50, 22)
-			updateBtn.Position = UDim2.new(1, -64, 1, -28)
-			updateBtn.BackgroundColor3 = color.Light(uipallet.Main, 0.08)
-			updateBtn.AutoButtonColor = false
-			updateBtn.Text = 'Update'
-			updateBtn.TextColor3 = color.Dark(uipallet.Text, 0.2)
-			updateBtn.TextSize = 10
-			updateBtn.FontFace = uipallet.Font
-			updateBtn.ZIndex = 13
-			updateBtn.Parent = card
-			addCorner(updateBtn)
-
-			updateBtn.MouseButton1Click:Connect(function()
-				updateBtn.Text = '...'
-				task.spawn(function()
-					local res = apiRequest('PUT', '/profiles/' .. profile.id, {
-						from = lplr.Name,
-						data = gatherProfileData()
-					})
-					if res and res.ok then
-						mainapi:CreateNotification('Profiles', 'Profile updated', 4)
-						updateBtn.Text = '✓'
-					else
-						mainapi:CreateNotification('Profiles', 'Update failed', 4, 'alert')
-						updateBtn.Text = '!'
-					end
-					task.wait(2)
-					updateBtn.Text = 'Update'
-				end)
-			end)
-		end
-
-		if canDel then
-			local delBtn = Instance.new('TextButton')
-			delBtn.Size = UDim2.fromOffset(isOwn and 28 or 56, 22)
-			delBtn.Position = UDim2.new(1, -(isOwn and 118 or 64), 1, -28)
-			delBtn.BackgroundColor3 = color.Light(uipallet.Main, 0.04)
-			delBtn.AutoButtonColor = false
-			delBtn.Text = isOwn and '✕' or 'Delete'
-			delBtn.TextColor3 = Color3.fromRGB(220, 80, 80)
-			delBtn.TextSize = 11
-			delBtn.FontFace = uipallet.Font
-			delBtn.ZIndex = 13
-			delBtn.Parent = card
-			addCorner(delBtn)
-
-			delBtn.MouseButton1Click:Connect(function()
-				task.spawn(function()
-					-- `from` goes in the query string, not the body: many executors drop
-					-- the request body on DELETE, which made deletes always fail.
-					local res = apiRequest('DELETE', '/profiles/' .. profile.id .. '?from=' .. lplr.Name, nil)
-					if res and res.ok then
-						card:Destroy()
-						mainapi:CreateNotification('Profiles', 'Profile deleted', 4)
-					else
-						mainapi:CreateNotification('Profiles', 'Delete failed', 4, 'alert')
-					end
-				end)
-			end)
-		end
-	end
-
-	local function fetchProfiles(resetPage)
-		if isLoading then return end
-		isLoading = true
-		if resetPage then
-			currentPage = 1
-			clearList()
-		end
-		statusLabel.Text = 'Loading...'
-
-		task.spawn(function()
-			local search = searchBox.Text ~= '' and ('&search=' .. searchBox.Text) or ''
-			-- Key by GameId (universe), not PlaceId: one experience can have many
-			-- place IDs, and profiles must be shared across all of them.
-			local url = '/profiles?game_id=' .. tostring(game.GameId) .. '&sort=' .. currentSort .. '&page=' .. currentPage .. search
-			local res = apiRequest('GET', url, nil)
-
-			statusLabel.Text = ''
-			if not res or not res.profiles then
-				statusLabel.Text = 'Failed to load profiles'
-				isLoading = false
-				return
-			end
-
-			if #res.profiles == 0 and currentPage == 1 then
-				statusLabel.Text = 'No profiles found'
-			end
-
-			-- Find user's linked Roblox name for ownership checks
-			local myRoblox = lplr.Name
-
-			for _, profile in res.profiles do
-				addProfileCard(profile, myRoblox)
-			end
-			raiseChildren()
-
-			totalPages = res.pages or 1
-			loadMoreBtn.Visible = currentPage < totalPages
-			loadMoreBtn.TextColor3 = uipallet.Text
-			isLoading = false
-		end)
-	end
-
-	-- Sort button logic
-	local function setSort(key)
-		currentSort = key
-		for k, btn in sortBtns do
-			btn.BackgroundColor3 = k == key and color.Light(uipallet.Main, 0.1) or color.Light(uipallet.Main, 0.04)
-			btn.TextColor3 = k == key and uipallet.Text or color.Dark(uipallet.Text, 0.4)
-		end
-		fetchProfiles(true)
-	end
-
-	popularBtn.MouseButton1Click:Connect(function() setSort('installs') end)
-	newestBtn.MouseButton1Click:Connect(function()  setSort('newest')   end)
-	nameBtn.MouseButton1Click:Connect(function()    setSort('name')     end)
-
-	-- Debounced search
-	local searchDebounce
-	searchBox:GetPropertyChangedSignal('Text'):Connect(function()
-		if searchDebounce then task.cancel(searchDebounce) end
-		searchDebounce = task.delay(0.4, function()
-			searchDebounce = nil
-			fetchProfiles(true)
-		end)
-	end)
-
-	-- Load more
-	loadMoreBtn.MouseButton1Click:Connect(function()
-		if currentPage < totalPages then
-			currentPage += 1
-			fetchProfiles(false)
-		end
-	end)
-	loadMoreBtn.Visible = false
-
-	-- Upload current profile
-	uploadBtn.MouseButton1Click:Connect(function()
-		-- Prompt for name via a simple textbox overlay
-		local promptBg = Instance.new('Frame')
-		promptBg.Size = UDim2.new(1, 0, 1, 0)
-		promptBg.BackgroundColor3 = Color3.new(0, 0, 0)
-		promptBg.BackgroundTransparency = 0.5
-		promptBg.BorderSizePixel = 0
-		promptBg.ZIndex = 20
-		promptBg.Parent = browserWindow
-
-		local promptBox = Instance.new('Frame')
-		promptBox.Size = UDim2.fromOffset(220, 100)
-		promptBox.Position = UDim2.new(0.5, -110, 0.5, -50)
-		promptBox.BackgroundColor3 = color.Light(uipallet.Main, 0.06)
-		promptBox.BorderSizePixel = 0
-		promptBox.ZIndex = 21
-		promptBox.Parent = promptBg
-		addCorner(promptBox)
-
-		local promptLabel = Instance.new('TextLabel')
-		promptLabel.Size = UDim2.new(1, -16, 0, 20)
-		promptLabel.Position = UDim2.fromOffset(8, 8)
-		promptLabel.BackgroundTransparency = 1
-		promptLabel.Text = 'Profile name'
-		promptLabel.TextXAlignment = Enum.TextXAlignment.Left
-		promptLabel.TextColor3 = uipallet.Text
-		promptLabel.TextSize = 12
-		promptLabel.FontFace = uipallet.FontSemiBold
-		promptLabel.ZIndex = 21
-		promptLabel.Parent = promptBox
-
-		local promptInput = Instance.new('TextBox')
-		promptInput.Size = UDim2.new(1, -16, 0, 28)
-		promptInput.Position = UDim2.fromOffset(8, 32)
-		promptInput.BackgroundColor3 = color.Light(uipallet.Main, 0.04)
-		promptInput.BorderSizePixel = 0
-		promptInput.PlaceholderText = 'My awesome profile'
-		promptInput.PlaceholderColor3 = color.Dark(uipallet.Text, 0.5)
-		promptInput.Text = ''
-		promptInput.TextColor3 = uipallet.Text
-		promptInput.TextSize = 12
-		promptInput.FontFace = uipallet.Font
-		promptInput.ZIndex = 21
-		promptInput.Parent = promptBox
-		addCorner(promptInput)
-
-		local confirmBtn = Instance.new('TextButton')
-		confirmBtn.Size = UDim2.fromOffset(90, 26)
-		confirmBtn.Position = UDim2.new(0.5, -95, 1, -34)
-		confirmBtn.BackgroundColor3 = Color3.fromHSV(mainapi.GUIColor.Hue, mainapi.GUIColor.Sat, mainapi.GUIColor.Value)
-		confirmBtn.AutoButtonColor = false
-		confirmBtn.Text = 'Upload'
-		confirmBtn.TextColor3 = Color3.new(1, 1, 1)
-		confirmBtn.TextSize = 12
-		confirmBtn.FontFace = uipallet.FontSemiBold
-		confirmBtn.ZIndex = 21
-		confirmBtn.Parent = promptBox
-		addCorner(confirmBtn)
-
-		local cancelBtn = Instance.new('TextButton')
-		cancelBtn.Size = UDim2.fromOffset(90, 26)
-		cancelBtn.Position = UDim2.new(0.5, 5, 1, -34)
-		cancelBtn.BackgroundColor3 = color.Light(uipallet.Main, 0.06)
-		cancelBtn.AutoButtonColor = false
-		cancelBtn.Text = 'Cancel'
-		cancelBtn.TextColor3 = color.Dark(uipallet.Text, 0.3)
-		cancelBtn.TextSize = 12
-		cancelBtn.FontFace = uipallet.Font
-		cancelBtn.ZIndex = 21
-		cancelBtn.Parent = promptBox
-		addCorner(cancelBtn)
-
-		cancelBtn.MouseButton1Click:Connect(function() promptBg:Destroy() end)
-
-		confirmBtn.MouseButton1Click:Connect(function()
-			local name = promptInput.Text:match('^%s*(.-)%s*$')
-			if #name < 1 then return end
-			confirmBtn.Text = '...'
-			task.spawn(function()
-				local res, status = apiRequest('POST', '/profiles', {
-					from        = lplr.Name,
-					name        = name,
-					game_id     = tostring(game.GameId),
-					data        = gatherProfileData(),
-				})
-				promptBg:Destroy()
-				if res and res.id then
-					mainapi:CreateNotification('Profiles', 'Uploaded: ' .. name, 5)
-					fetchProfiles(true)
-				else
-					local msg = res and res.error or 'Upload failed'
-					mainapi:CreateNotification('Profiles', msg, 5, 'alert')
-				end
-			end)
-		end)
-
-		task.defer(function() promptInput:CaptureFocus() end)
-	end)
-
-	-- Toggle button in the Profiles window
+	-- Preset templates: one button per preset (for this game) in the Profiles window;
+	-- clicking installs it as a new editable local profile.
 	local profilesWindow = clickgui:FindFirstChild('ProfilesCategoryList')
-	if profilesWindow then
+	if profilesWindow and profilesWindow:FindFirstChild('Children') then
 		local settingsPane = profilesWindow.Children:FindFirstChild('SettingsPane')
-		local browseBtn = Instance.new('TextButton')
-		browseBtn.Size = UDim2.fromOffset(200, 28)
-		browseBtn.LayoutOrder = 0
-		browseBtn.BackgroundColor3 = color.Light(uipallet.Main, 0.07)
-		browseBtn.AutoButtonColor = false
-		browseBtn.Text = 'Browse Global Profiles'
-		browseBtn.TextColor3 = color.Dark(uipallet.Text, 0.08)
-		browseBtn.TextSize = 12
-		browseBtn.FontFace = uipallet.FontSemiBold
-		browseBtn.Parent = settingsPane or profilesWindow.Children
-		addCorner(browseBtn)
-
-		local browseBtnStroke = Instance.new('UIStroke')
-		browseBtnStroke.Color = color.Light(uipallet.Main, 0.14)
-		browseBtnStroke.Parent = browseBtn
-
-		browseBtn.MouseButton1Click:Connect(function()
-			browserWindow.Visible = not browserWindow.Visible
-			if browserWindow.Visible then
-				raiseChildren()
-				fetchProfiles(true)
+		local parent = settingsPane or profilesWindow.Children
+		local order = 1
+		for _, preset in ipairs(mainapi.Presets) do
+			local g = preset.Game and tostring(preset.Game)
+			if (not g) or g == tostring(game.GameId) or g == tostring(game.PlaceId) then
+				local btn = Instance.new('TextButton')
+				btn.Size = UDim2.fromOffset(200, 28)
+				btn.LayoutOrder = order
+				order = order + 1
+				btn.BackgroundColor3 = color.Light(uipallet.Main, 0.07)
+				btn.AutoButtonColor = false
+				btn.Text = 'Use preset: ' .. tostring(preset.Name)
+				btn.TextColor3 = color.Dark(uipallet.Text, 0.08)
+				btn.TextSize = 12
+				btn.FontFace = uipallet.FontSemiBold
+				btn.Parent = parent
+				addCorner(btn)
+				if preset.Description and addTooltip then addTooltip(btn, preset.Description) end
+				local stroke = Instance.new('UIStroke')
+				stroke.Color = color.Light(uipallet.Main, 0.14)
+				stroke.Parent = btn
+				btn.MouseButton1Click:Connect(function()
+					mainapi:ApplyPreset(preset)
+				end)
+				btn.MouseEnter:Connect(function()
+					tween:Tween(btn, uipallet.Tween, { TextColor3 = uipallet.Text })
+				end)
+				btn.MouseLeave:Connect(function()
+					tween:Tween(btn, uipallet.Tween, { TextColor3 = color.Dark(uipallet.Text, 0.08) })
+				end)
 			end
-		end)
-
-		browseBtn.MouseEnter:Connect(function()
-			tween:Tween(browseBtn, uipallet.Tween, { TextColor3 = uipallet.Text })
-		end)
-		browseBtn.MouseLeave:Connect(function()
-			tween:Tween(browseBtn, uipallet.Tween, { TextColor3 = color.Dark(uipallet.Text, 0.08) })
-		end)
+		end
 	end
-	-- ── End Global Profile Browser ────────────────────────────────────────────
 end
+
 
 --[[
 	Targets
@@ -7799,11 +6945,6 @@ modules:CreateToggle({
 			mainapi.Libraries.entity.refresh()
 		end
 	end
-})
-modules:CreateToggle({
-	Name = 'Global Target List',
-	Tooltip = 'Get notified when someone on the shared global target list is in your server',
-	Default = true
 })
 modules:CreateToggle({
 	Name = 'Use team color',
@@ -7999,7 +7140,6 @@ mainapi.GUIColor = mainapi.Categories.Main:CreateGUISlider({
 	end
 })
 mainapi.Categories.Main:CreateBind()
-mainapi.Categories.Main:CreateConsole()
 
 --[[
 	Text GUI
