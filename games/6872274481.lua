@@ -29917,12 +29917,24 @@ run(function()
 		return false
 	end
 
+	-- Destroy the whole portal render, not just the skybox leaf: when we spot a
+	-- ViewportSkybox, tear down the ViewportFrame that holds it (that's the heavy
+	-- renderer). Returns the instance actually destroyed, or nil.
+	local function killPortal(inst)
+		local target = inst
+		if inst.Name == SKYBOX_NAME then
+			target = inst:FindFirstAncestorWhichIsA('ViewportFrame') or inst
+		end
+		if target and target.Parent then
+			pcall(function() target:Destroy() end)
+			return target
+		end
+	end
+
 	local function neutralise(inst)
 		if not (KillRender and KillRender.Enabled) then return end
 		if isPortalRender(inst) then
-			task.defer(function()
-				pcall(function() if inst and inst.Parent then inst:Destroy() end end)
-			end)
+			task.defer(function() killPortal(inst) end)
 		end
 	end
 
@@ -29944,13 +29956,12 @@ run(function()
 		disconnectAll()
 		summonWindow = {}
 		conns[#conns + 1] = workspace.DescendantAdded:Connect(function(inst)
-			if RateLimit and RateLimit.Enabled and isPortalRender(inst) and not summonAllowed() then
-				task.defer(function()
-					pcall(function() if inst and inst.Parent then inst:Destroy() end end)
-				end)
-				return
+			if not isPortalRender(inst) then return end
+			-- burst OR kill-render on -> tear down the portal render
+			if (RateLimit and RateLimit.Enabled and not summonAllowed())
+				or (KillRender and KillRender.Enabled) then
+				task.defer(function() killPortal(inst) end)
 			end
-			neutralise(inst)
 		end)
 		task.spawn(function()
 			for _, d in ipairs(workspace:GetDescendants()) do neutralise(d) end
