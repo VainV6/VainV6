@@ -29910,24 +29910,42 @@ run(function()
 	end
 
 	-- Is this instance part of the Wren portal render we want to suppress?
+	-- The game parents the portal PARTS to Workspace, each carrying a SurfaceGui
+	-- with a ViewportFrame into which it clones the (heavy) ViewportSkybox. We match
+	-- at every level so we catch it no matter which piece appears first.
 	local function isPortalRender(inst)
 		if not inst then return false end
 		if inst.Name == SKYBOX_NAME then return true end
-		if inst:IsA('ViewportFrame') and inst:FindFirstChild(SKYBOX_NAME) then return true end
+		if inst:IsA('ViewportFrame') then
+			-- a viewport that holds the skybox (or is destined to)
+			if inst:FindFirstChild(SKYBOX_NAME) then return true end
+		end
+		if inst:IsA('SurfaceGui') and inst:FindFirstChildWhichIsA('ViewportFrame') then
+			-- portal slice surface gui
+			local vp = inst:FindFirstChildWhichIsA('ViewportFrame')
+			if vp and vp:FindFirstChild(SKYBOX_NAME) then return true end
+		end
 		return false
 	end
 
-	-- Destroy the whole portal render, not just the skybox leaf: when we spot a
-	-- ViewportSkybox, tear down the ViewportFrame that holds it (that's the heavy
-	-- renderer). Returns the instance actually destroyed, or nil.
+	-- Destroy the whole portal render, not just the skybox leaf: when we spot any
+	-- portal piece, tear down the enclosing Part/Model in Workspace (the effect's
+	-- root), which removes the viewport + skybox + its per-Heartbeat updater.
 	local function killPortal(inst)
-		local target = inst
-		if inst.Name == SKYBOX_NAME then
-			target = inst:FindFirstAncestorWhichIsA('ViewportFrame') or inst
+		if not inst then return end
+		-- climb to the top-level Workspace child that owns this render
+		local root = inst
+		if inst.Name == SKYBOX_NAME or inst:IsA('ViewportFrame') or inst:IsA('SurfaceGui') then
+			local part = inst:FindFirstAncestorWhichIsA('BasePart')
+			if part and part.Parent == workspace then
+				root = part
+			else
+				root = inst:FindFirstAncestorWhichIsA('ViewportFrame') or inst
+			end
 		end
-		if target and target.Parent then
-			pcall(function() target:Destroy() end)
-			return target
+		if root and root.Parent then
+			pcall(function() root:Destroy() end)
+			return root
 		end
 	end
 
@@ -29952,14 +29970,25 @@ run(function()
 		return true
 	end
 
+	-- Source-level block: also catch the ViewportSkybox the instant it is added to
+	-- ANY viewport (the game clones it a frame after the part appears). Watching the
+	-- whole DataModel for the named skybox is the surest single catch for a
+	-- server-broadcast burst where many portals spawn across the map at once.
 	local function enable()
 		disconnectAll()
 		summonWindow = {}
+		-- 1) workspace parts (the portal roots)
 		conns[#conns + 1] = workspace.DescendantAdded:Connect(function(inst)
 			if not isPortalRender(inst) then return end
-			-- burst OR kill-render on -> tear down the portal render
 			if (RateLimit and RateLimit.Enabled and not summonAllowed())
 				or (KillRender and KillRender.Enabled) then
+				task.defer(function() killPortal(inst) end)
+			end
+		end)
+		-- 2) the skybox clone itself, wherever it lands -- this is the heavy asset,
+		--    so nuke it (and its viewport) the moment it appears, always.
+		conns[#conns + 1] = game.DescendantAdded:Connect(function(inst)
+			if inst.Name == SKYBOX_NAME and (KillRender and KillRender.Enabled) then
 				task.defer(function() killPortal(inst) end)
 			end
 		end)
@@ -29970,7 +29999,7 @@ run(function()
 
 	AntiWrenCrash = vain.Categories.World:CreateModule({
 		Name = 'Anti Crash (Wren)',
-		Tooltip = 'Immunity to the Wren / Black Market summon crash: rate-limits the summon render and destroys the heavy ViewportSkybox portal on your client. You stop seeing other players\' Wren portal animation while enabled.',
+		Tooltip = 'Protects you from the Wren / Black Market server crash (the one that takes down everyone in the lobby). Destroys the heavy ViewportSkybox portal render the instant it appears on your client, so you survive when someone crashes the server. You stop seeing other players\' Wren portal animation while enabled.',
 		Function = function(callback)
 			if callback then
 				enable()
