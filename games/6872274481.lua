@@ -9933,6 +9933,137 @@ run(function()
     })
 end)
 
+-- ══════════════════════════════════════════════════════════════════════════════
+--  HOTBAR COLOR  -- recolour the item hotbar slots
+-- ══════════════════════════════════════════════════════════════════════════════
+-- The hotbar is a Roact app mounted as the ScreenGui "hotbar" in PlayerGui, so we
+-- can't cleanly patch its props -- we recolour at the instance level and re-apply
+-- on a loop (Roact re-renders when items change). We remember each frame's
+-- original colour so the module restores cleanly when toggled off.
+run(function()
+    local HotbarColor
+    local Color, Slots, Container, Stroke
+
+    local ATTR = 'VainHotbarOrig'   -- stores a frame's original BackgroundColor3
+
+    local function hotbarGui()
+        local pg = lplr:FindFirstChild('PlayerGui')
+        return pg and pg:FindFirstChild('hotbar')
+    end
+
+    -- A hotbar slot background is an opaque Frame (the tile). We split the targets:
+    -- the slot tiles (small frames laid out horizontally) vs the container behind
+    -- them. We recolour based on which sub-toggles are on.
+    local function wantColor()
+        return Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+    end
+
+    -- Should this frame be recoloured given the current toggles?
+    local function isTarget(inst)
+        if not inst:IsA('Frame') and not inst:IsA('ImageLabel') then return false end
+        if inst.BackgroundTransparency >= 1 then return false end
+        -- slot tiles sit under a horizontal UIListLayout ("ItemsHotbar"); the
+        -- container is the larger backing frame. Heuristic: a tile is roughly
+        -- square-ish and small. We colour tiles when Slots is on, and the rest
+        -- (container) when Container is on.
+        local looksLikeSlot = inst.AbsoluteSize.X > 0
+            and math.abs(inst.AbsoluteSize.X - inst.AbsoluteSize.Y) < inst.AbsoluteSize.X * 0.6
+            and inst.AbsoluteSize.X < 120
+        if looksLikeSlot then
+            return Slots and Slots.Enabled
+        else
+            return Container and Container.Enabled
+        end
+    end
+
+    local function paint()
+        local gui = hotbarGui()
+        if not gui then return end
+        local col = wantColor()
+        for _, inst in gui:GetDescendants() do
+            if isTarget(inst) then
+                if inst:GetAttribute(ATTR) == nil then
+                    inst:SetAttribute(ATTR, tostring(inst.BackgroundColor3))
+                end
+                if inst.BackgroundColor3 ~= col then
+                    inst.BackgroundColor3 = col
+                end
+            end
+            -- optional slot outline
+            if Stroke and Stroke.Enabled and (inst:IsA('Frame')) then
+                local s = inst:FindFirstChildWhichIsA('UIStroke')
+                if s and s.Color ~= col then
+                    if s:GetAttribute(ATTR) == nil then s:SetAttribute(ATTR, tostring(s.Color)) end
+                    s.Color = col
+                end
+            end
+        end
+    end
+
+    -- Restore every frame/stroke we ever recoloured back to its saved colour.
+    local function restore()
+        local gui = hotbarGui()
+        if not gui then return end
+        for _, inst in gui:GetDescendants() do
+            local saved = inst:GetAttribute(ATTR)
+            if saved ~= nil then
+                local ok, c = pcall(function()
+                    local r, g, b = saved:match('([%d%.]+), ([%d%.]+), ([%d%.]+)')
+                    return Color3.new(tonumber(r), tonumber(g), tonumber(b))
+                end)
+                if ok and c then
+                    if inst:IsA('UIStroke') then inst.Color = c else inst.BackgroundColor3 = c end
+                end
+                inst:SetAttribute(ATTR, nil)
+            end
+        end
+    end
+
+    HotbarColor = vain.Categories.Render:CreateModule({
+        Name = 'Hotbar Color',
+        Tooltip = 'Recolours your item hotbar. Pick a colour and choose whether to tint the slots, the container, and/or the slot outlines.',
+        Function = function(callback)
+            if callback then
+                task.spawn(function()
+                    repeat
+                        pcall(paint)
+                        task.wait(0.2)
+                    until not HotbarColor.Enabled
+                    pcall(restore)
+                end)
+            else
+                pcall(restore)
+            end
+        end,
+    })
+    Color = HotbarColor:CreateColorSlider({
+        Name = 'Color',
+        Function = function() end,
+    })
+    Slots = HotbarColor:CreateToggle({
+        Name = 'Tint Slots',
+        Tooltip = 'Recolour the individual hotbar slot tiles.',
+        Default = true,
+        Function = function() end,
+    })
+    Container = HotbarColor:CreateToggle({
+        Name = 'Tint Container',
+        Tooltip = 'Recolour the backing panel behind the slots.',
+        Default = false,
+        Function = function(on)
+            if not on and HotbarColor.Enabled then pcall(restore) end
+        end,
+    })
+    Stroke = HotbarColor:CreateToggle({
+        Name = 'Tint Outline',
+        Tooltip = 'Recolour the slot outlines (UIStroke) to match.',
+        Default = false,
+        Function = function(on)
+            if not on and HotbarColor.Enabled then pcall(restore) end
+        end,
+    })
+end)
+
 run(function()
     local GeneratorESP
     local Transparency
