@@ -29878,6 +29878,177 @@ run(function()
 	})
 end)
 
+-- ══════════════════════════════════════════════════════════════════════════════
+--  ANTI CRASH (WREN)  -- immunity to the Wren / Black Market portal crash
+-- ══════════════════════════════════════════════════════════════════════════════
+-- Wren is the "Black Market Trader" kit. Its panflute summon fires the
+-- ServerToClient event "BlackMarketPlaceShop" on EVERY nearby client, which runs
+-- createPortalEffect in the black-marketeer-controller. That effect builds
+-- ViewportFrames and clones ReplicatedStorage.Assets.Effects.PortalKillEffect.
+-- ViewportSkybox into each one, then re-renders those viewport cameras every
+-- Heartbeat. A skybox rendered inside a ViewportFrame is brutally expensive, and
+-- there is NO client-side rate limit -- so a Wren spamming summon/unsummon (or
+-- several Wrens) stacks many per-frame viewport-skybox renders and crashes you.
+--
+-- Defense (two layers, so it's bulletproof):
+--   1) Rate-limit the summon render -- drop bursts outright.
+--   2) Neutralise the render itself -- kill any ViewportSkybox clone / portal
+--      ViewportFrame the moment it appears, so even summons that slip through
+--      render nothing heavy.
+run(function()
+	local AntiWrenCrash
+	local RateLimit, KillRender, SelfTest
+
+	local SKYBOX_NAME = 'ViewportSkybox'
+	local conns = {}
+
+	local function disconnectAll()
+		for _, c in ipairs(conns) do
+			pcall(function() c:Disconnect() end)
+		end
+		table.clear(conns)
+	end
+
+	-- Is this instance part of the Wren portal render we want to suppress?
+	local function isPortalRender(inst)
+		if not inst then return false end
+		if inst.Name == SKYBOX_NAME then return true end
+		if inst:IsA('ViewportFrame') and inst:FindFirstChild(SKYBOX_NAME) then return true end
+		return false
+	end
+
+	local function neutralise(inst)
+		if not (KillRender and KillRender.Enabled) then return end
+		if isPortalRender(inst) then
+			task.defer(function()
+				pcall(function() if inst and inst.Parent then inst:Destroy() end end)
+			end)
+		end
+	end
+
+	-- ── rate limiting ──────────────────────────────────────────────────────────
+	local summonWindow = {}
+	local function summonAllowed()
+		local now = os.clock()
+		local kept = {}
+		for _, t in ipairs(summonWindow) do
+			if now - t < 1 then kept[#kept + 1] = t end
+		end
+		summonWindow = kept
+		if #summonWindow >= 2 then return false end
+		summonWindow[#summonWindow + 1] = now
+		return true
+	end
+
+	local function enable()
+		disconnectAll()
+		summonWindow = {}
+		conns[#conns + 1] = workspace.DescendantAdded:Connect(function(inst)
+			if RateLimit and RateLimit.Enabled and isPortalRender(inst) and not summonAllowed() then
+				task.defer(function()
+					pcall(function() if inst and inst.Parent then inst:Destroy() end end)
+				end)
+				return
+			end
+			neutralise(inst)
+		end)
+		task.spawn(function()
+			for _, d in ipairs(workspace:GetDescendants()) do neutralise(d) end
+		end)
+	end
+
+	AntiWrenCrash = vain.Categories.World:CreateModule({
+		Name = 'Anti Crash (Wren)',
+		Tooltip = 'Immunity to the Wren / Black Market summon crash: rate-limits the summon render and destroys the heavy ViewportSkybox portal on your client. You stop seeing other players\' Wren portal animation while enabled.',
+		Function = function(callback)
+			if callback then
+				enable()
+			else
+				disconnectAll()
+			end
+		end,
+	})
+	RateLimit = AntiWrenCrash:CreateToggle({
+		Name = 'Rate Limit Summons',
+		Tooltip = 'Only allow a couple of Black Market portal renders per second (drops spam bursts outright).',
+		Default = true,
+		Function = function() end,
+	})
+	KillRender = AntiWrenCrash:CreateToggle({
+		Name = 'Kill Portal Render',
+		Tooltip = 'Destroy the ViewportSkybox / portal ViewportFrames the moment they appear -- this is the heavy part that actually crashes you.',
+		Default = true,
+		Function = function(on)
+			if on and AntiWrenCrash.Enabled then
+				task.spawn(function()
+					for _, d in ipairs(workspace:GetDescendants()) do neutralise(d) end
+				end)
+			end
+		end,
+	})
+	-- ── self-test ───────────────────────────────────────────────────────────────
+	-- Simulates the abuse locally: rapidly clones the exact ViewportSkybox into
+	-- ViewportFrames (what a spamming Wren makes your client render) and reports
+	-- whether the protection removed them -- verify without needing a real abuser.
+	SelfTest = AntiWrenCrash:CreateToggle({
+		Name = 'Run Self-Test',
+		Tooltip = 'Spawns 40 fake ViewportSkybox portal renders (the crash payload) and reports whether Anti Crash destroyed them. Safe -- it cleans up after itself.',
+		Default = false,
+		Function = function(on)
+			if not on then return end
+			task.spawn(function()
+				if not AntiWrenCrash.Enabled then
+					notif('Anti Crash (Wren)', 'Enable the module first, then run the self-test.', 6, 'warning')
+					SelfTest:Toggle(false)
+					return
+				end
+				local N = 40
+				local holder = Instance.new('Folder')
+				holder.Name = 'VainWrenCrashTest'
+				holder.Parent = workspace
+				local made = {}
+				local skyboxSrc
+				pcall(function()
+					skyboxSrc = replicatedStorage.Assets.Effects.PortalKillEffect:FindFirstChild(SKYBOX_NAME)
+				end)
+				for _ = 1, N do
+					local part = Instance.new('Part')
+					part.Anchored = true part.CanCollide = false part.Transparency = 1
+					part.Name = 'BlackMarketPortalTest'
+					part.Parent = holder
+					local sg = Instance.new('SurfaceGui')
+					sg.Parent = part
+					local vp = Instance.new('ViewportFrame')
+					vp.Size = UDim2.fromScale(1, 1)
+					vp.Parent = sg
+					local sky = (skyboxSrc and skyboxSrc:Clone()) or Instance.new('Folder')
+					sky.Name = SKYBOX_NAME
+					sky.Parent = vp
+					made[#made + 1] = vp
+				end
+				local start = os.clock()
+				local deadline = start + 2
+				local killed = 0
+				repeat
+					task.wait()
+					killed = 0
+					for _, vp in ipairs(made) do
+						if not vp.Parent then killed = killed + 1 end
+					end
+				until killed >= N or os.clock() > deadline
+				if holder and holder.Parent then holder:Destroy() end
+				local ok = killed >= N
+				notif('Anti Crash (Wren)',
+					('Self-test: %d/%d fake portal renders destroyed in %.2fs -- %s')
+						:format(killed, N, os.clock() - start,
+							ok and 'PROTECTED' or 'INCOMPLETE (turn on Kill Portal Render)'),
+					8, ok and 'success' or 'warning')
+				SelfTest:Toggle(false)
+			end)
+		end,
+	})
+end)
+
 run(function()
 	local AutoMushroom
 	local Range
