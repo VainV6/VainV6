@@ -18633,58 +18633,6 @@ run(function()
     end
 end)
 
--- ══════════════════════════════════════════════════════════════════════════════
---  WREN DISCOUNTED ITEMS  -- spam the Black Market close ability for cheaper deals
--- ══════════════════════════════════════════════════════════════════════════════
--- Wren (Black Market Trader) glitch: rapidly firing the "close_black_market"
--- ability desyncs the shop pricing on the server, sometimes rolling a discount.
--- The more fires per burst, the higher the chance. We fire useAbility in bursts on
--- a loop while enabled. This only affects YOUR own shop -- it's a self economy
--- glitch, not anything that touches other players.
-run(function()
-    local WrenDiscount
-    local Burst, Interval
-
-    local eventsFolder = replicatedStorage:WaitForChild(
-        'events-@easy-games/game-core:shared/game-core-networking@getEvents.Events')
-    local useAbility = eventsFolder and eventsFolder:WaitForChild('useAbility')
-
-    WrenDiscount = vain.Categories.Kits:CreateModule({
-        Name = 'Wren Discounted Items',
-        Tooltip = 'Spams the Wren / Black Market close ability to glitch shop pricing for discounts. Higher burst = higher discount chance. Affects only your own shop.',
-        Function = function(callback)
-            if callback then
-                task.spawn(function()
-                    repeat
-                        local n = (Burst and Burst.Value) or 400
-                        for _ = 1, n do
-                            pcall(function() useAbility:FireServer('close_black_market') end)
-                        end
-                        task.wait((Interval and Interval.Value) or 1.2)
-                    until not WrenDiscount.Enabled
-                end)
-            end
-        end,
-    })
-    Burst = WrenDiscount:CreateSlider({
-        Name = 'Burst Size',
-        Tooltip = 'How many ability fires per burst. More = higher discount chance (and more server load / risk).',
-        Min = 10,
-        Max = 800,
-        Default = 400,
-        Suffix = function(val) return 'fires' end,
-    })
-    Interval = WrenDiscount:CreateSlider({
-        Name = 'Burst Interval',
-        Tooltip = 'Seconds to wait between bursts.',
-        Min = 0.2,
-        Max = 5,
-        Default = 1.2,
-        Decimal = 10,
-        Suffix = function(val) return 's' end,
-    })
-end)
-
 run(function()
     local AutoBee
     local Collect
