@@ -1,17 +1,18 @@
 -- Flee the Facility (2-beast variant) -- place 17600423422 (10 players).
 --
 -- Data model (confirmed from the place file):
---  * A player is a BEAST when player:GetAttribute("Beast") == true. This round has
---    TWO beasts. Survivors and beasts are standard Humanoid characters.
---  * Computers are Models named "ComputerTable" placed around the map. A finished
---    one gets a "ComputerFinishedHighlight" in the hacker's character.
---  * Hacking is a skill check driven by ReplicatedStorage.Challenge (RemoteEvent):
---    server -> client Challenge.OnClientEvent("Challenge", computer, spaceStart,
---    spaceEnd); the client shows PlayerGui.ComputerChallenge.Frame with a "Space"
---    target zone (Position.X.Scale = start, Size.X.Scale = width) and a "Marker"
---    that slides 0->1 over 2s. You WIN by firing
---    Challenge:FireServer(computer, "Challenge", markerX) with markerX inside the
---    zone. Autohack simply fires with the CENTRE of the zone -> perfect every time.
+--  * A player is a BEAST when player:GetAttribute("Beast") == true. Two beasts.
+--  * Computers are CollectionService-tagged "Computer". The hackable computer is
+--    the tagged part's Parent, with attributes: Progress (0..100, >=100 = hacked),
+--    Player (who is hacking), Dummy (tutorial dummy). GetTagged("Computer") lists
+--    every trigger part.
+--  * Hacking: press E on a computer -> Computer:InvokeServer(part, "Start")
+--    (RemoteFunction) begins it; the server then drives skill checks via the
+--    Challenge RemoteEvent: Challenge.OnClientEvent("Challenge", computer, start,
+--    end). You WIN a check with Challenge:FireServer(computer, "Challenge", x)
+--    where x is inside [start, end]. Repeat until Progress >= 100.
+--  * The escape Hatch is a CollectionService-tagged "Hatch" instance that only
+--    exists/opens when one survivor is left.
 
 local run = function(func) func() end
 local cloneref = cloneref or function(obj) return obj end
@@ -21,7 +22,6 @@ local replicatedStorage = cloneref(game:GetService('ReplicatedStorage'))
 local runService = cloneref(game:GetService('RunService'))
 local collectionService = cloneref(game:GetService('CollectionService'))
 
-local gameCamera = workspace.CurrentCamera
 local lplr = playersService.LocalPlayer
 
 local vain = shared.vain
@@ -30,12 +30,10 @@ local vain = shared.vain
 -- Shared helpers
 -- ============================================================================
 
--- A player is a beast when their "Beast" attribute is true.
 local function isBeast(plr)
 	return plr and plr:GetAttribute('Beast') == true
 end
 
--- Every beast player (there are two).
 local function beastPlayers()
 	local list = {}
 	for _, plr in playersService:GetPlayers() do
@@ -46,72 +44,35 @@ local function beastPlayers()
 	return list
 end
 
-local function charParts(plr)
-	local char = plr and plr.Character
-	if not char then return nil, nil end
-	return char, char:FindFirstChild('HumanoidRootPart') or char.PrimaryPart
+local function myRoot()
+	local char = lplr.Character
+	return char and (char:FindFirstChild('HumanoidRootPart') or char.PrimaryPart)
 end
 
--- Every hackable computer in the map (Models named "ComputerTable").
+-- Every hackable computer trigger part (tagged "Computer"), skipping tutorial
+-- dummies. Returns { { part = triggerPart, board = part.Parent }, ... }.
 local function computers()
 	local list = {}
-	for _, m in workspace:GetDescendants() do
-		if m:IsA('Model') and m.Name == 'ComputerTable' then
-			list[#list + 1] = m
+	local ok, tagged = pcall(function() return collectionService:GetTagged('Computer') end)
+	if not ok then return list end
+	for _, part in tagged do
+		local board = part.Parent
+		if board and not board:GetAttribute('Dummy') then
+			list[#list + 1] = { part = part, board = board }
 		end
 	end
 	return list
 end
 
--- ============================================================================
--- SLOW BEAST  -- pin every beast's WalkSpeed down (both beasts)
--- ============================================================================
-run(function()
-	local SlowBeast
-	local Speed
-
-	local function apply()
-		for _, plr in beastPlayers() do
-			if plr ~= lplr then
-				local char = plr.Character
-				local hum = char and char:FindFirstChildOfClass('Humanoid')
-				if hum then
-					hum.WalkSpeed = (Speed and Speed.Value) or 4
-				end
-			end
-		end
-	end
-
-	SlowBeast = vain.Categories.Blatant:CreateModule({
-		Name = 'Slow Beast',
-		Tooltip = 'Forces every beast\'s walk speed down on your client (this version has two beasts).',
-		Function = function(callback)
-			if callback then
-				task.spawn(function()
-					repeat
-						pcall(apply)
-						runService.Heartbeat:Wait()
-					until not SlowBeast.Enabled
-				end)
-			end
-		end,
-	})
-	Speed = SlowBeast:CreateSlider({
-		Name = 'Beast Speed',
-		Tooltip = 'Walk speed to force on the beasts (lower = slower).',
-		Min = 0,
-		Max = 16,
-		Default = 4,
-		Suffix = function(val) return 'studs/s' end,
-	})
-end)
+local function isHacked(board)
+	return board and (board:GetAttribute('Progress') or 0) >= 100
+end
 
 -- ============================================================================
 -- BEAST ESP  -- highlight both beasts through walls
 -- ============================================================================
 run(function()
 	local BeastESP
-	local Tracers
 	local highlights = {}
 
 	local function clear()
@@ -135,7 +96,6 @@ run(function()
 			h.Parent = char
 			highlights[char] = h
 		end
-		return h
 	end
 
 	local function tick()
@@ -146,7 +106,6 @@ run(function()
 				ensure(plr.Character)
 			end
 		end
-		-- drop highlights for anyone no longer a beast / gone
 		for char, h in pairs(highlights) do
 			if not live[char] then
 				pcall(function() h:Destroy() end)
@@ -179,15 +138,12 @@ end)
 -- ============================================================================
 run(function()
 	local ComputerESP
-	local ShowFinished, Highlights
+	local ShowFinished, Highlights, GreenHacked
 	local gui
-	local marks = {}   -- computer model -> { billboard, highlight }
+	local marks = {}   -- board -> { bb, label, hl }
 
-	local function isFinished(m)
-		-- a finished computer usually shows a green finished highlight / attribute
-		return m:GetAttribute('Finished') == true
-			or m:FindFirstChild('ComputerFinishedHighlight', true) ~= nil
-	end
+	local BLUE = Color3.fromRGB(120, 210, 255)
+	local GREEN = Color3.fromRGB(90, 235, 120)
 
 	local function ensureGui()
 		if gui and gui.Parent then return gui end
@@ -200,93 +156,82 @@ run(function()
 	end
 
 	local function clear()
-		for _, entry in pairs(marks) do
-			pcall(function() if entry.bb then entry.bb:Destroy() end end)
-			pcall(function() if entry.hl then entry.hl:Destroy() end end)
+		for _, e in pairs(marks) do
+			pcall(function() if e.bb then e.bb:Destroy() end end)
+			pcall(function() if e.hl then e.hl:Destroy() end end)
 		end
 		table.clear(marks)
 		if gui then gui:Destroy() gui = nil end
 	end
 
-	local function markFor(m)
-		local entry = marks[m]
-		if entry and entry.bb and entry.bb.Parent then return entry end
-		entry = entry or {}
-		local part = m.PrimaryPart or m:FindFirstChildWhichIsA('BasePart')
-		if not part then return end
-
-		local bb = Instance.new('BillboardGui')
-		bb.Name = 'VainComp'
-		bb.Adornee = part
-		bb.Size = UDim2.fromOffset(90, 22)
-		bb.StudsOffset = Vector3.new(0, 2.5, 0)
-		bb.AlwaysOnTop = true
-		bb.MaxDistance = 1000
-		bb.Parent = ensureGui()
-		local label = Instance.new('TextLabel')
-		label.Size = UDim2.fromScale(1, 1)
-		label.BackgroundTransparency = 1
-		label.Font = Enum.Font.GothamBold
-		label.TextSize = 14
-		label.TextStrokeTransparency = 0.4
-		label.Parent = bb
-		entry.bb = bb
-		entry.label = label
-		marks[m] = entry
-		return entry
-	end
-
 	local function tick()
 		local live = {}
-		for _, m in computers() do
-			local finished = isFinished(m)
-			if finished and not (ShowFinished and ShowFinished.Enabled) then
-				-- hide finished computers
+		for _, c in computers() do
+			local board, part = c.board, c.part
+			local hacked = isHacked(board)
+			if hacked and not (ShowFinished and ShowFinished.Enabled) then
+				-- hidden
 			else
-				live[m] = true
-				local entry = markFor(m)
-				if entry then
-					local part = m.PrimaryPart or m:FindFirstChildWhichIsA('BasePart')
-					local dist = part and lplr.Character and lplr.Character.PrimaryPart
-						and math.floor((part.Position - lplr.Character.PrimaryPart.Position).Magnitude)
-					entry.label.Text = (finished and 'Computer ✓' or 'Computer')
-						.. (dist and (' [' .. dist .. ']') or '')
-					entry.label.TextColor3 = finished and Color3.fromRGB(90, 235, 120)
-						or Color3.fromRGB(120, 210, 255)
-					-- optional through-wall highlight
-					if Highlights and Highlights.Enabled then
-						if not entry.hl or entry.hl.Parent ~= m then
-							local hl = Instance.new('Highlight')
-							hl.Name = 'VainCompHL'
-							hl.FillTransparency = 0.7
-							hl.OutlineTransparency = 0.2
-							hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-							hl.Adornee = m
-							hl.Parent = m
-							entry.hl = hl
-						end
-						entry.hl.FillColor = finished and Color3.fromRGB(90, 235, 120)
-							or Color3.fromRGB(120, 210, 255)
-					elseif entry.hl then
-						pcall(function() entry.hl:Destroy() end)
-						entry.hl = nil
+				live[board] = true
+				local col = hacked and (GreenHacked and GreenHacked.Enabled and GREEN or BLUE) or BLUE
+				local e = marks[board]
+				if not e or not e.bb or not e.bb.Parent then
+					e = {}
+					local bb = Instance.new('BillboardGui')
+					bb.Adornee = part
+					bb.Size = UDim2.fromOffset(96, 22)
+					bb.StudsOffset = Vector3.new(0, 2.5, 0)
+					bb.AlwaysOnTop = true
+					bb.MaxDistance = 1200
+					bb.Parent = ensureGui()
+					local label = Instance.new('TextLabel')
+					label.Size = UDim2.fromScale(1, 1)
+					label.BackgroundTransparency = 1
+					label.Font = Enum.Font.GothamBold
+					label.TextSize = 14
+					label.TextStrokeTransparency = 0.4
+					label.Parent = bb
+					e.bb, e.label = bb, label
+					marks[board] = e
+				end
+				local prog = math.floor(board:GetAttribute('Progress') or 0)
+				local mp = myRoot()
+				local dist = mp and math.floor((part.Position - mp.Position).Magnitude)
+				e.label.Text = (hacked and 'Computer ✓' or ('Computer ' .. prog .. '%'))
+					.. (dist and (' [' .. dist .. ']') or '')
+				e.label.TextColor3 = col
+
+				if Highlights and Highlights.Enabled then
+					if not e.hl or e.hl.Parent ~= board then
+						local hl = Instance.new('Highlight')
+						hl.Name = 'VainCompHL'
+						hl.FillTransparency = 0.7
+						hl.OutlineTransparency = 0.2
+						hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+						hl.Adornee = board
+						hl.Parent = board
+						e.hl = hl
 					end
+					e.hl.FillColor = col
+					e.hl.OutlineColor = col
+				elseif e.hl then
+					pcall(function() e.hl:Destroy() end)
+					e.hl = nil
 				end
 			end
 		end
-		-- drop marks for computers gone / now-hidden
-		for m, entry in pairs(marks) do
-			if not live[m] then
-				pcall(function() if entry.bb then entry.bb:Destroy() end end)
-				pcall(function() if entry.hl then entry.hl:Destroy() end end)
-				marks[m] = nil
+		for board, e in pairs(marks) do
+			if not live[board] then
+				pcall(function() if e.bb then e.bb:Destroy() end end)
+				pcall(function() if e.hl then e.hl:Destroy() end end)
+				marks[board] = nil
 			end
 		end
 	end
 
 	ComputerESP = vain.Categories.Render:CreateModule({
 		Name = 'Computer ESP',
-		Tooltip = 'Renders every computer in the map with a label (and distance), so you can find hacks fast.',
+		Tooltip = 'Renders every computer with its hack progress and distance, so you can find hacks fast.',
 		Function = function(callback)
 			if callback then
 				task.spawn(function()
@@ -304,7 +249,12 @@ run(function()
 	ShowFinished = ComputerESP:CreateToggle({
 		Name = 'Show Finished',
 		Tooltip = 'Also show computers that are already hacked (marked ✓).',
-		Default = false,
+		Default = true,
+	})
+	GreenHacked = ComputerESP:CreateToggle({
+		Name = 'Green When Hacked',
+		Tooltip = 'Colour already-hacked computers green instead of blue.',
+		Default = true,
 	})
 	Highlights = ComputerESP:CreateToggle({
 		Name = 'Highlight',
@@ -314,145 +264,15 @@ run(function()
 end)
 
 -- ============================================================================
--- AUTOHACK  -- auto-complete the computer skill checks
--- ============================================================================
--- The server starts a challenge via Challenge.OnClientEvent("Challenge", computer,
--- spaceStart, spaceEnd). The win is Challenge:FireServer(computer, "Challenge",
--- markerX) with markerX inside [spaceStart, spaceEnd]. We answer with the CENTRE of
--- the zone the instant the challenge starts -> a perfect hack with no timing.
-run(function()
-	local AutoHack
-	local Instant
-
-	local Challenge = replicatedStorage:FindFirstChild('Challenge')
-
-	-- Read the live target zone from the challenge GUI (set by StartChallenge).
-	local function zoneCentre()
-		local pg = lplr:FindFirstChild('PlayerGui')
-		local cc = pg and pg:FindFirstChild('ComputerChallenge')
-		local frame = cc and cc:FindFirstChild('Frame')
-		local space = frame and frame:FindFirstChild('Space')
-		if not space then return nil end
-		local start = space.Position.X.Scale
-		local width = space.Size.X.Scale
-		return start + width / 2
-	end
-
-	local function solve(computer)
-		if not Challenge then return end
-		-- Prefer the zone centre from the GUI; fall back to 0.5 if not ready.
-		local centre
-		for _ = 1, 30 do
-			centre = zoneCentre()
-			if centre then break end
-			runService.Heartbeat:Wait()
-		end
-		centre = centre or 0.5
-		pcall(function()
-			Challenge:FireServer(computer, 'Challenge', centre)
-		end)
-		-- close the challenge UI locally so it doesn't linger
-		local pg = lplr:FindFirstChild('PlayerGui')
-		local cc = pg and pg:FindFirstChild('ComputerChallenge')
-		if cc then cc.Enabled = false end
-	end
-
-	AutoHack = vain.Categories.World:CreateModule({
-		Name = 'Autohack',
-		Tooltip = 'Automatically completes computer skill checks perfectly. Walk into a computer\'s trigger and it hacks itself.',
-		Function = function(callback)
-			if callback then
-				Challenge = replicatedStorage:FindFirstChild('Challenge') or Challenge
-				if Challenge then
-					AutoHack:Clean(Challenge.OnClientEvent:Connect(function(kind, computer)
-						if not AutoHack.Enabled then return end
-						if kind == 'Challenge' and computer then
-							-- single-press skill check: answer with the zone centre
-							task.spawn(function() solve(computer) end)
-						elseif kind == 'ContinuousChallenge' and computer then
-							-- continuous check: keep feeding the zone centre until it ends
-							task.spawn(function()
-								local pg = lplr:FindFirstChild('PlayerGui')
-								local cc = pg and pg:FindFirstChild('ComputerChallenge')
-								local t0 = tick()
-								while AutoHack.Enabled and cc and cc.Enabled and tick() - t0 < 10 do
-									local centre = zoneCentre() or 0.5
-									pcall(function() Challenge:FireServer(computer, 'ContinuousChallenge', centre) end)
-									runService.Heartbeat:Wait()
-								end
-							end)
-						end
-					end))
-				else
-					vain:CreateNotification('Autohack', 'Challenge remote not found in this place.', 6, 'warning')
-				end
-			end
-		end,
-	})
-	Instant = AutoHack:CreateToggle({
-		Name = 'Instant',
-		Tooltip = 'Answer the moment the skill check starts (leave on).',
-		Default = true,
-	})
-end)
-
--- ============================================================================
--- BEAST NO SLOWDOWN  -- keep your speed up after swinging (when you're the beast)
--- ============================================================================
--- After a beast action the game pins LocalPlayer WalkSpeed to 4 for ~1s ("back to
--- normal speed"). While enabled and you ARE a beast, we hold your WalkSpeed at the
--- normal value so that post-swing slow never lands.
-run(function()
-	local NoSlowdown
-	local Speed
-
-	local function tick()
-		if not isBeast(lplr) then return end
-		local char = lplr.Character
-		local hum = char and char:FindFirstChildOfClass('Humanoid')
-		if not hum then return end
-		-- don't fight the game's intentional freezes (Phaser sets 0); only lift the
-		-- post-swing slow (the 4 value).
-		local target = (Speed and Speed.Value) or 16
-		if hum.WalkSpeed < target and not lplr:GetAttribute('PhaserPause') then
-			hum.WalkSpeed = target
-		end
-	end
-
-	NoSlowdown = vain.Categories.Blatant:CreateModule({
-		Name = 'Beast No Slowdown',
-		Tooltip = 'When you are the beast, removes the ~1s walk-speed slow after each swing/action so you keep full speed.',
-		Function = function(callback)
-			if callback then
-				NoSlowdown:Clean(runService.Heartbeat:Connect(tick))
-			end
-		end,
-	})
-	Speed = NoSlowdown:CreateSlider({
-		Name = 'Hold Speed',
-		Tooltip = 'Walk speed to hold when the game tries to slow you.',
-		Min = 8,
-		Max = 30,
-		Default = 16,
-		Suffix = function(val) return 'studs/s' end,
-	})
-end)
-
--- ============================================================================
 -- HATCH ESP  -- highlight the escape hatch once it opens (1 survivor left)
 -- ============================================================================
--- The hatch is a CollectionService-tagged instance ("Hatch") that only exists when
--- it's open (the game adds a HatchHighlight on the "Hatch" tag-added signal). We
--- track that tag and render our own highlight + a labelled billboard with distance.
 run(function()
 	local HatchESP
 	local gui
-	local marks = {}   -- hatch instance -> { bb, label, hl }
+	local marks = {}
 
 	local function hatchInstances()
-		local ok, list = pcall(function()
-			return collectionService:GetTagged('Hatch')
-		end)
+		local ok, list = pcall(function() return collectionService:GetTagged('Hatch') end)
 		return ok and list or {}
 	end
 
@@ -484,8 +304,11 @@ run(function()
 	local function tick()
 		local live = {}
 		for _, hatch in hatchInstances() do
+			-- ignore a closed hatch (the game sets Closed on the parent)
+			local closed = (hatch:IsA('Model') and hatch:GetAttribute('Closed'))
+				or (hatch.Parent and hatch.Parent:GetAttribute('Closed'))
 			local part = partOf(hatch)
-			if part then
+			if part and not closed then
 				live[hatch] = true
 				local e = marks[hatch]
 				if not e or not e.bb or not e.bb.Parent then
@@ -516,8 +339,8 @@ run(function()
 					e.hl, e.bb, e.label = hl, bb, label
 					marks[hatch] = e
 				end
-				local myPart = lplr.Character and lplr.Character.PrimaryPart
-				local dist = myPart and math.floor((part.Position - myPart.Position).Magnitude)
+				local mp = myRoot()
+				local dist = mp and math.floor((part.Position - mp.Position).Magnitude)
 				e.label.Text = 'HATCH' .. (dist and (' [' .. dist .. ']') or '')
 			end
 		end
@@ -546,5 +369,169 @@ run(function()
 				clear()
 			end
 		end,
+	})
+end)
+
+-- ============================================================================
+-- BEAST NO SLOWDOWN  -- keep your speed up after swinging (when you're the beast)
+-- ============================================================================
+-- After a beast action the game (a LocalScript) pins LocalPlayer.Character.
+-- Humanoid.WalkSpeed to 4 for ~1s ("back to normal speed"). Because that's your
+-- OWN character, we can hold it back up. (Slowing OTHER players is not possible
+-- client-side -- the server owns their characters -- so there's no "Slow Beast".)
+run(function()
+	local NoSlowdown
+	local Speed
+
+	local function tick()
+		if not isBeast(lplr) then return end
+		local char = lplr.Character
+		local hum = char and char:FindFirstChildOfClass('Humanoid')
+		if not hum then return end
+		-- respect intentional freezes (Phaser sets WalkSpeed 0); only lift the
+		-- post-swing slow (the low ~4 value).
+		local target = (Speed and Speed.Value) or 16
+		if hum.WalkSpeed < target and not lplr:GetAttribute('PhaserPause') then
+			hum.WalkSpeed = target
+		end
+	end
+
+	NoSlowdown = vain.Categories.Blatant:CreateModule({
+		Name = 'Beast No Slowdown',
+		Tooltip = 'When you are the beast, removes the ~1s walk-speed slow after each swing/action so you keep full speed.',
+		Function = function(callback)
+			if callback then
+				NoSlowdown:Clean(runService.Heartbeat:Connect(tick))
+			end
+		end,
+	})
+	Speed = NoSlowdown:CreateSlider({
+		Name = 'Hold Speed',
+		Tooltip = 'Walk speed to hold when the game tries to slow you.',
+		Min = 8,
+		Max = 30,
+		Default = 16,
+		Suffix = function(val) return 'studs/s' end,
+	})
+end)
+
+-- ============================================================================
+-- AUTOHACK  -- auto-complete computer skill checks
+-- ============================================================================
+-- Correct flow: pick the nearest unhacked computer, Computer:InvokeServer(part,
+-- "Start") to begin, then answer every Challenge event with the CENTRE of the
+-- target zone until Progress >= 100. Repeat for the next computer.
+run(function()
+	local AutoHack
+	local Range
+
+	local Computer = replicatedStorage:FindFirstChild('Computer')     -- RemoteFunction
+	local Challenge = replicatedStorage:FindFirstChild('Challenge')   -- RemoteEvent
+	local busy = false
+	local answerConn
+
+	-- Read the live target zone from the challenge GUI (set by StartChallenge).
+	local function zoneCentre()
+		local pg = lplr:FindFirstChild('PlayerGui')
+		local cc = pg and pg:FindFirstChild('ComputerChallenge')
+		local frame = cc and cc:FindFirstChild('Frame')
+		local space = frame and frame:FindFirstChild('Space')
+		if not space then return nil end
+		return space.Position.X.Scale + space.Size.X.Scale / 2
+	end
+
+	-- Answer any skill-check the server starts, instantly, with the zone centre.
+	local function hookAnswers()
+		if answerConn or not Challenge then return end
+		answerConn = Challenge.OnClientEvent:Connect(function(kind, computer)
+			if not AutoHack.Enabled or not computer then return end
+			if kind == 'Challenge' then
+				task.spawn(function()
+					local centre
+					for _ = 1, 20 do
+						centre = zoneCentre()
+						if centre then break end
+						runService.Heartbeat:Wait()
+					end
+					pcall(function() Challenge:FireServer(computer, 'Challenge', centre or 0.5) end)
+				end)
+			elseif kind == 'ContinuousChallenge' then
+				task.spawn(function()
+					local pg = lplr:FindFirstChild('PlayerGui')
+					local cc = pg and pg:FindFirstChild('ComputerChallenge')
+					local t0 = tick()
+					while AutoHack.Enabled and cc and cc.Enabled and tick() - t0 < 12 do
+						pcall(function() Challenge:FireServer(computer, 'ContinuousChallenge', zoneCentre() or 0.5) end)
+						runService.Heartbeat:Wait()
+					end
+				end)
+			end
+		end)
+		AutoHack:Clean(answerConn)
+	end
+
+	local function nearestComputer()
+		local mp = myRoot()
+		if not mp then return nil end
+		local best, bestD
+		for _, c in computers() do
+			if not isHacked(c.board) and not c.board:GetAttribute('Player') then
+				local d = (c.part.Position - mp.Position).Magnitude
+				if d <= (Range and Range.Value or 60) and (not best or d < bestD) then
+					best, bestD = c, d
+				end
+			end
+		end
+		return best
+	end
+
+	local function hackOne(c)
+		if not Computer then return end
+		busy = true
+		-- Start the hack on the server.
+		local ok = false
+		pcall(function() ok = Computer:InvokeServer(c.part, 'Start') and true or false end)
+		if ok then
+			-- Wait until it finishes (Progress hits 100) or the computer is gone /
+			-- the server rejects us. The answer hook feeds each skill check.
+			local t0 = tick()
+			while AutoHack.Enabled and c.part.Parent and not isHacked(c.board) and tick() - t0 < 15 do
+				task.wait(0.1)
+			end
+		end
+		busy = false
+	end
+
+	AutoHack = vain.Categories.World:CreateModule({
+		Name = 'Autohack',
+		Tooltip = 'Automatically hacks nearby computers: starts the hack and completes every skill check perfectly. Walk near a computer.',
+		Function = function(callback)
+			if callback then
+				Computer = replicatedStorage:FindFirstChild('Computer') or Computer
+				Challenge = replicatedStorage:FindFirstChild('Challenge') or Challenge
+				if not (Computer and Challenge) then
+					vain:CreateNotification('Autohack', 'Computer/Challenge remotes not found here.', 6, 'warning')
+					return
+				end
+				hookAnswers()
+				task.spawn(function()
+					repeat
+						if not busy and not isBeast(lplr) then
+							local c = nearestComputer()
+							if c then pcall(hackOne, c) end
+						end
+						task.wait(0.3)
+					until not AutoHack.Enabled
+				end)
+			end
+		end,
+	})
+	Range = AutoHack:CreateSlider({
+		Name = 'Range',
+		Tooltip = 'Only auto-start computers within this distance.',
+		Min = 5,
+		Max = 120,
+		Default = 60,
+		Suffix = function(val) return 'studs' end,
 	})
 end)
