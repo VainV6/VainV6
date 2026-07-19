@@ -217,3 +217,209 @@ run(function()
 		false
 	)
 end)
+
+-- ============================================================================
+-- AUTO HARVEST CROPS  -- harvest ready crops on your farming plot
+-- ============================================================================
+-- Crops have states (Empty/Growing/Completed/Locked). A "Completed" crop is
+-- harvested via RequestHarvest:InvokeServer(cropName). We find ready crops and
+-- harvest them on a loop.
+run(function()
+	local AutoHarvest
+	local Farming, RequestHarvest
+
+	local function resolve()
+		if not RequestHarvest then
+			pcall(function()
+				RequestHarvest = replicatedStorage.Events.Farming.RequestHarvest
+			end)
+		end
+		if not Farming then
+			pcall(function()
+				Farming = require(lplr.PlayerScripts.Source.Systems.Farming)
+			end)
+		end
+		return RequestHarvest ~= nil
+	end
+
+	-- Harvest every crop reported "Completed". We read the plot's crops from the
+	-- Farming system when available; else fall back to scanning tagged crops.
+	local function harvestReady()
+		if not RequestHarvest then return end
+		-- Preferred: ask the Farming system for its crops + states.
+		local handled = false
+		pcall(function()
+			if Farming and Farming.Plot and Farming.GetState then
+				for _, crop in Farming.Plot:GetChildren() do
+					local ok, state = pcall(function() return Farming:GetState(crop) end)
+					if ok and tostring(state):lower():find('complet') then
+						pcall(function() RequestHarvest:InvokeServer(crop.Name) end)
+						handled = true
+					end
+				end
+			end
+		end)
+		if handled then return end
+		-- Fallback: any workspace model tagged/attributed as a completed crop.
+		pcall(function()
+			for _, m in workspace:GetDescendants() do
+				if m:GetAttribute and m:GetAttribute('CropState') then
+					local st = tostring(m:GetAttribute('CropState')):lower()
+					if st:find('complet') then
+						pcall(function() RequestHarvest:InvokeServer(m.Name) end)
+					end
+				end
+			end
+		end)
+	end
+
+	AutoHarvest = vain.Categories.World:CreateModule({
+		Name = 'Auto Harvest Crops',
+		Tooltip = 'Automatically harvests any crop that is ready on your farming plot.',
+		Function = function(callback)
+			if callback then
+				if not resolve() then
+					vain:CreateNotification('Auto Harvest', 'Farming system not found in this place.', 6, 'warning')
+					return
+				end
+				task.spawn(function()
+					repeat
+						pcall(harvestReady)
+						task.wait(1)
+					until not AutoHarvest.Enabled
+				end)
+			end
+		end,
+	})
+end)
+
+-- ============================================================================
+-- AUTO BOOST DISHES  -- buy the needed ingredients and boost every unboosted dish
+-- ============================================================================
+-- A dish is boosted with ingredients (eggs, flesh, ...) bought from plaza NPCs.
+-- Flow (all confirmed remotes/data):
+--   * dishes on the menu + which are boosted: GetBoostedFoodDictionary()
+--   * a dish's required ingredients: FoodUtility:GetIngredients(foodKey)
+--     -> { IngredientName = qty, ... }
+--   * what you own: FoodMenu:GetIngredientOwnership() -> { IngredientName = count }
+--   * buy: PurchaseIngredientRequested:FireServer(tycoon, ingredientName, amount)
+--   * boost: BoostRequested:FireServer(tycoon, foodKey)
+-- We only ever act on dishes that are NOT already boosted, so it never over-buys.
+run(function()
+	local AutoBoost
+	local FoodUtility, FocusedTycoon
+	local PurchaseIngredient, BoostRequested
+
+	local function resolve()
+		if PurchaseIngredient == nil then
+			pcall(function() PurchaseIngredient = replicatedStorage.Events.Food.PurchaseIngredientRequested end)
+		end
+		if BoostRequested == nil then
+			pcall(function() BoostRequested = replicatedStorage.Events.Food.BoostRequested end)
+		end
+		if FoodUtility == nil then
+			pcall(function() FoodUtility = require(replicatedStorage.Source.Utility.Food.FoodUtility) end)
+		end
+		if FocusedTycoon == nil then
+			pcall(function() FocusedTycoon = require(lplr.PlayerScripts.Source.Systems.FocusedTycoon) end)
+		end
+		return PurchaseIngredient and BoostRequested and FoodUtility
+	end
+
+	-- Resolve the tycoon reference the remotes expect (the focused/owned tycoon).
+	local function getTycoon()
+		local t
+		pcall(function()
+			if FocusedTycoon then
+				t = (FocusedTycoon.Get and FocusedTycoon:Get())
+					or (FocusedTycoon.GetDefaultTycoon and FocusedTycoon:GetDefaultTycoon())
+					or FocusedTycoon.Tycoon
+			end
+		end)
+		return t
+	end
+
+	-- { foodKey = true } for dishes already boosted, via the food menu system.
+	local function boostedDict()
+		local dict = {}
+		pcall(function()
+			local FoodMenu = require(lplr.PlayerScripts.Source.Systems.FoodMenu)
+			if FoodMenu and FoodMenu.GetBoostedFoodDictionary then
+				dict = FoodMenu:GetBoostedFoodDictionary() or {}
+			end
+		end)
+		return dict
+	end
+
+	-- { ingredient = count } you currently own.
+	local function ownership()
+		local own = {}
+		pcall(function()
+			local FoodMenu = require(lplr.PlayerScripts.Source.Systems.FoodMenu)
+			if FoodMenu and FoodMenu.GetIngredientOwnership then
+				own = FoodMenu:GetIngredientOwnership() or {}
+			end
+		end)
+		return own
+	end
+
+	-- All dish food keys on your menu.
+	local function menuDishes()
+		local keys = {}
+		pcall(function()
+			local FoodMenu = require(lplr.PlayerScripts.Source.Systems.FoodMenu)
+			local menu = FoodMenu and FoodMenu.GetMenu and FoodMenu:GetMenu()
+			if type(menu) == 'table' then
+				for k in pairs(menu) do keys[#keys + 1] = k end
+			end
+		end)
+		return keys
+	end
+
+	local function boostAll()
+		local tycoon = getTycoon()
+		if not tycoon then return end
+		local boosted = boostedDict()
+		local own = ownership()
+		for _, foodKey in menuDishes() do
+			if not boosted[foodKey] and AutoBoost.Enabled then
+				-- required ingredients for this dish
+				local need = {}
+				pcall(function() need = FoodUtility:GetIngredients(foodKey) or {} end)
+				-- buy any we're short on
+				for ing, qty in pairs(need) do
+					local have = tonumber(own[ing]) or 0
+					local short = (tonumber(qty) or 0) - have
+					if short > 0 then
+						pcall(function() PurchaseIngredient:FireServer(tycoon, ing, short) end)
+						own[ing] = have + short   -- assume the buy succeeds this pass
+						task.wait(0.15)
+					end
+				end
+				-- boost the dish
+				pcall(function() BoostRequested:FireServer(tycoon, foodKey) end)
+				boosted[foodKey] = true
+				task.wait(0.25)
+			end
+		end
+	end
+
+	AutoBoost = vain.Categories.World:CreateModule({
+		Name = 'Auto Boost Dishes',
+		Tooltip = 'Buys the ingredients each unboosted dish needs (from the plaza shops) and boosts it. Skips dishes that are already boosted, so it never over-buys.',
+		Function = function(callback)
+			if callback then
+				if not resolve() then
+					vain:CreateNotification('Auto Boost', 'Boost/ingredient system not found here.', 6, 'warning')
+					return
+				end
+				task.spawn(function()
+					repeat
+						pcall(boostAll)
+						task.wait(3)   -- re-scan for newly-added / still-unboosted dishes
+					until not AutoBoost.Enabled
+				end)
+			end
+		end,
+	})
+end)
