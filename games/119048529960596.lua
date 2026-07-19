@@ -157,10 +157,23 @@ run(function()
 		return Cook and CookInputRequested
 	end
 
-	local module, Speed
+	local module, Speed, AutoQueue
+
+	local function completeStep()
+		pcall(function()
+			if Cook.IsCooking then
+				local kitchen = Cook.CurrentKitchenModel or (Cook.GetCurrentKitchenModel and Cook:GetCurrentKitchenModel())
+				local item = Cook.CurrentItemType
+				if kitchen ~= nil and item ~= nil then
+					CookInputRequested:FireServer(COMPLETE, kitchen, item)
+				end
+			end
+		end)
+	end
+
 	module = vain.Categories.World:CreateModule({
 		Name = 'Auto Cook',
-		Tooltip = 'Auto-completes every step (Hold, Click, etc.) of a dish YOU start cooking, on any station. It only runs while you are cooking -- it never starts or queues a dish.',
+		Tooltip = 'Auto-completes every step (Hold, Click, etc.) of a dish, on any station. With Auto Queue on it also starts new dishes from the queue by itself.',
 		Function = function(callback)
 			if callback then
 				if not resolve() then
@@ -169,20 +182,15 @@ run(function()
 				end
 				task.spawn(function()
 					repeat
-						-- Re-check Enabled right before firing (not just at loop bottom):
-						-- completing the last step of a dish auto-advances the server to
-						-- the next queued dish, so a stale fire after you toggle off would
-						-- keep cooking the queue. Guarding here stops instantly.
+						-- Re-check Enabled right before acting so a disable stops instantly.
 						if module.Enabled then
-							pcall(function()
-								if Cook.IsCooking then
-									local kitchen = Cook.CurrentKitchenModel or (Cook.GetCurrentKitchenModel and Cook:GetCurrentKitchenModel())
-									local item = Cook.CurrentItemType
-									if kitchen ~= nil and item ~= nil then
-										CookInputRequested:FireServer(COMPLETE, kitchen, item)
-									end
-								end
-							end)
+							if Cook.IsCooking then
+								-- mid-dish: complete the current step
+								completeStep()
+							elseif AutoQueue and AutoQueue.Enabled then
+								-- idle: start/queue the next dish (fire the Cook interaction)
+								fireInteractionKeys({ Cook = true })
+							end
 						end
 						-- Floor the interval so we never fire faster than the cook UI
 						-- (PlayerGui.Cooking) can render each step. Keep at least ~0.12s.
@@ -192,6 +200,11 @@ run(function()
 				end)
 			end
 		end,
+	})
+	AutoQueue = module:CreateToggle({
+		Name = 'Auto Queue',
+		Tooltip = 'Also automatically start new dishes from the cooking queue (not just complete the one you started).',
+		Default = true,
 	})
 	Speed = module:CreateSlider({
 		Name = 'Speed',
