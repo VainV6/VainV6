@@ -49,16 +49,49 @@ local function myRoot()
 	return char and (char:FindFirstChild('HumanoidRootPart') or char.PrimaryPart)
 end
 
--- Every hackable computer trigger part (tagged "Computer"), skipping tutorial
--- dummies. Returns { { part = triggerPart, board = part.Parent }, ... }.
+-- Resolve a world position from an instance that may be a BasePart or a Model
+-- (the "Computer" tag can be on either). Returns a Vector3 or nil.
+local function positionOf(inst)
+	if not inst then return nil end
+	if inst:IsA('BasePart') then return inst.Position end
+	if inst:IsA('Model') then
+		local ok, cf = pcall(function() return inst:GetPivot() end)
+		if ok and cf then return cf.Position end
+		local p = inst.PrimaryPart or inst:FindFirstChildWhichIsA('BasePart')
+		return p and p.Position
+	end
+	local p = inst:FindFirstChildWhichIsA('BasePart', true)
+	return p and p.Position
+end
+
+-- A BasePart to adorn a billboard/highlight to.
+local function partOf(inst)
+	if not inst then return nil end
+	if inst:IsA('BasePart') then return inst end
+	if inst:IsA('Model') then return inst.PrimaryPart or inst:FindFirstChildWhichIsA('BasePart') end
+	return inst:FindFirstChildWhichIsA('BasePart', true)
+end
+
+-- Every hackable computer. The Model is tagged "Computer" (holds Progress/Player/
+-- Dummy attributes); its interaction trigger is a child part tagged "Trigger",
+-- which is what Computer:InvokeServer("Start") expects. Skips tutorial dummies.
+-- Returns { board = model, trigger = triggerPart, part = adornPart }.
 local function computers()
 	local list = {}
-	local ok, tagged = pcall(function() return collectionService:GetTagged('Computer') end)
+	local ok, taggedList = pcall(function() return collectionService:GetTagged('Computer') end)
 	if not ok then return list end
-	for _, part in tagged do
-		local board = part.Parent
-		if board and not board:GetAttribute('Dummy') then
-			list[#list + 1] = { part = part, board = board }
+	for _, board in taggedList do
+		if not board:GetAttribute('Dummy') then
+			-- the trigger the server wants is a descendant tagged "Trigger"
+			local trigger
+			for _, d in board:GetDescendants() do
+				if d:IsA('BasePart') and d:HasTag('Trigger') then trigger = d break end
+			end
+			list[#list + 1] = {
+				board = board,
+				trigger = trigger,
+				part = trigger or partOf(board),
+			}
 		end
 	end
 	return list
@@ -169,7 +202,9 @@ run(function()
 		for _, c in computers() do
 			local board, part = c.board, c.part
 			local hacked = isHacked(board)
-			if hacked and not (ShowFinished and ShowFinished.Enabled) then
+			if not part then
+				-- no adornable part; skip
+			elseif hacked and not (ShowFinished and ShowFinished.Enabled) then
 				-- hidden
 			else
 				live[board] = true
@@ -475,8 +510,9 @@ run(function()
 		if not mp then return nil end
 		local best, bestD
 		for _, c in computers() do
-			if not isHacked(c.board) and not c.board:GetAttribute('Player') then
-				local d = (c.part.Position - mp.Position).Magnitude
+			local pos = c.part and c.part.Position
+			if pos and c.trigger and not isHacked(c.board) and not c.board:GetAttribute('Player') then
+				local d = (pos - mp.Position).Magnitude
 				if d <= (Range and Range.Value or 60) and (not best or d < bestD) then
 					best, bestD = c, d
 				end
@@ -486,16 +522,16 @@ run(function()
 	end
 
 	local function hackOne(c)
-		if not Computer then return end
+		if not Computer or not c.trigger then return end
 		busy = true
-		-- Start the hack on the server.
+		-- Start the hack on the server (it expects the "Trigger" part).
 		local ok = false
-		pcall(function() ok = Computer:InvokeServer(c.part, 'Start') and true or false end)
+		pcall(function() ok = Computer:InvokeServer(c.trigger, 'Start') and true or false end)
 		if ok then
 			-- Wait until it finishes (Progress hits 100) or the computer is gone /
 			-- the server rejects us. The answer hook feeds each skill check.
 			local t0 = tick()
-			while AutoHack.Enabled and c.part.Parent and not isHacked(c.board) and tick() - t0 < 15 do
+			while AutoHack.Enabled and c.board.Parent and not isHacked(c.board) and tick() - t0 < 15 do
 				task.wait(0.1)
 			end
 		end
