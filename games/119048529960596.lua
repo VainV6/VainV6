@@ -263,11 +263,9 @@ run(function()
 		-- Fallback: any workspace model tagged/attributed as a completed crop.
 		pcall(function()
 			for _, m in workspace:GetDescendants() do
-				if m:GetAttribute and m:GetAttribute('CropState') then
-					local st = tostring(m:GetAttribute('CropState')):lower()
-					if st:find('complet') then
-						pcall(function() RequestHarvest:InvokeServer(m.Name) end)
-					end
+				local state = m:GetAttribute('CropState')
+				if state and tostring(state):lower():find('complet') then
+					pcall(function() RequestHarvest:InvokeServer(m.Name) end)
 				end
 			end
 		end)
