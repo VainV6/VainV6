@@ -395,3 +395,156 @@ run(function()
 		Default = true,
 	})
 end)
+
+-- ============================================================================
+-- BEAST NO SLOWDOWN  -- keep your speed up after swinging (when you're the beast)
+-- ============================================================================
+-- After a beast action the game pins LocalPlayer WalkSpeed to 4 for ~1s ("back to
+-- normal speed"). While enabled and you ARE a beast, we hold your WalkSpeed at the
+-- normal value so that post-swing slow never lands.
+run(function()
+	local NoSlowdown
+	local Speed
+
+	local function tick()
+		if not isBeast(lplr) then return end
+		local char = lplr.Character
+		local hum = char and char:FindFirstChildOfClass('Humanoid')
+		if not hum then return end
+		-- don't fight the game's intentional freezes (Phaser sets 0); only lift the
+		-- post-swing slow (the 4 value).
+		local target = (Speed and Speed.Value) or 16
+		if hum.WalkSpeed < target and not lplr:GetAttribute('PhaserPause') then
+			hum.WalkSpeed = target
+		end
+	end
+
+	NoSlowdown = vain.Categories.Blatant:CreateModule({
+		Name = 'Beast No Slowdown',
+		Tooltip = 'When you are the beast, removes the ~1s walk-speed slow after each swing/action so you keep full speed.',
+		Function = function(callback)
+			if callback then
+				NoSlowdown:Clean(runService.Heartbeat:Connect(tick))
+			end
+		end,
+	})
+	Speed = NoSlowdown:CreateSlider({
+		Name = 'Hold Speed',
+		Tooltip = 'Walk speed to hold when the game tries to slow you.',
+		Min = 8,
+		Max = 30,
+		Default = 16,
+		Suffix = function(val) return 'studs/s' end,
+	})
+end)
+
+-- ============================================================================
+-- HATCH ESP  -- highlight the escape hatch once it opens (1 survivor left)
+-- ============================================================================
+-- The hatch is a CollectionService-tagged instance ("Hatch") that only exists when
+-- it's open (the game adds a HatchHighlight on the "Hatch" tag-added signal). We
+-- track that tag and render our own highlight + a labelled billboard with distance.
+run(function()
+	local HatchESP
+	local gui
+	local marks = {}   -- hatch instance -> { bb, label, hl }
+
+	local function hatchInstances()
+		local ok, list = pcall(function()
+			return collectionService:GetTagged('Hatch')
+		end)
+		return ok and list or {}
+	end
+
+	local function ensureGui()
+		if gui and gui.Parent then return gui end
+		gui = Instance.new('ScreenGui')
+		gui.Name = 'VainHatchESP'
+		gui.ResetOnSpawn = false
+		gui.IgnoreGuiInset = true
+		gui.Parent = gethui and gethui() or lplr:WaitForChild('PlayerGui')
+		return gui
+	end
+
+	local function clear()
+		for _, e in pairs(marks) do
+			pcall(function() if e.bb then e.bb:Destroy() end end)
+			pcall(function() if e.hl then e.hl:Destroy() end end)
+		end
+		table.clear(marks)
+		if gui then gui:Destroy() gui = nil end
+	end
+
+	local function partOf(inst)
+		if inst:IsA('BasePart') then return inst end
+		if inst:IsA('Model') then return inst.PrimaryPart or inst:FindFirstChildWhichIsA('BasePart') end
+		return inst:FindFirstChildWhichIsA('BasePart', true)
+	end
+
+	local function tick()
+		local live = {}
+		for _, hatch in hatchInstances() do
+			local part = partOf(hatch)
+			if part then
+				live[hatch] = true
+				local e = marks[hatch]
+				if not e or not e.bb or not e.bb.Parent then
+					e = {}
+					local hl = Instance.new('Highlight')
+					hl.Name = 'VainHatchHL'
+					hl.FillColor = Color3.fromRGB(255, 215, 60)
+					hl.OutlineColor = Color3.fromRGB(255, 245, 200)
+					hl.FillTransparency = 0.4
+					hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+					hl.Adornee = hatch
+					hl.Parent = hatch:IsA('Model') and hatch or part
+					local bb = Instance.new('BillboardGui')
+					bb.Adornee = part
+					bb.Size = UDim2.fromOffset(90, 22)
+					bb.StudsOffset = Vector3.new(0, 3, 0)
+					bb.AlwaysOnTop = true
+					bb.MaxDistance = 2000
+					bb.Parent = ensureGui()
+					local label = Instance.new('TextLabel')
+					label.Size = UDim2.fromScale(1, 1)
+					label.BackgroundTransparency = 1
+					label.Font = Enum.Font.GothamBold
+					label.TextSize = 15
+					label.TextColor3 = Color3.fromRGB(255, 215, 60)
+					label.TextStrokeTransparency = 0.4
+					label.Parent = bb
+					e.hl, e.bb, e.label = hl, bb, label
+					marks[hatch] = e
+				end
+				local myPart = lplr.Character and lplr.Character.PrimaryPart
+				local dist = myPart and math.floor((part.Position - myPart.Position).Magnitude)
+				e.label.Text = 'HATCH' .. (dist and (' [' .. dist .. ']') or '')
+			end
+		end
+		for hatch, e in pairs(marks) do
+			if not live[hatch] then
+				pcall(function() if e.bb then e.bb:Destroy() end end)
+				pcall(function() if e.hl then e.hl:Destroy() end end)
+				marks[hatch] = nil
+			end
+		end
+	end
+
+	HatchESP = vain.Categories.Render:CreateModule({
+		Name = 'Hatch ESP',
+		Tooltip = 'Highlights the escape hatch (with distance) the moment it opens -- i.e. when one survivor is left.',
+		Function = function(callback)
+			if callback then
+				task.spawn(function()
+					repeat
+						pcall(tick)
+						task.wait(0.3)
+					until not HatchESP.Enabled
+					clear()
+				end)
+			else
+				clear()
+			end
+		end,
+	})
+end)
