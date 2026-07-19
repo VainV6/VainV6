@@ -451,123 +451,72 @@ run(function()
 end)
 
 -- ============================================================================
--- AUTOHACK  -- auto-complete computer skill checks
+-- AUTOHACK  -- auto-complete the computer skill check
 -- ============================================================================
--- Correct flow: pick the nearest unhacked computer, Computer:InvokeServer(part,
--- "Start") to begin, then answer every Challenge event with the CENTRE of the
--- target zone until Progress >= 100. Repeat for the next computer.
+-- You start a hack normally (walk up, press E). When the server begins a skill
+-- check it fires Challenge.OnClientEvent("Challenge", computer, start, end) and
+-- shows the moving marker. We answer instantly with the CENTRE of the target zone
+-- so every skill check is a perfect hit -- no timing, no manual pressing.
 run(function()
 	local AutoHack
-	local Range
-
-	local Computer = replicatedStorage:FindFirstChild('Computer')     -- RemoteFunction
 	local Challenge = replicatedStorage:FindFirstChild('Challenge')   -- RemoteEvent
-	local busy = false
-	local answerConn
 
-	-- Read the live target zone from the challenge GUI (set by StartChallenge).
-	local function zoneCentre()
+	-- The live target zone from the challenge GUI (set by StartChallenge): a
+	-- "Space" frame whose X scale spans the winning band. Its centre is the safest
+	-- answer. Falls back to the event's start/end args if the GUI isn't ready yet.
+	local function zoneCentre(startScale, endScale)
 		local pg = lplr:FindFirstChild('PlayerGui')
 		local cc = pg and pg:FindFirstChild('ComputerChallenge')
 		local frame = cc and cc:FindFirstChild('Frame')
 		local space = frame and frame:FindFirstChild('Space')
-		if not space then return nil end
-		return space.Position.X.Scale + space.Size.X.Scale / 2
-	end
-
-	-- Answer any skill-check the server starts, instantly, with the zone centre.
-	local function hookAnswers()
-		if answerConn or not Challenge then return end
-		answerConn = Challenge.OnClientEvent:Connect(function(kind, computer)
-			if not AutoHack.Enabled or not computer then return end
-			if kind == 'Challenge' then
-				task.spawn(function()
-					local centre
-					for _ = 1, 20 do
-						centre = zoneCentre()
-						if centre then break end
-						runService.Heartbeat:Wait()
-					end
-					pcall(function() Challenge:FireServer(computer, 'Challenge', centre or 0.5) end)
-				end)
-			elseif kind == 'ContinuousChallenge' then
-				task.spawn(function()
-					local pg = lplr:FindFirstChild('PlayerGui')
-					local cc = pg and pg:FindFirstChild('ComputerChallenge')
-					local t0 = tick()
-					while AutoHack.Enabled and cc and cc.Enabled and tick() - t0 < 12 do
-						pcall(function() Challenge:FireServer(computer, 'ContinuousChallenge', zoneCentre() or 0.5) end)
-						runService.Heartbeat:Wait()
-					end
-				end)
-			end
-		end)
-		AutoHack:Clean(answerConn)
-	end
-
-	local function nearestComputer()
-		local mp = myRoot()
-		if not mp then return nil end
-		local best, bestD
-		for _, c in computers() do
-			local pos = c.part and c.part.Position
-			if pos and c.trigger and not isHacked(c.board) and not c.board:GetAttribute('Player') then
-				local d = (pos - mp.Position).Magnitude
-				if d <= (Range and Range.Value or 60) and (not best or d < bestD) then
-					best, bestD = c, d
-				end
-			end
+		if space then
+			return space.Position.X.Scale + space.Size.X.Scale / 2
 		end
-		return best
-	end
-
-	local function hackOne(c)
-		if not Computer or not c.trigger then return end
-		busy = true
-		-- Start the hack on the server (it expects the "Trigger" part).
-		local ok = false
-		pcall(function() ok = Computer:InvokeServer(c.trigger, 'Start') and true or false end)
-		if ok then
-			-- Wait until it finishes (Progress hits 100) or the computer is gone /
-			-- the server rejects us. The answer hook feeds each skill check.
-			local t0 = tick()
-			while AutoHack.Enabled and c.board.Parent and not isHacked(c.board) and tick() - t0 < 15 do
-				task.wait(0.1)
-			end
+		if type(startScale) == 'number' and type(endScale) == 'number' then
+			return (startScale + endScale) / 2
 		end
-		busy = false
+		return nil
 	end
 
 	AutoHack = vain.Categories.World:CreateModule({
 		Name = 'Autohack',
-		Tooltip = 'Automatically hacks nearby computers: starts the hack and completes every skill check perfectly. Walk near a computer.',
+		Tooltip = 'Auto-completes the computer skill check for you: start hacking a computer normally and it solves each skill check perfectly.',
 		Function = function(callback)
 			if callback then
-				Computer = replicatedStorage:FindFirstChild('Computer') or Computer
 				Challenge = replicatedStorage:FindFirstChild('Challenge') or Challenge
-				if not (Computer and Challenge) then
-					vain:CreateNotification('Autohack', 'Computer/Challenge remotes not found here.', 6, 'warning')
+				if not Challenge then
+					vain:CreateNotification('Autohack', 'Challenge remote not found here.', 6, 'warning')
 					return
 				end
-				hookAnswers()
-				task.spawn(function()
-					repeat
-						if not busy and not isBeast(lplr) then
-							local c = nearestComputer()
-							if c then pcall(hackOne, c) end
-						end
-						task.wait(0.3)
-					until not AutoHack.Enabled
-				end)
+				AutoHack:Clean(Challenge.OnClientEvent:Connect(function(kind, computer, startScale, endScale)
+					if not AutoHack.Enabled or not computer then return end
+					if kind == 'Challenge' then
+						-- single-press skill check: answer with the zone centre
+						task.spawn(function()
+							local centre
+							for _ = 1, 20 do
+								centre = zoneCentre(startScale, endScale)
+								if centre then break end
+								runService.Heartbeat:Wait()
+							end
+							pcall(function() Challenge:FireServer(computer, 'Challenge', centre or 0.5) end)
+						end)
+					elseif kind == 'ContinuousChallenge' then
+						-- keep feeding the zone centre until the check ends
+						task.spawn(function()
+							local pg = lplr:FindFirstChild('PlayerGui')
+							local cc = pg and pg:FindFirstChild('ComputerChallenge')
+							local t0 = tick()
+							while AutoHack.Enabled and cc and cc.Enabled and tick() - t0 < 12 do
+								pcall(function()
+									Challenge:FireServer(computer, 'ContinuousChallenge', zoneCentre(startScale, endScale) or 0.5)
+								end)
+								runService.Heartbeat:Wait()
+							end
+						end)
+					end
+				end))
 			end
 		end,
-	})
-	Range = AutoHack:CreateSlider({
-		Name = 'Range',
-		Tooltip = 'Only auto-start computers within this distance.',
-		Min = 5,
-		Max = 120,
-		Default = 60,
-		Suffix = function(val) return 'studs' end,
 	})
 end)
