@@ -110,20 +110,20 @@ local function makeAuto(name, tooltip, worker, withSpeed)
 end
 
 -- ============================================================================
--- AUTO COOK  -- complete all kitchen cooking prompts (ovens, fryers, everything)
+-- AUTO COOK  -- complete the actual cooking steps (ovens, fryers, everything)
 -- ============================================================================
--- Cooking surfaces as BOTH "Cook_*"-named prompts and "Interaction"-tagged prompts
--- (Key "Cook"/"Serve"/"CollectDishes"/"CollectBill"). We fire every Interaction
--- prompt plus every Cook_* prompt, which covers every station type -- ovens,
--- fryers, grills, drinks, etc. It does NOT touch customer prompts, so it never
--- takes orders.
+-- The real cooking minigame steps are "Cook_*"-named prompts (CookingPrompts) --
+-- firing these completes the current dish on every station type (ovens, fryers,
+-- grills, drinks). We deliberately do NOT fire the "Interaction"-tagged prompts:
+-- the "Cook"-Key interaction prompt is what STARTS/queues a new dish, which is the
+-- order-queuing behaviour we must avoid. Cook_* only advances what's already
+-- cooking, so this never queues orders.
 run(function()
 	makeAuto(
 		'Auto Cook',
-		'Automatically completes every cooking task (ovens, fryers, grills, drinks -- all stations). Does not take customer orders.',
+		'Automatically completes the cooking steps for dishes already being cooked (ovens, fryers, grills, drinks). Does not queue new orders.',
 		function()
 			fireNamed({ 'Cook_' })
-			fireTagged('Interaction')
 		end,
 		true   -- speed slider
 	)
