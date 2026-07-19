@@ -461,7 +461,6 @@ end)
 -- the white band -- exactly like pressing E at the right time (just frame-perfect).
 run(function()
 	local AutoHack
-	local Safety
 	local Challenge = replicatedStorage:FindFirstChild('Challenge')   -- RemoteEvent
 
 	local function challengeGui()
@@ -497,14 +496,10 @@ run(function()
 				local lo, hi = whiteBand(frame)
 				if not lo and type(startArg) == 'number' then lo, hi = startArg, endArg end
 				local x = markerX(frame)
-				if lo and hi and x then
-					-- shrink the band slightly by the Safety margin so we fire safely
-					-- inside it (not right on the edge).
-					local margin = (hi - lo) * (Safety and Safety.Value or 0) / 100
-					if x >= lo + margin and x <= hi - margin then
-						pcall(function() Challenge:FireServer(computer, 'Challenge', x) end)
-						return
-					end
+				if lo and hi and x and x >= lo and x <= hi then
+					-- marker is inside the white band -> fire its live position
+					pcall(function() Challenge:FireServer(computer, 'Challenge', x) end)
+					return
 				end
 			end
 			runService.Heartbeat:Wait()
@@ -544,13 +539,5 @@ run(function()
 				end))
 			end
 		end,
-	})
-	Safety = AutoHack:CreateSlider({
-		Name = 'Safety Margin',
-		Tooltip = 'How far inside the white band to aim (% of band width). Higher = safer, waits for the marker to be more centred.',
-		Min = 0,
-		Max = 45,
-		Default = 20,
-		Suffix = function(val) return '%' end,
 	})
 end)
