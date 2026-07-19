@@ -1,24 +1,29 @@
 -- Restaurant Tycoon -- place 119048529960596.
 --
 -- Data model (confirmed from the place file):
---  * There are TWO prompt systems:
---    1) "Interaction"-tagged ProximityPrompts (Interactions module) drive the
---       kitchen/table tasks: Cook, Serve, CollectDishes, CollectBill. Triggering
---       one fires Interacted:FireServer(...); the handlers route by the
---       interaction's Key. Cooking also creates "Cook_*"-named prompts.
---    2) "CustomerInteractPrompt"-tagged prompts (one per customer, parented to the
---       customer's HumanoidRootPart) drive the CUSTOMER lifecycle: greet/seat,
---       take order, serve to table, collect bill. Firing a customer's prompt
---       performs whatever action their current state needs.
---  * Firing a prompt with nothing actionable is a harmless no-op, and there is a
---    ~0.5s server debounce on restaurant interactions.
---  * So: automate by firing the relevant prompts on a loop (fireproximityprompt).
+--  * COOKING is a multi-step minigame. The player starts a dish; then the server
+--    drives a SEQUENCE of input steps (Hold the Mouse, Click, Click Rapidly, ...)
+--    via CookUpdated. Each step is completed by firing
+--    ReplicatedStorage.Events.Cook.CookInputRequested:FireServer("CompleteTask",
+--    kitchenModel, itemType), where kitchenModel/itemType come from the Cook system
+--    (require PlayerScripts.Source.Systems.Cook -> :GetCurrentKitchenModel(),
+--    .CurrentItemType, .IsCooking). Auto Cook spams CompleteTask WHILE IsCooking,
+--    so it completes every step of a dish the PLAYER started -- it never starts or
+--    queues a cook itself.
+--  * CUSTOMERS use "CustomerInteractPrompt"-tagged prompts (one per customer, on
+--    their HumanoidRootPart) for the whole lifecycle (greet/seat, take order, serve,
+--    bill). Firing a customer's prompt performs the next action they need.
+--  * Table tasks (CollectDishes/Serve/CollectBill) are "Interaction"-tagged prompts.
+--  * ~0.5s server debounce on interactions; firing an idle prompt is a no-op.
 
 local run = function(func) func() end
 local cloneref = cloneref or function(obj) return obj end
 
+local players = cloneref(game:GetService('Players'))
+local replicatedStorage = cloneref(game:GetService('ReplicatedStorage'))
 local collectionService = cloneref(game:GetService('CollectionService'))
 
+local lplr = players.LocalPlayer
 local vain = shared.vain
 
 local fireprompt = fireproximityprompt
@@ -48,26 +53,6 @@ local function fireTagged(tag, namePrefixes)
 			if pass then
 				pcall(function() fireprompt(p, p.HoldDuration or 0) end)
 				fired = fired + 1
-			end
-		end
-	end
-	return fired
-end
-
--- Also fire any workspace ProximityPrompt whose Name starts with a prefix (used
--- for the "Cook_*" cooking prompts that aren't Interaction-tagged).
-local function fireNamed(prefixes)
-	if not fireprompt then return 0 end
-	local fired = 0
-	for _, p in workspace:GetDescendants() do
-		if p:IsA('ProximityPrompt') and p.Enabled then
-			local n = p.Name or ''
-			for _, pre in prefixes do
-				if n:sub(1, #pre) == pre then
-					pcall(function() fireprompt(p, p.HoldDuration or 0) end)
-					fired = fired + 1
-					break
-				end
 			end
 		end
 	end
@@ -110,23 +95,73 @@ local function makeAuto(name, tooltip, worker, withSpeed)
 end
 
 -- ============================================================================
--- AUTO COOK  -- complete the actual cooking steps (ovens, fryers, everything)
+-- AUTO COOK  -- auto-complete every step of the dish YOU'RE cooking
 -- ============================================================================
--- The real cooking minigame steps are "Cook_*"-named prompts (CookingPrompts) --
--- firing these completes the current dish on every station type (ovens, fryers,
--- grills, drinks). We deliberately do NOT fire the "Interaction"-tagged prompts:
--- the "Cook"-Key interaction prompt is what STARTS/queues a new dish, which is the
--- order-queuing behaviour we must avoid. Cook_* only advances what's already
--- cooking, so this never queues orders.
+-- Cooking a dish is a multi-step minigame (Hold the Mouse, Click, Click Rapidly,
+-- ...). Each step completes by firing CookInputRequested:FireServer("CompleteTask",
+-- kitchenModel, itemType). We read those from the Cook system and spam CompleteTask
+-- ONLY while Cook.IsCooking -- i.e. a dish the player already started -- so it
+-- auto-finishes every step of that dish and never starts/queues a cook itself.
 run(function()
-	makeAuto(
-		'Auto Cook',
-		'Automatically completes the cooking steps for dishes already being cooked (ovens, fryers, grills, drinks). Does not queue new orders.',
-		function()
-			fireNamed({ 'Cook_' })
+	local Cook, CookInputRequested, COMPLETE
+
+	local function resolve()
+		if not Cook then
+			pcall(function()
+				Cook = require(lplr.PlayerScripts.Source.Systems.Cook)
+			end)
+		end
+		if not CookInputRequested then
+			pcall(function()
+				CookInputRequested = replicatedStorage.Events.Cook.CookInputRequested
+			end)
+		end
+		if COMPLETE == nil then
+			-- CookReplication.CompleteTask == "CompleteTask"
+			COMPLETE = 'CompleteTask'
+			pcall(function()
+				COMPLETE = require(replicatedStorage.Source.Enums.Cook.CookReplication).CompleteTask or COMPLETE
+			end)
+		end
+		return Cook and CookInputRequested
+	end
+
+	local module, Speed
+	module = vain.Categories.World:CreateModule({
+		Name = 'Auto Cook',
+		Tooltip = 'Auto-completes every step (Hold, Click, etc.) of a dish YOU start cooking, on any station. It only runs while you are cooking -- it never starts or queues a dish.',
+		Function = function(callback)
+			if callback then
+				if not resolve() then
+					vain:CreateNotification('Auto Cook', 'Could not hook the cooking system in this place.', 6, 'warning')
+					return
+				end
+				task.spawn(function()
+					repeat
+						pcall(function()
+							if Cook.IsCooking then
+								local kitchen = Cook.CurrentKitchenModel or (Cook.GetCurrentKitchenModel and Cook:GetCurrentKitchenModel())
+								local item = Cook.CurrentItemType
+								if kitchen ~= nil and item ~= nil then
+									CookInputRequested:FireServer(COMPLETE, kitchen, item)
+								end
+							end
+						end)
+						local delay = (Speed and (1 / math.max(Speed.Value, 0.1))) or 0.1
+						task.wait(delay)
+					until not module.Enabled
+				end)
+			end
 		end,
-		true   -- speed slider
-	)
+	})
+	Speed = module:CreateSlider({
+		Name = 'Speed',
+		Tooltip = 'How many steps per second to complete (higher = faster cooking).',
+		Min = 1,
+		Max = 30,
+		Default = 15,
+		Suffix = function(val) return '/s' end,
+	})
 end)
 
 -- ============================================================================
