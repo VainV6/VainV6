@@ -147,8 +147,12 @@ run(function()
 								end
 							end
 						end)
-						local delay = (Speed and (1 / math.max(Speed.Value, 0.1))) or 0.1
-						task.wait(delay)
+						-- Floor the interval so we never fire faster than the cook UI
+						-- (PlayerGui.Cooking) can render each step -- spamming completed
+						-- the whole dish before the bar could show, so it looked
+						-- suppressed. Keep at least ~0.12s between fires.
+						local delay = (Speed and (1 / math.max(Speed.Value, 0.1))) or 0.12
+						task.wait(math.max(delay, 0.12))
 					until not module.Enabled
 				end)
 			end
@@ -156,10 +160,10 @@ run(function()
 	})
 	Speed = module:CreateSlider({
 		Name = 'Speed',
-		Tooltip = 'How many steps per second to complete (higher = faster cooking).',
+		Tooltip = 'How many steps per second to complete. Capped so the cooking UI stays visible (going faster hid it because the dish finished before the bar could render).',
 		Min = 1,
-		Max = 30,
-		Default = 15,
+		Max = 8,
+		Default = 6,
 		Suffix = function(val) return '/s' end,
 	})
 end)
