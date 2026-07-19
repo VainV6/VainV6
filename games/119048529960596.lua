@@ -59,6 +59,37 @@ local function fireTagged(tag, namePrefixes)
 	return fired
 end
 
+-- Fire ONLY the restaurant interactions whose task Key is in `keys` (a set). The
+-- Interactions system stores every interaction's data (including .Key and .Prompt)
+-- in Interactions.PromptData[tycoon][Id]; firing the specific prompts lets us do
+-- e.g. collect-dishes/collect-bill WITHOUT touching the Cook/Serve prompts (firing
+-- the Cook interaction is what starts/queues a new dish). Returns count fired.
+local Interactions
+local function fireInteractionKeys(keys)
+	if not fireprompt then return 0 end
+	if not Interactions then
+		pcall(function()
+			Interactions = require(lplr.PlayerScripts.Source.Systems.Restaurant.Interactions)
+		end)
+	end
+	if not (Interactions and Interactions.PromptData) then return 0 end
+	local fired = 0
+	pcall(function()
+		for _, byId in pairs(Interactions.PromptData) do
+			for _, data in pairs(byId) do
+				if type(data) == 'table' and keys[data.Key] then
+					local p = data.Prompt
+					if p and p:IsA('ProximityPrompt') and p.Enabled then
+						pcall(function() fireprompt(p, p.HoldDuration or 0) end)
+						fired = fired + 1
+					end
+				end
+			end
+		end
+	end)
+	return fired
+end
+
 -- Build a loop-toggle module. `worker` runs every tick; `withSpeed` adds a slider.
 local function makeAuto(name, tooltip, worker, withSpeed)
 	local module, Speed
@@ -138,19 +169,23 @@ run(function()
 				end
 				task.spawn(function()
 					repeat
-						pcall(function()
-							if Cook.IsCooking then
-								local kitchen = Cook.CurrentKitchenModel or (Cook.GetCurrentKitchenModel and Cook:GetCurrentKitchenModel())
-								local item = Cook.CurrentItemType
-								if kitchen ~= nil and item ~= nil then
-									CookInputRequested:FireServer(COMPLETE, kitchen, item)
+						-- Re-check Enabled right before firing (not just at loop bottom):
+						-- completing the last step of a dish auto-advances the server to
+						-- the next queued dish, so a stale fire after you toggle off would
+						-- keep cooking the queue. Guarding here stops instantly.
+						if module.Enabled then
+							pcall(function()
+								if Cook.IsCooking then
+									local kitchen = Cook.CurrentKitchenModel or (Cook.GetCurrentKitchenModel and Cook:GetCurrentKitchenModel())
+									local item = Cook.CurrentItemType
+									if kitchen ~= nil and item ~= nil then
+										CookInputRequested:FireServer(COMPLETE, kitchen, item)
+									end
 								end
-							end
-						end)
+							end)
+						end
 						-- Floor the interval so we never fire faster than the cook UI
-						-- (PlayerGui.Cooking) can render each step -- spamming completed
-						-- the whole dish before the bar could show, so it looked
-						-- suppressed. Keep at least ~0.12s between fires.
+						-- (PlayerGui.Cooking) can render each step. Keep at least ~0.12s.
 						local delay = (Speed and (1 / math.max(Speed.Value, 0.1))) or 0.12
 						task.wait(math.max(delay, 0.12))
 					until not module.Enabled
@@ -169,16 +204,17 @@ run(function()
 end)
 
 -- ============================================================================
--- AUTO COLLECT DISHES  -- collect finished dishes from tables
+-- AUTO COLLECT DISHES  -- collect finished dishes and bills (money) only
 -- ============================================================================
--- CollectDishes is an "Interaction"-tagged prompt. We fire the Interaction prompts;
--- one with nothing to collect is a no-op, so this cleanly collects whatever's ready.
+-- Fires ONLY the CollectDishes + CollectBill interactions (by task Key), so it
+-- collects dirty dishes and money but never touches the Cook/Serve prompts --
+-- firing the Cook interaction is what was auto-queuing new dishes to cook.
 run(function()
 	makeAuto(
 		'Auto Collect Dishes',
-		'Automatically collects finished dishes from tables.',
+		'Automatically collects finished dishes and bills (money) from tables. Does not start cooking.',
 		function()
-			fireTagged('Interaction')
+			fireInteractionKeys({ CollectDishes = true, CollectBill = true })
 		end,
 		false
 	)
@@ -303,9 +339,17 @@ end)
 --   * buy: PurchaseIngredientRequested:FireServer(tycoon, ingredientName, amount)
 --   * boost: BoostRequested:FireServer(tycoon, foodKey)
 -- We only ever act on dishes that are NOT already boosted, so it never over-buys.
+-- Data lives in PlayerData (Systems.PlayerData), read via
+-- PlayerData:GetKey(DataStoreType.Restaurant, DataKey.X, ownerPlayer):
+--   DataKey.Menu -> your dishes, DataKey.BoostedFoods -> boosted set,
+--   DataKey.Ingredients -> owned ingredients. The tycoon obj is
+--   LocalPlayer.Tycoon.Value (its .Player.Value is the owner). This is far more
+--   robust than the UI-controller getters (which only populate when the menu is
+--   open). Remotes: PurchaseIngredientRequested:FireServer(tycoon, ingredient,
+--   amount); BoostRequested:FireServer(tycoon, foodKey).
 run(function()
-	local AutoBoost
-	local FoodUtility, FocusedTycoon
+	local AutoBoost, Notify
+	local FoodUtility, PlayerData
 	local PurchaseIngredient, BoostRequested
 
 	local function resolve()
@@ -318,93 +362,74 @@ run(function()
 		if FoodUtility == nil then
 			pcall(function() FoodUtility = require(replicatedStorage.Source.Utility.Food.FoodUtility) end)
 		end
-		if FocusedTycoon == nil then
-			pcall(function() FocusedTycoon = require(lplr.PlayerScripts.Source.Systems.FocusedTycoon) end)
+		if PlayerData == nil then
+			pcall(function() PlayerData = require(lplr.PlayerScripts.Source.Systems.PlayerData) end)
 		end
-		return PurchaseIngredient and BoostRequested and FoodUtility
+		return PurchaseIngredient and BoostRequested and FoodUtility and PlayerData
 	end
 
-	-- Resolve the tycoon reference the remotes expect (the focused/owned tycoon).
-	local function getTycoon()
-		local t
-		pcall(function()
-			if FocusedTycoon then
-				t = (FocusedTycoon.Get and FocusedTycoon:Get())
-					or (FocusedTycoon.GetDefaultTycoon and FocusedTycoon:GetDefaultTycoon())
-					or FocusedTycoon.Tycoon
-			end
-		end)
-		return t
+	-- The tycoon object (LocalPlayer.Tycoon.Value) + its owner Player value.
+	local function tycoonAndOwner()
+		local tyc = lplr:FindFirstChild('Tycoon')
+		tyc = tyc and tyc.Value
+		local owner
+		pcall(function() owner = tyc and tyc.Player and tyc.Player.Value end)
+		return tyc, owner
 	end
 
-	-- { foodKey = true } for dishes already boosted, via the food menu system.
-	local function boostedDict()
-		local dict = {}
+	local function getData(dataKey, owner)
+		local v
 		pcall(function()
-			local FoodMenu = require(lplr.PlayerScripts.Source.Systems.FoodMenu)
-			if FoodMenu and FoodMenu.GetBoostedFoodDictionary then
-				dict = FoodMenu:GetBoostedFoodDictionary() or {}
-			end
+			v = PlayerData:GetKey(PlayerData.DataStoreType.Restaurant, PlayerData.DataKey[dataKey], owner)
 		end)
-		return dict
-	end
-
-	-- { ingredient = count } you currently own.
-	local function ownership()
-		local own = {}
-		pcall(function()
-			local FoodMenu = require(lplr.PlayerScripts.Source.Systems.FoodMenu)
-			if FoodMenu and FoodMenu.GetIngredientOwnership then
-				own = FoodMenu:GetIngredientOwnership() or {}
-			end
-		end)
-		return own
-	end
-
-	-- All dish food keys on your menu.
-	local function menuDishes()
-		local keys = {}
-		pcall(function()
-			local FoodMenu = require(lplr.PlayerScripts.Source.Systems.FoodMenu)
-			local menu = FoodMenu and FoodMenu.GetMenu and FoodMenu:GetMenu()
-			if type(menu) == 'table' then
-				for k in pairs(menu) do keys[#keys + 1] = k end
-			end
-		end)
-		return keys
+		return v or {}
 	end
 
 	local function boostAll()
-		local tycoon = getTycoon()
-		if not tycoon then return end
-		local boosted = boostedDict()
-		local own = ownership()
-		for _, foodKey in menuDishes() do
-			if not boosted[foodKey] and AutoBoost.Enabled then
-				-- required ingredients for this dish
+		local tycoon, owner = tycoonAndOwner()
+		if not (tycoon and owner) then return 0, 'no tycoon (load your restaurant)' end
+
+		local menu = getData('Menu', owner)          -- dish list
+		local boosted = getData('BoostedFoods', owner)  -- { foodKey = true }
+		local own = getData('Ingredients', owner)       -- { ingredient = count }
+
+		-- Menu may be a { foodKey = data } map or an array of keys; handle both.
+		local dishKeys = {}
+		for k, v in pairs(menu) do
+			if type(k) == 'string' then
+				dishKeys[#dishKeys + 1] = k
+			elseif type(v) == 'string' then
+				dishKeys[#dishKeys + 1] = v
+			end
+		end
+
+		local acted = 0
+		for _, foodKey in dishKeys do
+			if not AutoBoost.Enabled then break end
+			if not boosted[foodKey] then
 				local need = {}
 				pcall(function() need = FoodUtility:GetIngredients(foodKey) or {} end)
-				-- buy any we're short on
 				for ing, qty in pairs(need) do
 					local have = tonumber(own[ing]) or 0
 					local short = (tonumber(qty) or 0) - have
 					if short > 0 then
 						pcall(function() PurchaseIngredient:FireServer(tycoon, ing, short) end)
-						own[ing] = have + short   -- assume the buy succeeds this pass
+						own[ing] = have + short
 						task.wait(0.15)
 					end
 				end
-				-- boost the dish
 				pcall(function() BoostRequested:FireServer(tycoon, foodKey) end)
 				boosted[foodKey] = true
+				acted = acted + 1
 				task.wait(0.25)
 			end
 		end
+		return acted, (#dishKeys .. ' dishes on menu')
 	end
 
 	AutoBoost = vain.Categories.World:CreateModule({
 		Name = 'Auto Boost Dishes',
-		Tooltip = 'Buys the ingredients each unboosted dish needs (from the plaza shops) and boosts it. Skips dishes that are already boosted, so it never over-buys.',
+		Tooltip = 'Buys the ingredients each UNBOOSTED dish needs (from the plaza shops) and boosts it. Skips already-boosted dishes, so it never over-buys. Load your restaurant first.',
 		Function = function(callback)
 			if callback then
 				if not resolve() then
@@ -413,11 +438,21 @@ run(function()
 				end
 				task.spawn(function()
 					repeat
-						pcall(boostAll)
-						task.wait(3)   -- re-scan for newly-added / still-unboosted dishes
+						local acted, info = boostAll()
+						if Notify and Notify.Enabled then
+							vain:CreateNotification('Auto Boost',
+								(acted > 0 and ('Boosted ' .. acted .. ' dish(es). ') or 'Nothing to boost. ')
+									.. tostring(info), 4)
+						end
+						task.wait(3)
 					until not AutoBoost.Enabled
 				end)
 			end
 		end,
+	})
+	Notify = AutoBoost:CreateToggle({
+		Name = 'Notify',
+		Tooltip = 'Show what it did each pass (how many dishes boosted / on menu). Useful to confirm it\'s working.',
+		Default = true,
 	})
 end)
