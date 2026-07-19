@@ -268,6 +268,23 @@ run(function()
 end)
 
 -- ============================================================================
+-- AUTO SERVE CUSTOMERS  -- deliver ready food to seated customers
+-- ============================================================================
+-- Serving is a "Serve"-Key Interaction (fires when a cooked dish is ready to be
+-- carried to a table). We fire only the Serve interactions, so it delivers food
+-- without touching Cook (which would queue dishes).
+run(function()
+	makeAuto(
+		'Auto Serve Customers',
+		'Automatically serves ready food to seated customers.',
+		function()
+			fireInteractionKeys({ Serve = true })
+		end,
+		false
+	)
+end)
+
+-- ============================================================================
 -- AUTO HARVEST CROPS  -- harvest ready crops on your farming plot
 -- ============================================================================
 -- Crops have states (Empty/Growing/Completed/Locked). A "Completed" crop is
