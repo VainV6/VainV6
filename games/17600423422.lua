@@ -451,36 +451,69 @@ run(function()
 end)
 
 -- ============================================================================
--- AUTOHACK  -- auto-complete the computer skill check
+-- AUTOHACK  -- press E for you when the marker hits the white zone
 -- ============================================================================
--- You start a hack normally (walk up, press E). When the server begins a skill
--- check it fires Challenge.OnClientEvent("Challenge", computer, start, end) and
--- shows the moving marker. We answer instantly with the CENTRE of the target zone
--- so every skill check is a perfect hit -- no timing, no manual pressing.
+-- You start a hack normally. The skill check shows a MARKER (rod line) that slides
+-- across a bar; the white target band is the "Space" frame. The game fires
+-- Challenge:FireServer(computer, "Challenge", Marker.Position.X.Scale) on press, so
+-- the answer is the marker's LIVE position at the moment you fire. Rather than
+-- fabricate a value, we watch the marker and fire the instant it's actually inside
+-- the white band -- exactly like pressing E at the right time (just frame-perfect).
 run(function()
 	local AutoHack
+	local Safety
 	local Challenge = replicatedStorage:FindFirstChild('Challenge')   -- RemoteEvent
 
-	-- The live target zone from the challenge GUI (set by StartChallenge): a
-	-- "Space" frame whose X scale spans the winning band. Its centre is the safest
-	-- answer. Falls back to the event's start/end args if the GUI isn't ready yet.
-	local function zoneCentre(startScale, endScale)
+	local function challengeGui()
 		local pg = lplr:FindFirstChild('PlayerGui')
 		local cc = pg and pg:FindFirstChild('ComputerChallenge')
 		local frame = cc and cc:FindFirstChild('Frame')
+		return cc, frame
+	end
+
+	-- The white band [start, end] in X-scale, from the Space frame.
+	local function whiteBand(frame)
 		local space = frame and frame:FindFirstChild('Space')
-		if space then
-			return space.Position.X.Scale + space.Size.X.Scale / 2
+		if not space then return nil end
+		local s = space.Position.X.Scale
+		return s, s + space.Size.X.Scale
+	end
+
+	local function markerX(frame)
+		local marker = frame and frame:FindFirstChild('Marker')
+		return marker and marker.Position.X.Scale
+	end
+
+	-- Wait for the sliding marker to enter the white band, then fire its real
+	-- position. `kind` is "Challenge" (single) -- returns once fired or timed out.
+	local function pressWhenInZone(computer, startArg, endArg)
+		local t0 = tick()
+		while AutoHack.Enabled and tick() - t0 < 3 do
+			local cc, frame = challengeGui()
+			if not (cc and cc.Enabled and frame) then
+				-- GUI gone (finished/left) -> stop
+				if tick() - t0 > 0.2 then return end
+			else
+				local lo, hi = whiteBand(frame)
+				if not lo and type(startArg) == 'number' then lo, hi = startArg, endArg end
+				local x = markerX(frame)
+				if lo and hi and x then
+					-- shrink the band slightly by the Safety margin so we fire safely
+					-- inside it (not right on the edge).
+					local margin = (hi - lo) * (Safety and Safety.Value or 0) / 100
+					if x >= lo + margin and x <= hi - margin then
+						pcall(function() Challenge:FireServer(computer, 'Challenge', x) end)
+						return
+					end
+				end
+			end
+			runService.Heartbeat:Wait()
 		end
-		if type(startScale) == 'number' and type(endScale) == 'number' then
-			return (startScale + endScale) / 2
-		end
-		return nil
 	end
 
 	AutoHack = vain.Categories.World:CreateModule({
 		Name = 'Autohack',
-		Tooltip = 'Auto-completes the computer skill check for you: start hacking a computer normally and it solves each skill check perfectly.',
+		Tooltip = 'Presses E for you at the right moment: it fires the skill check the instant the moving marker enters the white band, so every hack lands without instant-answering.',
 		Function = function(callback)
 			if callback then
 				Challenge = replicatedStorage:FindFirstChild('Challenge') or Challenge
@@ -488,29 +521,22 @@ run(function()
 					vain:CreateNotification('Autohack', 'Challenge remote not found here.', 6, 'warning')
 					return
 				end
-				AutoHack:Clean(Challenge.OnClientEvent:Connect(function(kind, computer, startScale, endScale)
+				AutoHack:Clean(Challenge.OnClientEvent:Connect(function(kind, computer, startArg, endArg)
 					if not AutoHack.Enabled or not computer then return end
 					if kind == 'Challenge' then
-						-- single-press skill check: answer with the zone centre
-						task.spawn(function()
-							local centre
-							for _ = 1, 20 do
-								centre = zoneCentre(startScale, endScale)
-								if centre then break end
-								runService.Heartbeat:Wait()
-							end
-							pcall(function() Challenge:FireServer(computer, 'Challenge', centre or 0.5) end)
-						end)
+						task.spawn(function() pressWhenInZone(computer, startArg, endArg) end)
 					elseif kind == 'ContinuousChallenge' then
-						-- keep feeding the zone centre until the check ends
+						-- continuous: keep the marker's live position fed while it's in band
 						task.spawn(function()
-							local pg = lplr:FindFirstChild('PlayerGui')
-							local cc = pg and pg:FindFirstChild('ComputerChallenge')
 							local t0 = tick()
-							while AutoHack.Enabled and cc and cc.Enabled and tick() - t0 < 12 do
-								pcall(function()
-									Challenge:FireServer(computer, 'ContinuousChallenge', zoneCentre(startScale, endScale) or 0.5)
-								end)
+							while AutoHack.Enabled and tick() - t0 < 12 do
+								local cc, frame = challengeGui()
+								if not (cc and cc.Enabled and frame) then return end
+								local lo, hi = whiteBand(frame)
+								local x = markerX(frame)
+								if lo and hi and x and x >= lo and x <= hi then
+									pcall(function() Challenge:FireServer(computer, 'ContinuousChallenge', x) end)
+								end
 								runService.Heartbeat:Wait()
 							end
 						end)
@@ -518,5 +544,13 @@ run(function()
 				end))
 			end
 		end,
+	})
+	Safety = AutoHack:CreateSlider({
+		Name = 'Safety Margin',
+		Tooltip = 'How far inside the white band to aim (% of band width). Higher = safer, waits for the marker to be more centred.',
+		Min = 0,
+		Max = 45,
+		Default = 20,
+		Suffix = function(val) return '%' end,
 	})
 end)
