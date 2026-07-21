@@ -378,29 +378,39 @@ run(function()
 		return Waypoints
 	end
 
-	-- The green arrow = a DirectionBeam (Beam) on a Part in workspace.Temp, with a
-	-- WaypointAttachment; the beam links to the character's RootAttachment. Kill the
-	-- beams (the visible arrow) and their owning parts wherever they are.
-	local function killWaypointInstances(root)
-		if not root then return end
-		local ok, kids = pcall(function() return root:GetDescendants() end)
-		if not ok then return end
-		for _, d in kids do
-			local hit = false
-			if d:IsA('Beam') and d.Name == 'DirectionBeam' then hit = true
-			elseif d:IsA('Attachment') and d.Name == 'WaypointAttachment' then hit = true end
-			if hit then
-				local part = d:FindFirstAncestorWhichIsA('BasePart')
-				pcall(function() (part or d):Destroy() end)
-			end
+	-- The green arrow = a DirectionBeam (Beam) whose owning Part sits in the SHARED
+	-- workspace.Temp folder. Temp also holds interaction-prompt parts, build
+	-- previews, the world map, etc -- so we must NOT destroy arbitrary parts in it
+	-- (that was deleting the interaction parts and breaking Auto Serve/Collect).
+	-- The visible arrow IS the beam, so destroying the beam (and only a part that is
+	-- unambiguously a waypoint marker) removes it without touching anything else.
+	local function isWaypointPart(part)
+		-- a waypoint marker part is a transparent anchored Part that ONLY contains a
+		-- DirectionBeam + WaypointAttachment (nothing else lives on it).
+		if not part:IsA('BasePart') then return false end
+		local hasBeam, hasWpAtt, other = false, false, false
+		for _, c in part:GetChildren() do
+			if c:IsA('Beam') and c.Name == 'DirectionBeam' then hasBeam = true
+			elseif c:IsA('Attachment') and c.Name == 'WaypointAttachment' then hasWpAtt = true
+			else other = true end
 		end
+		return hasBeam and hasWpAtt and not other
 	end
 
 	local function sweepOrphans()
-		-- primary spot: workspace.Temp (where Waypoints:Create parents its parts)
-		killWaypointInstances(workspace:FindFirstChild('Temp'))
-		-- belt-and-braces: scan the rest of workspace too (in case Temp moved)
-		killWaypointInstances(workspace)
+		local temp = workspace:FindFirstChild('Temp')
+		if not temp then return end
+		for _, d in temp:GetChildren() do
+			-- destroy only parts that are clearly a waypoint marker
+			if d:IsA('BasePart') and isWaypointPart(d) then
+				pcall(function() d:Destroy() end)
+			else
+				-- or a stray DirectionBeam directly (kill just the beam, not its parent)
+				local beam = d:IsA('Beam') and d.Name == 'DirectionBeam' and d
+					or d:FindFirstChild('DirectionBeam')
+				if beam then pcall(function() beam:Destroy() end) end
+			end
+		end
 	end
 
 	local function clearAll()
