@@ -90,6 +90,49 @@ local function fireInteractionKeys(keys)
 	return fired
 end
 
+-- ── Drive-thru ──────────────────────────────────────────────────────────────
+-- The drive-thru is a SEPARATE task system (not the Interaction prompts). Cars
+-- have a State (Entering/Ordering/Paying/WaitingForFood); you act on a car by
+-- firing TaskCompleted:FireServer({ Name = Task.X, CarId = carName, Tycoon }).
+--   Ordering        -> Task.TakeDriveThruOrder
+--   WaitingForFood  -> Task.Serve
+--   Paying          -> Task.CollectDriveThruBill
+-- Cars live in DriveThru:GetStorage(tycoon).Cars (map name -> { State = ... }).
+local DriveThru, TaskCompleted
+local function driveThruTycoon()
+	local t = lplr:FindFirstChild('Tycoon')
+	return t and t.Value
+end
+-- Fire the given task for every drive-thru car currently in `state`.
+local function fireDriveThru(taskName, state)
+	if not DriveThru then
+		pcall(function()
+			DriveThru = require(lplr.PlayerScripts.Source.Systems.Restaurant.DriveThru)
+		end)
+	end
+	if not TaskCompleted then
+		pcall(function()
+			TaskCompleted = replicatedStorage.Events.Restaurant.TaskCompleted
+		end)
+	end
+	if not (DriveThru and TaskCompleted) then return 0 end
+	local tycoon = driveThruTycoon()
+	if not tycoon then return 0 end
+	local fired = 0
+	pcall(function()
+		local storage = DriveThru.GetStorage and DriveThru:GetStorage(tycoon)
+		local cars = storage and storage.Cars
+		if type(cars) ~= 'table' then return end
+		for carName, car in pairs(cars) do
+			if type(car) == 'table' and car.State == state then
+				TaskCompleted:FireServer({ Name = taskName, CarId = carName, Tycoon = tycoon })
+				fired = fired + 1
+			end
+		end
+	end)
+	return fired
+end
+
 -- Build a loop-toggle module. `worker` runs every tick; `withSpeed` adds a slider.
 local function makeAuto(name, tooltip, worker, withSpeed)
 	local module, Speed
@@ -217,17 +260,31 @@ run(function()
 end)
 
 -- ============================================================================
--- AUTO COLLECT DISHES  -- collect finished dishes and bills (money) only
+-- AUTO COLLECT DISHES  -- collect dirty dishes from tables only
 -- ============================================================================
--- Fires ONLY the CollectDishes + CollectBill interactions (by task Key), so it
--- collects dirty dishes and money but never touches the Cook/Serve prompts --
--- firing the Cook interaction is what was auto-queuing new dishes to cook.
 run(function()
 	makeAuto(
 		'Auto Collect Dishes',
-		'Automatically collects finished dishes and bills (money) from tables. Does not start cooking.',
+		'Automatically collects dirty dishes from tables.',
 		function()
-			fireInteractionKeys({ CollectDishes = true, CollectBill = true })
+			fireInteractionKeys({ CollectDishes = true })
+		end,
+		false
+	)
+end)
+
+-- ============================================================================
+-- AUTO COLLECT MONEY  -- collect bills (dine-in) and drive-thru payments
+-- ============================================================================
+-- Dine-in bills are the "CollectBill" Interaction; drive-thru payments are the
+-- Paying-car Task.CollectDriveThruBill. Both are money collection.
+run(function()
+	makeAuto(
+		'Auto Collect Money',
+		'Automatically collects bills from tables and drive-thru payments.',
+		function()
+			fireInteractionKeys({ CollectBill = true })
+			fireDriveThru('CollectDriveThruBill', 'Paying')
 		end,
 		false
 	)
@@ -236,9 +293,6 @@ end)
 -- ============================================================================
 -- AUTO SEAT CUSTOMERS  -- greet and seat waiting customers
 -- ============================================================================
--- Customers are driven by their own "CustomerInteractPrompt" (one per customer).
--- Firing it performs the next action the customer needs -- greeting/seating a new
--- arrival is the first of those, so this seats waiting customers.
 run(function()
 	makeAuto(
 		'Auto Seat Customers',
@@ -251,34 +305,34 @@ run(function()
 end)
 
 -- ============================================================================
--- AUTO TAKE ORDERS  -- take seated customers' orders
+-- AUTO TAKE ORDERS  -- take dine-in and drive-thru orders
 -- ============================================================================
--- Same customer prompt system: once a customer is seated, firing their prompt
--- takes their order. (Seating and ordering share the per-customer prompt, so this
--- and Auto Seat both advance customers -- enable whichever stages you want.)
+-- Dine-in: the per-customer "CustomerInteractPrompt". Drive-thru: a car in the
+-- Ordering state, taken via Task.TakeDriveThruOrder.
 run(function()
 	makeAuto(
 		'Auto Take Orders',
-		'Automatically takes seated customers\' orders.',
+		'Automatically takes seated customers\' orders and drive-thru orders.',
 		function()
 			fireTagged('CustomerInteractPrompt')
+			fireDriveThru('TakeDriveThruOrder', 'Ordering')
 		end,
 		false
 	)
 end)
 
 -- ============================================================================
--- AUTO SERVE CUSTOMERS  -- deliver ready food to seated customers
+-- AUTO SERVE CUSTOMERS  -- serve ready food to tables and drive-thru cars
 -- ============================================================================
--- Serving is a "Serve"-Key Interaction (fires when a cooked dish is ready to be
--- carried to a table). We fire only the Serve interactions, so it delivers food
--- without touching Cook (which would queue dishes).
+-- Dine-in: the "Serve" Interaction. Drive-thru: a car WaitingForFood, served via
+-- Task.Serve. Neither touches Cook (which would queue dishes).
 run(function()
 	makeAuto(
 		'Auto Serve Customers',
-		'Automatically serves ready food to seated customers.',
+		'Automatically serves ready food to seated customers and drive-thru cars.',
 		function()
 			fireInteractionKeys({ Serve = true })
+			fireDriveThru('Serve', 'WaitingForFood')
 		end,
 		false
 	)
