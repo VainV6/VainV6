@@ -92,45 +92,65 @@ end
 
 -- ── Drive-thru ──────────────────────────────────────────────────────────────
 -- The drive-thru is a SEPARATE task system (not the Interaction prompts). Cars
--- have a State (Entering/Ordering/Paying/WaitingForFood); you act on a car by
--- firing TaskCompleted:FireServer({ Name = Task.X, CarId = carName, Tycoon }).
---   Ordering        -> Task.TakeDriveThruOrder
---   WaitingForFood  -> Task.Serve
---   Paying          -> Task.CollectDriveThruBill
--- Cars live in DriveThru:GetStorage(tycoon).Cars (map name -> { State = ... }).
-local DriveThru, TaskCompleted
+-- have a State (Entering/Ordering/Paying/WaitingForFood) in
+-- DriveThru:GetStorage(tycoon).Cars (map carName -> { State, Model, Orders }).
+--   Ordering        -> take order  (TaskCompleted{ Name=TakeDriveThruOrder })
+--   Paying          -> collect bill (TaskCompleted{ Name=CollectDriveThruBill })
+--   WaitingForFood  -> SERVE, which needs the held FoodModel, so we call the
+--                      game's own ServeFood:CompleteForCar(tycoon, carModel)
+--                      (it grabs/validates the food and fires the right payload).
+local DriveThru, TaskCompleted, ServeFood
 local function driveThruTycoon()
 	local t = lplr:FindFirstChild('Tycoon')
 	return t and t.Value
 end
--- Fire the given task for every drive-thru car currently in `state`.
-local function fireDriveThru(taskName, state)
+local function resolveDriveThru()
 	if not DriveThru then
-		pcall(function()
-			DriveThru = require(lplr.PlayerScripts.Source.Systems.Restaurant.DriveThru)
-		end)
+		pcall(function() DriveThru = require(lplr.PlayerScripts.Source.Systems.Restaurant.DriveThru) end)
 	end
 	if not TaskCompleted then
-		pcall(function()
-			TaskCompleted = replicatedStorage.Events.Restaurant.TaskCompleted
-		end)
+		pcall(function() TaskCompleted = replicatedStorage.Events.Restaurant.TaskCompleted end)
 	end
-	if not (DriveThru and TaskCompleted) then return 0 end
+	if not ServeFood then
+		pcall(function() ServeFood = require(lplr.PlayerScripts.Source.Modules.Tasks.ServeFood) end)
+	end
+	return DriveThru ~= nil
+end
+-- Iterate { carName, car, carModel } for every car whose State == `state`.
+local function forEachCar(state, fn)
+	if not resolveDriveThru() then return 0 end
 	local tycoon = driveThruTycoon()
 	if not tycoon then return 0 end
-	local fired = 0
+	local n = 0
 	pcall(function()
 		local storage = DriveThru.GetStorage and DriveThru:GetStorage(tycoon)
 		local cars = storage and storage.Cars
 		if type(cars) ~= 'table' then return end
 		for carName, car in pairs(cars) do
 			if type(car) == 'table' and car.State == state then
-				TaskCompleted:FireServer({ Name = taskName, CarId = carName, Tycoon = tycoon })
-				fired = fired + 1
+				fn(tycoon, carName, car)
+				n = n + 1
 			end
 		end
 	end)
-	return fired
+	return n
+end
+-- Simple TaskCompleted tasks (take order / collect bill).
+local function fireDriveThru(taskName, state)
+	return forEachCar(state, function(tycoon, carName)
+		if TaskCompleted then
+			pcall(function() TaskCompleted:FireServer({ Name = taskName, CarId = carName, Tycoon = tycoon }) end)
+		end
+	end)
+end
+-- Serve every WaitingForFood car via the game's own serve (handles FoodModel/grab).
+local function serveDriveThru()
+	return forEachCar('WaitingForFood', function(tycoon, _carName, car)
+		local carModel = car.Model or car.CarModel
+		if ServeFood and ServeFood.CompleteForCar and carModel then
+			pcall(function() ServeFood:CompleteForCar(tycoon, carModel) end)
+		end
+	end)
 end
 
 -- Build a loop-toggle module. `worker` runs every tick; `withSpeed` adds a slider.
@@ -332,10 +352,76 @@ run(function()
 		'Automatically serves ready food to seated customers and drive-thru cars.',
 		function()
 			fireInteractionKeys({ Serve = true })
-			fireDriveThru('Serve', 'WaitingForFood')
+			serveDriveThru()
 		end,
 		false
 	)
+end)
+
+-- ============================================================================
+-- ANTI WAYPOINT GLITCH  -- clear the green direction arrow when it gets stuck
+-- ============================================================================
+-- The green arrow is a Waypoint (Systems.Waypoints): Create clones
+-- ReplicatedStorage.Assets.Effects.DirectionBeam onto a part; Destroy removes it.
+-- When a task ends abnormally the game sometimes fails to Destroy it, so the arrow
+-- lingers. This clears stuck ones: while enabled it (1) tears down orphaned
+-- DirectionBeam markers each pass, and (2) can force Waypoints:DestroyAll(). It
+-- also does a full clear the moment you enable it, wiping any pre-existing glitch.
+run(function()
+	local AntiWaypoint, ForceAll
+	local Waypoints
+
+	local function resolveW()
+		if not Waypoints then
+			pcall(function() Waypoints = require(lplr.PlayerScripts.Source.Systems.Waypoints) end)
+		end
+		return Waypoints
+	end
+
+	-- Destroy every stray DirectionBeam / WaypointAttachment left in the world.
+	local function sweepOrphans()
+		for _, d in workspace:GetDescendants() do
+			if (d:IsA('Beam') and d.Name == 'DirectionBeam')
+				or (d.Name == 'WaypointAttachment') then
+				-- destroy the marker part that owns it (or the beam itself)
+				local part = d:FindFirstAncestorWhichIsA('BasePart')
+				pcall(function() (part or d):Destroy() end)
+			end
+		end
+	end
+
+	local function clearAll()
+		resolveW()
+		if Waypoints and Waypoints.DestroyAll then
+			pcall(function() Waypoints:DestroyAll() end)
+		end
+		sweepOrphans()
+	end
+
+	AntiWaypoint = vain.Categories.World:CreateModule({
+		Name = 'Anti Waypoint Glitch',
+		Tooltip = 'Removes the green direction arrow when it gets stuck. Clears any existing glitched arrow the moment you enable it, then keeps stray markers cleared. Turn on "Force Clear All" to also wipe live waypoints.',
+		Function = function(callback)
+			if callback then
+				clearAll()   -- one-shot: wipe any pre-existing glitched marker now
+				task.spawn(function()
+					repeat
+						if ForceAll and ForceAll.Enabled then
+							clearAll()
+						else
+							pcall(sweepOrphans)
+						end
+						task.wait(1)
+					until not AntiWaypoint.Enabled
+				end)
+			end
+		end,
+	})
+	ForceAll = AntiWaypoint:CreateToggle({
+		Name = 'Force Clear All',
+		Tooltip = 'Also destroy ALL waypoints (including valid ones) every pass, not just stray/orphaned markers. Use if a stuck arrow won\'t clear otherwise.',
+		Default = false,
+	})
 end)
 
 -- ============================================================================
