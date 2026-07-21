@@ -43,6 +43,7 @@ local mainapi = {
 			-- Line format: '[Game][feature|fix] short text'. ONE atomic change per line
 			-- (never bundle several changes into one line), grouped by game in the UI.
 			Changes = {
+				'[BedWars][feature] Anti Crash (Block Kick): immunity to a new Terra / Block Kicker crash exploit',
 				'[BedWars][feature] Bed Protector: added a Place Speed slider',
 				'[BedWars][feature] Block-In: added a Place Speed slider',
 				'[BedWars][feature] Block-In: added a Duration slider',
