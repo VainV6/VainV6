@@ -378,19 +378,34 @@ run(function()
 		return Waypoints
 	end
 
-	-- Destroy every stray DirectionBeam / WaypointAttachment left in the world.
-	local function sweepOrphans()
-		for _, d in workspace:GetDescendants() do
-			if (d:IsA('Beam') and d.Name == 'DirectionBeam')
-				or (d.Name == 'WaypointAttachment') then
-				-- destroy the marker part that owns it (or the beam itself)
+	-- The green arrow = a DirectionBeam (Beam) on a Part in workspace.Temp, with a
+	-- WaypointAttachment; the beam links to the character's RootAttachment. Kill the
+	-- beams (the visible arrow) and their owning parts wherever they are.
+	local function killWaypointInstances(root)
+		if not root then return end
+		local ok, kids = pcall(function() return root:GetDescendants() end)
+		if not ok then return end
+		for _, d in kids do
+			local hit = false
+			if d:IsA('Beam') and d.Name == 'DirectionBeam' then hit = true
+			elseif d:IsA('Attachment') and d.Name == 'WaypointAttachment' then hit = true end
+			if hit then
 				local part = d:FindFirstAncestorWhichIsA('BasePart')
 				pcall(function() (part or d):Destroy() end)
 			end
 		end
 	end
 
+	local function sweepOrphans()
+		-- primary spot: workspace.Temp (where Waypoints:Create parents its parts)
+		killWaypointInstances(workspace:FindFirstChild('Temp'))
+		-- belt-and-braces: scan the rest of workspace too (in case Temp moved)
+		killWaypointInstances(workspace)
+	end
+
 	local function clearAll()
+		-- Ask the game to tear down its tracked waypoints first (cleanest), then
+		-- sweep any instances it left orphaned.
 		resolveW()
 		if Waypoints and Waypoints.DestroyAll then
 			pcall(function() Waypoints:DestroyAll() end)
@@ -400,7 +415,7 @@ run(function()
 
 	AntiWaypoint = vain.Categories.World:CreateModule({
 		Name = 'Anti Waypoint Glitch',
-		Tooltip = 'Removes the green direction arrow when it gets stuck. Clears any existing glitched arrow the moment you enable it, then keeps stray markers cleared. Turn on "Force Clear All" to also wipe live waypoints.',
+		Tooltip = 'Removes the green direction arrow (including stuck/glitched ones the game fails to clear). Clears any existing arrow the moment you enable it, then keeps the world clear -- note this also removes normal task arrows, which the auto modules don\'t need anyway.',
 		Function = function(callback)
 			if callback then
 				clearAll()   -- one-shot: wipe any pre-existing glitched marker now
@@ -411,7 +426,7 @@ run(function()
 						else
 							pcall(sweepOrphans)
 						end
-						task.wait(1)
+						task.wait(0.4)
 					until not AntiWaypoint.Enabled
 				end)
 			end
