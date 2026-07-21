@@ -641,3 +641,112 @@ run(function()
 		Default = true,
 	})
 end)
+
+-- ============================================================================
+-- AUTO QUEST  -- claim quest rewards and auto-pick a random dish reward
+-- ============================================================================
+-- Quests (Objectives) reward you on completion; often the reward is a choice of a
+-- new dish to unlock. Flow (confirmed):
+--   * claiming a completed quest triggers RewardRequested -> the game shows the
+--     reward screen. We click the visible Claim/Collect reward buttons in the
+--     objectives UI so the game supplies the correct reward id.
+--   * dish rewards arrive as panels tagged "SelectRewardScreenPanel", each named
+--     "Reward_<foodKey>" with a SelectButton that fires RewardChosen(foodKey).
+--     We pick a RANDOM panel and fire RewardChosen:FireServer(foodKey).
+run(function()
+	local AutoQuest, PickDish
+	local RewardChosen
+
+	local function resolveQ()
+		if not RewardChosen then
+			pcall(function() RewardChosen = replicatedStorage.Events.Rewards.RewardChosen end)
+		end
+		return RewardChosen ~= nil
+	end
+
+	-- Trigger a GuiButton's click handlers. GUI signals can't be :Fire()'d, so use
+	-- the executor's firesignal on the button's Activated/MouseButton1Click
+	-- connections (works on all mainstream executors).
+	local firesignal = firesignal or (getgenv and getgenv().firesignal)
+	local getconns = getconnections or (getgenv and getgenv().getconnections)
+	local function press(btn)
+		if not (btn and btn:IsA('GuiButton')) then return end
+		pcall(function()
+			if firesignal then
+				firesignal(btn.Activated)
+				firesignal(btn.MouseButton1Click)
+			elseif getconns then
+				for _, sig in { btn.Activated, btn.MouseButton1Click } do
+					for _, c in getconns(sig) do
+						if c.Function then pcall(c.Function) end
+					end
+				end
+			end
+		end)
+	end
+
+	-- Click any visible quest claim / collect-reward button.
+	local function claimQuests()
+		local pg = lplr:FindFirstChild('PlayerGui')
+		if not pg then return end
+		for _, d in pg:GetDescendants() do
+			if d:IsA('GuiButton') and d.Visible then
+				local n = d.Name
+				if n == 'ClaimButton' or n == 'CollectRewardButton' or n == 'RewardButton' then
+					-- only if it's actually on-screen (an ancestor could be hidden)
+					if d.AbsoluteSize.X > 0 then
+						press(d)
+					end
+				end
+			end
+		end
+	end
+
+	-- If a dish reward-choice screen is up, pick a random dish.
+	local function pickRandomDish()
+		if not (PickDish and PickDish.Enabled) then return end
+		local ok, panels = pcall(function() return collectionService:GetTagged('SelectRewardScreenPanel') end)
+		if not ok or #panels == 0 then return end
+		-- gather panels that are actually shown, then pick one at random
+		local shown = {}
+		for _, p in panels do
+			if p.Parent and (not p:IsA('GuiObject') or p.Visible) then
+				shown[#shown + 1] = p
+			end
+		end
+		if #shown == 0 then return end
+		local panel = shown[math.random(1, #shown)]
+		-- Prefer the remote: fire RewardChosen with the food key from the panel name
+		-- (most reliable -- no dependency on click hooks).
+		local foodKey = tostring(panel.Name):match('^Reward_(.+)$')
+		if foodKey and RewardChosen then
+			pcall(function() RewardChosen:FireServer(foodKey) end)
+			return
+		end
+		-- fallback: click the panel's SelectButton
+		local sel = panel:FindFirstChild('SelectButton', true)
+		if sel and sel:IsA('GuiButton') then press(sel) end
+	end
+
+	AutoQuest = vain.Categories.World:CreateModule({
+		Name = 'Auto Quest',
+		Tooltip = 'Automatically claims completed quest rewards. With "Pick Random Dish" on, it also auto-selects a random dish whenever a reward is a new-meal choice.',
+		Function = function(callback)
+			if callback then
+				resolveQ()
+				task.spawn(function()
+					repeat
+						pcall(claimQuests)
+						pcall(pickRandomDish)
+						task.wait(0.6)
+					until not AutoQuest.Enabled
+				end)
+			end
+		end,
+	})
+	PickDish = AutoQuest:CreateToggle({
+		Name = 'Pick Random Dish',
+		Tooltip = 'When a quest reward is a choice of a new dish, automatically pick one at random.',
+		Default = true,
+	})
+end)
