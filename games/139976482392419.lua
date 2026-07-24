@@ -1896,12 +1896,19 @@ run(function()
 
 				AutoReady:Clean(runService.Heartbeat:Connect(function()
 					local now = inShop()
-					if now ~= lastInShop then
-						-- entered or left the shop: reset, and drop the cached button --
-						-- it's recreated each shop visit, so a stale cache would mis-click.
+					if now and not lastInShop then
+						-- just ENTERED the shop: fresh ready attempt for this visit; drop
+						-- the cached button (it's recreated each visit).
 						readiedThisShop = false
 						readyClick = nil
-						if now then enteredAt = tick() end
+						enteredAt = tick()
+					elseif not now then
+						-- Any frame NOT in the shop, keep the readied flag cleared so the
+						-- NEXT shop entry always readies again -- even if the in/out edge was
+						-- missed (instant round / flag flicker). Relying only on the edge left
+						-- readiedThisShop stuck true after the first shop -- that was the bug.
+						readiedThisShop = false
+						readyClick = nil
 					end
 					lastInShop = now
 					if now then tryReady() end
