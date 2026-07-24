@@ -988,16 +988,21 @@ run(function()
 		if not hum then return false end
 
 		pcall(function()
-			if AutoEquip.Enabled and not equipped then
-				-- the game unequips everything then equips the shovel so the dig lands
-				hum:UnequipTools()
+			-- Mirror the game's dig (u253) EXACTLY: it always does UnequipTools ->
+			-- (re-home to backpack) -> EquipTool -> wait 0.15s -> fire, unconditionally.
+			-- The fresh equip is part of what makes the server accept the dig, so we
+			-- must do it every time -- doing it only "when not already equipped" (or
+			-- skipping it when Auto Equip is off) was why digs silently failed. The
+			-- Auto Equip toggle now only controls whether we fully re-home the tool.
+			hum:UnequipTools()
+			if AutoEquip.Enabled then
 				local bp = lplr:FindFirstChildOfClass('Backpack')
 				if bp and shovel.Parent ~= bp and shovel.Parent ~= char then
 					shovel.Parent = bp
 				end
-				hum:EquipTool(shovel)
-				task.wait(0.12)
 			end
+			hum:EquipTool(shovel)
+			task.wait(0.15)
 			local remote = shovel:FindFirstChild('Remote')
 			if remote and remote:IsA('RemoteEvent') then
 				remote:FireServer('LeftDown')
@@ -1005,7 +1010,7 @@ run(function()
 				shovel:Activate()
 			end
 			-- optionally swap back to your previous weapon between digs so AutoFarm/
-			-- combat still works; the next dig will re-equip the shovel.
+			-- combat still works; the next dig re-equips the shovel.
 			if ReEquip.Enabled then
 				task.wait(0.05)
 				hum:UnequipTools()
@@ -1036,7 +1041,7 @@ run(function()
 		Tooltip = 'Auto-digs buried treasure (Pirate only). Replays the real shovel dig, respecting the server cooldown.'
 	})
 	Interval = AutoShovel:CreateSlider({Name = 'Check Rate', Min = 0.1, Max = 2, Default = 0.3, Decimal = 100, Suffix = 'sec', Tooltip = 'How often to check if the dig cooldown is up. Lower = digs the instant it is ready.'})
-	AutoEquip = AutoShovel:CreateToggle({Name = 'Auto Equip', Default = true, Tooltip = 'Equip the Shovel before digging (matches the game). Turn off only if you keep it equipped yourself.'})
+	AutoEquip = AutoShovel:CreateToggle({Name = 'Auto Equip', Default = true, Tooltip = 'Re-home the Shovel to your backpack before equipping it (matches the game and helps the dig register). Leave on unless it fights another tool-swap module.'})
 	ReEquip = AutoShovel:CreateToggle({Name = 'Unequip After', Default = false, Tooltip = 'Unequip the Shovel right after each dig so you can keep using your weapon between digs.'})
 end)
 
