@@ -30221,6 +30221,156 @@ run(function()
 end)
 
 run(function()
+	local AntiBlockKick
+	local SelfTest
+
+	-- A leaked crasher spams the TryBlockKick remote with
+	--   originPosition / direction = Vector3.new(9e9, 9e9, 9e9)
+	-- the server broadcasts the kick, and every client that renders the resulting
+	-- block-kick projectile chokes on the NaN / float-overflow physics + per-frame
+	-- PivotTo and crashes. BedWars world positions never sit more than a few thousand
+	-- studs from origin, so we treat anything past this bound (or non-finite) as the
+	-- payload and tear it down before that bad step can run.
+	local BOUND = 30000
+	-- Block-kick payload instances the game clones straight into Workspace.
+	local KICK_NAMES = {
+		BlockKickerBlock = true,         -- the kicked-block projectile model
+		BlockKickImpactExplosion = true, -- the landing impact explosion
+	}
+	local conns = {}
+
+	local function disconnectAll()
+		for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+		table.clear(conns)
+	end
+
+	-- A number is bad if it is NaN, infinite, or absurdly far out of bounds.
+	local function badNum(n)
+		return n ~= n or n == math.huge or n == -math.huge or n > BOUND or n < -BOUND
+	end
+	local function badVector(v)
+		return badNum(v.X) or badNum(v.Y) or badNum(v.Z)
+	end
+
+	-- Neutralise SYNCHRONOUSLY: anchor + zero every velocity first (so a 9e9 assembly
+	-- can never be stepped by physics or tracked by the camera), THEN destroy. Doing
+	-- this inline in the DescendantAdded callback -- not task.defer -- is what beats
+	-- the crash: a deferred Destroy runs a frame too late, after the bad step ran.
+	local function freeze(part)
+		pcall(function()
+			part.Anchored = true
+			part.AssemblyLinearVelocity = Vector3.zero
+			part.AssemblyAngularVelocity = Vector3.zero
+			part.CanCollide = false
+			part.CanQuery = false
+			part.CanTouch = false
+		end)
+	end
+	local function neutralise(inst)
+		if not inst then return end
+		if inst:IsA('BasePart') then
+			freeze(inst)
+		else
+			for _, d in ipairs(inst:GetDescendants()) do
+				if d:IsA('BasePart') then freeze(d) end
+			end
+		end
+		pcall(function() inst:Destroy() end)
+	end
+
+	-- Tear this instance down if it is a named block-kick payload, or a part / model
+	-- sitting at a non-finite / out-of-bounds position (the 9e9 crasher, whatever it
+	-- happens to be named).
+	local function isPayload(inst)
+		if KICK_NAMES[inst.Name] then return true end
+		if inst:IsA('BasePart') then
+			local ok, bad = pcall(function() return badVector(inst.Position) end)
+			return ok and bad
+		elseif inst:IsA('Model') then
+			local ok, bad = pcall(function() return badVector(inst:GetPivot().Position) end)
+			return ok and bad
+		end
+		return false
+	end
+
+	local function sweep()
+		for _, inst in ipairs(workspace:GetDescendants()) do
+			if isPayload(inst) then neutralise(inst) end
+		end
+	end
+
+	local function enable()
+		disconnectAll()
+		conns[#conns + 1] = workspace.DescendantAdded:Connect(function(inst)
+			if not AntiBlockKick.Enabled then return end
+			local ok, hit = pcall(isPayload, inst)
+			if ok and hit then neutralise(inst) end
+		end)
+		task.spawn(sweep)
+	end
+
+	AntiBlockKick = vain.Categories.World:CreateModule({
+		Name = 'Anti Crash (Block Kick)',
+		Tooltip = 'Protects you from a new Terra (Block Kicker) crash exploit: it neutralises the malicious block-kick payload the instant it appears on your client, so a spammer cannot crash you. The block-kick effect stops showing while enabled.',
+		Function = function(callback)
+			if callback then enable() else disconnectAll() end
+		end,
+	})
+	-- self-test: spawn fake payloads (anchored, and at a SAFE out-of-bounds coord --
+	-- not the real 9e9 -- so the test itself can never crash you) and confirm the
+	-- guard tears them down. Exercises both the name guard and the position guard.
+	SelfTest = AntiBlockKick:CreateToggle({
+		Name = 'Run Self-Test',
+		Tooltip = 'Spawns fake block-kick payloads (anchored and harmless) and reports whether Anti Crash destroyed them. Safe -- it cleans up after itself.',
+		Default = false,
+		Function = function(on)
+			if not on then return end
+			task.spawn(function()
+				if not AntiBlockKick.Enabled then
+					notif('Anti Crash (Block Kick)', 'Enable the module first, then run the self-test.', 6, 'warning')
+					SelfTest:Toggle(false)
+					return
+				end
+				local N = 200
+				local holder = Instance.new('Folder')
+				holder.Name = 'VainBlockKickTest'
+				holder.Parent = workspace
+				local made = 0
+				for i = 1, N do
+					local part = Instance.new('Part')
+					part.Anchored = true
+					part.CanCollide = false
+					part.Transparency = 1
+					if i % 2 == 0 then
+						-- name guard: payload name at a normal position
+						part.Name = 'BlockKickerBlock'
+						part.Position = Vector3.new(0, 50, 0)
+					else
+						-- position guard: neutral name at a safe out-of-bounds coord (1e5 > BOUND,
+						-- far from the real 9e9 overflow territory)
+						part.Name = 'VainKickCoordTest'
+						part.Position = Vector3.new(1e5, 1e5, 1e5)
+					end
+					part.Parent = holder
+					made = made + 1
+				end
+				local deadline = os.clock() + 3
+				repeat task.wait() until #holder:GetChildren() == 0 or os.clock() > deadline
+				local remaining = #holder:GetChildren()
+				local killed = made - remaining
+				if holder and holder.Parent then holder:Destroy() end
+				local ok = remaining == 0
+				notif('Anti Crash (Block Kick)',
+					('Self-test: %d/%d payloads destroyed -- %s'):format(killed, made,
+						ok and 'PROTECTED' or ('INCOMPLETE ('..remaining..' left)')),
+					8, ok and 'success' or 'warning')
+				SelfTest:Toggle(false)
+			end)
+		end,
+	})
+end)
+
+run(function()
 	local AutoMushroom
 	local Range
 	local Streamer
