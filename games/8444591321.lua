@@ -43,5 +43,19 @@ do
 			pcall(delfile, path)
 		end
 	end
-	loadstring(downloadFile(path), tostring(vain.Place))()
+	local src
+	for _ = 1, 5 do
+		if isfile(path) then
+			local c = readfile(path)
+			if c == '' or c:match('^%s*%d%d%d:%s') or not c:find('VAINEOF') then pcall(delfile, path) end
+		end
+		local ok, res = pcall(downloadFile, path)
+		if ok and type(res) == 'string' and res:find('VAINEOF') then src = res break end
+		pcall(delfile, path)
+	end
+	if src then
+		loadstring(src, tostring(vain.Place))()
+	elseif shared.vain and shared.vain.CreateNotification then
+		shared.vain:CreateNotification('Vain', 'BedWars modules did not download fully -- reinject.', 12, 'alert')
+	end
 end

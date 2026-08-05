@@ -10274,6 +10274,26 @@ end)
 -- per-place load main.lua still does afterwards is a harmless no-op.
 if game.GameId == 2619619496 and game.PlaceId ~= 6872265039 and not shared.VainBedwarsLoaded then
     vain.Place = 6872274481
-    local loader = loadstring(downloadFile('vain/games/6872274481.lua'), '6872274481')
-    if loader then loader() end
+    -- The 6872274481 file is ~1.2 MB and sometimes downloads incomplete. A truncated
+    -- copy still loadstrings (valid Lua up to the cut) but registers only the first
+    -- half of the modules AND sets shared.VainBedwarsLoaded -- poisoning every later
+    -- load. So only run it once it's verified complete (ends with --VAINEOF); refetch
+    -- until it is.
+    local path = 'vain/games/6872274481.lua'
+    local src
+    for _ = 1, 5 do
+        if isfile(path) then
+            local c = readfile(path)
+            if c == '' or c:match('^%s*%d%d%d:%s') or not c:find('VAINEOF') then pcall(delfile, path) end
+        end
+        local ok, res = pcall(downloadFile, path)
+        if ok and type(res) == 'string' and res:find('VAINEOF') then src = res break end
+        pcall(delfile, path)
+    end
+    if src then
+        local loader = loadstring(src, '6872274481')
+        if loader then loader() end
+    elseif vain and vain.CreateNotification then
+        vain:CreateNotification('Vain', 'BedWars modules did not download fully -- please reinject.', 12, 'alert')
+    end
 end
