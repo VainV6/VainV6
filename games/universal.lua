@@ -5524,6 +5524,10 @@ run(function()
     -- are captured and restored on disable where the engine allows it.
     local FPSBoost
     local NoParticles, NoTextures, NoShadows, LowQuality, NoPostFX
+    local UncapFPS, CheapLighting, NoMaterials, LowMesh, NoSky
+    local savedMaterials = {} -- [part] = {Material, Reflectance, CastShadow}
+    local savedMesh = {}      -- [meshpart] = RenderFidelity
+    local savedSky = {}       -- [inst] = original Parent (Sky/Atmosphere) or Enabled (Clouds)
     local terrain = workspace:FindFirstChildWhichIsA('Terrain')
 
     -- saved originals (restored on disable)
@@ -5555,6 +5559,20 @@ run(function()
                 if savedTextures[inst] == nil then savedTextures[inst] = inst.TextureId end
                 pcall(function() inst.TextureId = '' end)
             end
+        end
+        if NoMaterials and NoMaterials.Enabled and inst:IsA('BasePart') then
+            if savedMaterials[inst] == nil then
+                savedMaterials[inst] = { inst.Material, inst.Reflectance, inst.CastShadow }
+            end
+            pcall(function()
+                inst.Material = Enum.Material.SmoothPlastic
+                inst.Reflectance = 0
+                inst.CastShadow = false
+            end)
+        end
+        if LowMesh and LowMesh.Enabled and cls == 'MeshPart' then
+            if savedMesh[inst] == nil then savedMesh[inst] = inst.RenderFidelity end
+            pcall(function() inst.RenderFidelity = Enum.RenderFidelity.Performance end)
         end
     end
 
@@ -5595,6 +5613,53 @@ run(function()
         end
     end
 
+    local function applyFpsCap()
+        if UncapFPS and UncapFPS.Enabled and setfpscap then
+            pcall(function() setfpscap(9999) end)
+        end
+    end
+
+    local function applyCheapLighting()
+        if CheapLighting and CheapLighting.Enabled then
+            if saved.Technology == nil then pcall(function() saved.Technology = lightingService.Technology end) end
+            if saved.EnvDiffuse == nil then pcall(function() saved.EnvDiffuse = lightingService.EnvironmentDiffuseScale end) end
+            if saved.EnvSpecular == nil then pcall(function() saved.EnvSpecular = lightingService.EnvironmentSpecularScale end) end
+            pcall(function() lightingService.Technology = Enum.Technology.Compatibility end)
+            pcall(function() sethiddenproperty(lightingService, 'Technology', 1) end)
+            pcall(function() lightingService.EnvironmentDiffuseScale = 0 end)
+            pcall(function() lightingService.EnvironmentSpecularScale = 0 end)
+        end
+    end
+
+    local function applySky()
+        if NoSky and NoSky.Enabled then
+            for _, inst in lightingService:GetChildren() do
+                if inst:IsA('Sky') or inst:IsA('Atmosphere') then
+                    if savedSky[inst] == nil then savedSky[inst] = inst.Parent end
+                    pcall(function() inst.Parent = nil end)
+                end
+            end
+            if terrain then
+                local clouds = terrain:FindFirstChildOfClass('Clouds')
+                if clouds then
+                    if savedSky[clouds] == nil then savedSky[clouds] = clouds.Enabled end
+                    pcall(function() clouds.Enabled = false end)
+                end
+            end
+        end
+    end
+
+    -- re-run the workspace sweep so a toggle flipped mid-run applies immediately.
+    local function resweep()
+        if not FPSBoost or not FPSBoost.Enabled then return end
+        task.spawn(function()
+            for _, inst in workspace:GetDescendants() do
+                if not FPSBoost.Enabled then break end
+                stripInstance(inst)
+            end
+        end)
+    end
+
     FPSBoost = vain.Categories.Utility:CreateModule({
         Name = 'FPS Boost',
         Tooltip = 'Strips expensive rendering (particles, textures, shadows, post-fx) to boost FPS. Client-visual only. Tune below.',
@@ -5604,6 +5669,9 @@ run(function()
                 applyQuality()
                 applyLighting()
                 applyTerrain()
+                applyFpsCap()
+                applyCheapLighting()
+                applySky()
                 -- initial sweep of the whole datamodel
                 task.spawn(function()
                     for _, inst in workspace:GetDescendants() do
@@ -5619,6 +5687,8 @@ run(function()
                 FPSBoost:Clean(workspace.DescendantAdded:Connect(stripInstance))
                 FPSBoost:Clean(lightingService.DescendantAdded:Connect(function()
                     applyLighting()
+                    applyCheapLighting()
+                    applySky()
                 end))
             else
                 -- restore what we can
@@ -5652,6 +5722,25 @@ run(function()
                     end)
                 end
                 table.clear(savedTextures)
+                -- restore materials / mesh / sky / cheap-lighting / fps cap
+                for inst, m in pairs(savedMaterials) do
+                    pcall(function() inst.Material = m[1] inst.Reflectance = m[2] inst.CastShadow = m[3] end)
+                end
+                table.clear(savedMaterials)
+                for inst, rf in pairs(savedMesh) do
+                    pcall(function() inst.RenderFidelity = rf end)
+                end
+                table.clear(savedMesh)
+                for inst, v in pairs(savedSky) do
+                    pcall(function()
+                        if inst:IsA('Clouds') then inst.Enabled = v else inst.Parent = v end
+                    end)
+                end
+                table.clear(savedSky)
+                if saved.Technology ~= nil then pcall(function() lightingService.Technology = saved.Technology end) end
+                if saved.EnvDiffuse ~= nil then pcall(function() lightingService.EnvironmentDiffuseScale = saved.EnvDiffuse end) end
+                if saved.EnvSpecular ~= nil then pcall(function() lightingService.EnvironmentSpecularScale = saved.EnvSpecular end) end
+                if setfpscap then pcall(function() setfpscap(60) end) end
                 pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Automatic end)
                 table.clear(saved)
             end
@@ -5669,6 +5758,21 @@ run(function()
     LowQuality = FPSBoost:CreateToggle({ Name = 'Low Quality', Default = true,
         Tooltip = 'Drop render quality to the lowest level + flatten water/terrain decoration.',
         Function = function() applyQuality() applyTerrain() end })
+    UncapFPS = FPSBoost:CreateToggle({ Name = 'Uncap FPS', Default = true,
+        Tooltip = 'Remove the frame-rate cap (setfpscap) -- the single biggest FPS gain.',
+        Function = function() applyFpsCap() end })
+    CheapLighting = FPSBoost:CreateToggle({ Name = 'Cheap Lighting', Default = true,
+        Tooltip = 'Compatibility (Voxel) lighting pipeline + kill ambient/reflection sampling.',
+        Function = function() applyCheapLighting() end })
+    NoMaterials = FPSBoost:CreateToggle({ Name = 'No Materials', Default = true,
+        Tooltip = 'Force every part to SmoothPlastic, no reflectance, no cast shadow (kills PBR cost).',
+        Function = function() resweep() end })
+    LowMesh = FPSBoost:CreateToggle({ Name = 'Low Mesh Detail', Default = true,
+        Tooltip = 'Force all meshes to the lowest render fidelity.',
+        Function = function() resweep() end })
+    NoSky = FPSBoost:CreateToggle({ Name = 'No Sky', Default = true,
+        Tooltip = 'Remove skybox, atmosphere and clouds.',
+        Function = function() applySky() end })
 end)
 
 run(function()
