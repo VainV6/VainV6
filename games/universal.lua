@@ -3230,11 +3230,12 @@ run(function()
 		Function = function(callback)
 			if callback then
 				repeat
+					pcall(function()
 					local interest, tool = getAttackData()
 					local attacked = {}
 					if interest then
 						local plrs = entitylib.AllPosition({
-							Range = SwingRange.Value,
+							Range = math.max(SwingRange.Value, AttackRange.Value),
 							Wallcheck = Targets.Walls.Enabled or nil,
 							Part = 'RootPart',
 							Players = Targets.Players.Enabled,
@@ -3292,6 +3293,7 @@ run(function()
 						entitylib.character.RootPart.CFrame = CFrame.lookAt(entitylib.character.RootPart.Position, Vector3.new(vec.X, entitylib.character.RootPart.Position.Y, vec.Z))
 					end
 
+					end)
 					task.wait()
 				until not Killaura.Enabled
 			else
