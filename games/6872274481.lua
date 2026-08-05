@@ -7047,12 +7047,13 @@ run(function()
                 local lastHit = 0
                 local singleTarget = nil
                 repeat
+                    pcall(function()
                     local attacked, sword, meta = {}, getAttackData()
                     Attacking = false
                     store.KillauraTarget = nil
                     if sword then
                         local plrs = entitylib.AllPosition({
-                            Range = SwingRange.Value,
+                            Range = math.max(SwingRange.Value, AttackRange.Value),
                             Wallcheck = Targets.Walls.Enabled or nil,
                             Part = 'RootPart',
                             Players = Targets.Players.Enabled,
@@ -7274,6 +7275,7 @@ run(function()
                         entitylib.character.RootPart.CFrame = CFrame.lookAt(entitylib.character.RootPart.Position, Vector3.new(vec.X, entitylib.character.RootPart.Position.Y + 0.001, vec.Z))
                     end
     
+                    end)
                     task.wait(1 / UpdateRate.Value)
                 until not Killaura.Enabled
             else
