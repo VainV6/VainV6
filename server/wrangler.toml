@@ -1,0 +1,18 @@
+name = "vain"
+main = "src/worker.js"
+compatibility_date = "2024-11-01"
+
+# KV namespace holding the key -> {hwid, expires, revoked, ...} records.
+# Create it once with:
+#   npx wrangler kv namespace create KEYS
+# then paste the returned id below.
+[[kv_namespaces]]
+binding = "KEYS"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Secrets (DO NOT put these here -- set them with `wrangler secret put`):
+#   GITHUB_PAT   : fine-grained PAT with Contents:Read on VainV6/Vain (repo private)
+#   ADMIN_TOKEN  : random string you use for the /admin/* routes
+#
+#   npx wrangler secret put GITHUB_PAT
+#   npx wrangler secret put ADMIN_TOKEN
